@@ -1,0 +1,16 @@
+[
+  "we introduce ConvergeFlow, an embedding-space flow-based LM, which constrains the data predictor to the convex hull of token embeddings and trains it solely with the mean squared error objective induced by flow matching.",
+  "we prove that the resulting flow converges to valid token embeddings despite errors in the data predictor, enabling direct token prediction without a CE-supervised decoder.",
+  "Our code is available at https://github.com/Na-Li66/ConvergeFlow.",
+  "ConvergeFlow is the first flow-based LM with provable convergence to token embeddings.",
+  "ConvergeFlow achieves a Gen. PPL of33.17while maintaining an entropy of5.44; see Figure 1 and Table 1 for details.",
+  "At the dataset entropy of5.44, our method achieves a Gen. PPL of33.17, whereas the lowest Gen. PPL among the continuous flow-based LMs is approximately60, even though these models are evaluated at entropies below the dataset entropy.",
+  "We use the same DiT-style Transformer architecture (Peebles and Xie, 2023) as LangFlow, which consists of12layers, a hidden dimension of768, and12attention heads, totaling approximately130M parameters.",
+  "the two rules agree at99.16%–99.82%of token positions, with the agreement increasing as the sampling discretization becomes finer.",
+  "training with the MSE objective steadily reduces Gen. PPL and maintains a clear advantage throughout training",
+  "This crossover experiment confirms that the improvement is attributable to the MSE objective rather than",
+  "Department of Statistics and Data Science, Chinese University of Hong Kong, Hong Kong",
+  "arXiv:2608.23551v1  [cs.CL]  24 Aug 2026",
+  "We conduct all experiments on the OpenWebText (OWT) dataset (Raffel et al., 2020), which contains approximately 9B tokens, and pack the text into sequences of lengthL= 1024.",
+  "Both models are trained using AdamW\n(Loshchilov and Hutter, 2017) with a global batch size of480and a learning rate of10 −5."
+]

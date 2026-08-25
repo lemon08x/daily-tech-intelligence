@@ -1,0 +1,16 @@
+[
+  "this strategy yielded a high-performance variant, FanzMAX v3-hLa, achieving up to 97% editing efficiency at the best-performing endogenous locus and a mean editing efficiency of ~33% across 19 endogenous loci, outperforming the established compact genome editors enNlovFz2 and enCnCas12f1 by more than 2.6-fold.",
+  "In vivo editing of hPCSK9 in humanized mice supported the translational potential of optimized Fz2 editors.",
+  "EvoMax integrates iterative experimental profiling with Gaussian process regression, protein language models and inverse folding to navigate complex sequence-to-fitness landscapes.",
+  "Fanzor2 (Fz2) nucleases, typically under 500 aa, are RNA-guided DNA endonucleases encoded in eukaryotic genomes and are well suited for single-AAV delivery",
+  "we used a transfer-learning strategy and assembled a training dataset of 209 single-point mutations with measured activity values, combining an internal library of NlovFz2 variants with previously published functional datasets",
+  "EvoMax achieved a higher hit rate for functional variants (84%) compared to EVOLVEpro (20%) and AiCE (35%)",
+  "WT-NaloFz2 exhibited 12% indel formation, whereas FanzMAX v3 increased indel frequency to 66%",
+  "Addition of the hLa domain further enhanced activity, achieving an editing efficiency of 97% in bulk cells",
+  "In mice, the AAV 1.0 scaffold (3.7 kb) established a tolerable and effective editing window, achieving ~25% liver editing and a corresponding 34% reduction in circulating PCSK9 without detectable toxicity",
+  "the more potent AAV 2.0 and 3.0 configurations resulted in rapid morbidity within 7–14 days following systemic administration",
+  "A defining feature of the engineered FanzMAX system is its compact size (<500 aa), which enables packaging of a complete genome-editing system into a single AAV vector, a longstanding challenge for Cas9-derived systems",
+  "FanzMAX v3-hLa reached on-target activity of 97% ± 1.38%, with most off-target sites remaining below 1.0%",
+  "EvoMax operates at the single-site mutation level, with combinatorial variants emerging progressively through iterative stacking across optimization rounds, rather than explicit modeling of higher-order mutational epistatic interactions.",
+  "Application of enωRNA v2 enhanced the editing activity of M7 by 8.7-fold and enabled functional rescue of the previously inactive ortholog M9"
+]

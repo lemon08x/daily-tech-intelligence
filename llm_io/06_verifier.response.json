@@ -1,0 +1,10 @@
+{
+  "supported_evidence_indexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  "unsupported_claims": [
+    "公司关联（药明康德603259、诺唯赞688105）在原文中无直接依据，属假设级关联，符合待核验机制设计",
+    "counterpoints中'现有siRNA（>90%）与抗体（约60%）药物'的PCSK9降幅对比数字来自文档之外的背景知识，原文仅以enNlovFz2与enCnCas12f1为对比编辑器"
+  ],
+  "confidence_adjustment": -0.05,
+  "verdict": "pass",
+  "notes": "12条证据均为原文逐字引用且支持对应结论；关键数值（97%最佳位点、19位点均值~33%、2.6倍、命中率84% vs 20%/35%、Spearman ρ=0.40 P=0.005、209个训练突变、R²=0.693、92 nt支架、8.7倍M7增强、小鼠25%肝编辑/34% PCSK9降幅、AAV 2.0/3.0 7-14天发病、脱靶2.2%/5.0%）均与原文一致；EvoMax三组件（GPR/ESM-2 650M/ESM-IF 142M）与两阶段自适应权重描述准确。唯一瑕疵为counterpoints引入文档外PCSK9药物对比数字，已在unsupported_claims标注并小幅下调置信度。"
+}

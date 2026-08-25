@@ -1,0 +1,10 @@
+{
+  "supported_evidence_indexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  "unsupported_claims": [
+    "公司关联（科大讯飞002230）在原文中无直接依据，属假设级关联，符合待核验机制设计",
+    "counterpoints中'AR推理加速（投机解码）'为文档外的竞争背景知识，原文仅对比LangFlow/ELF/FLM/Duo/MDLM等基线"
+  ],
+  "confidence_adjustment": 0.0,
+  "verdict": "pass",
+  "notes": "12条证据均为原文逐字引用且支持对应结论；关键数值（Gen. PPL 33.17@熵5.44、连续基线最低约60、130M参数12层768维12头、解码规则一致率99.16%-99.82%、OWT 9B token L=1024、arXiv:2608.23551v1 2026-08-24）与原文表格及正文一致；定理1/命题2/命题3的表述与原文相符；MSE vs CE交叉实验结论准确。草稿对规模局限（130M、OWT、GPT-2 Large参考）与理论条件保持如实标注，无过度推断。"
+}

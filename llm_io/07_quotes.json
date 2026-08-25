@@ -1,0 +1,21 @@
+[
+  "Announced today, the NVIDIA Vera Rubin rack-scale system NVIDIA Groq 3 LPX is in full production.",
+  "it delivered 3,400 output tokens per second for 100,000-token long-context use cases critical to agentic systems, 4x faster than the nearest alternative platform.",
+  "SpaceXAI announced that NVIDIA Vera CPUs will power its next generation of agentic AI.",
+  "CoreWeave has deployed into production Spectrum-X Multiplane, which connects NVIDIA Vera Rubin racks using multiple parallel switches to provide high-bandwidth, flat and lossless AI networks.",
+  "Nebius is the first AI cloud to adopt NVIDIA Groq 3 LPX.",
+  "NVIDIA Groq 3 LPX brings a new low-latency inference architecture designed to work alongside Vera Rubin NLV72, the most versatile AI factory platform",
+  "Rubin GPUs handle large-scale context processing while LPX accelerates latency-sensitive decode workloads.",
+  "At scale, fleets of LPUs operate as a giant processor optimized for deterministic inference.",
+  "A rack-scale NVIDIA Groq 3 LPX deployment can include 256 LP30 accelerators connected through direct chip-to-chip links, creating a highly efficient inference engine built for modern AI factories.",
+  "It splits each server’s network connection into several independent paths, or “planes,” each running its own lightweight two-tier network.",
+  "The result is a flat, simple network that scales to 512,000 GPUs, without the added cost and complexity of a third tier.",
+  "In an eight-plane topology, if one plane fails, the network still maintains about 90% of its total bandwidth, with hardware recovery that’s 11x faster than software-based multiplane load balancing.",
+  "Spectrum-X SN6000 series switches, based on the 102.4Tb/s Spectrum-6 Ethernet ASIC and ConnectX-9 SuperNICs, supporting up to 1,600Gb/s per GPU, are purpose-built for Vera Rubin NVL72 AI factories.",
+  "NVIDIA is introducing NVIDIA Scale-In, the fifth pillar of NVIDIA AI networking and a new class of accelerated network infrastructure for agentic AI factories.",
+  "Powered by the NVIDIA BlueField-4 processor and NVIDIA DOCA software platform and connected over NVIDIA Spectrum-X Ethernet",
+  "NVLink Fusion brings custom silicon into NVIDIA’s world-leading AI infrastructure platform, enabling hyperscalers and AI-native companies to build semi-custom AI factories with greater performance, flexibility and speed.",
+  "The platform includes sixth-generation NVIDIA NVLink and NVLink Switch purpose-built scale-up networking, as well as NVLink-C2C for energy-efficient connectivity between XPUs and CPUs.",
+  "At the Hot Chips conference this week in Palo Alto, California, NVIDIA is showcasing how extreme codesign is reshaping the AI factory from end to end.",
+  "The company plans to deploy NVIDIA Vera CPUs to accelerate the CPU-intensive work behind agentic AI, including orchestration, tool use, code execution, data processing and simulation."
+]

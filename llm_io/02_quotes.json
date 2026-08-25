@@ -1,0 +1,18 @@
+[
+  "Self-reflection is a powerful mechanism for credit assignment in human learning, converting sparse outcome feedback into actionable guidance.",
+  "SRPO enables LLMs to analyze their own completed trajectories, synthesize errors into concise",
+  "Counting Stage 1 and Stage 2, SRPO uses 5.4×10 18 FLOPs versus 20.8×10 18 for GRPO, i.e., approximately 3.8× fewer total FLOPs.",
+  "SRPO achieves the highest success rates across all three benchmarks: 64.7% on WebShop (+7.9% over SFT), 76.8% on ALFWorld (+5.6% over Reflexion), and 31.2% on SWE-Bench-Lite (+4.4% over Reflexion).",
+  "Remarkably, SRPO with self-distillation outperforms distil-lation from Qwen3-72B (+0.8 points) while using 9× fewer teacher FLOPs.",
+  "with gains of +7.8, +5.3, and +3.8 points over GRPO for 1.5B, 8B, and 32B models",
+  "LoRA-128 achieves 97.8% of full fine-tuning performance on AIME’24 while using only 1.3% of the trainable parameters and 34% of the GPU memory.",
+  "of mathematical reasoning performance after code adaptation, compared to 87.2% for GRPO and 80.3% for SFT.",
+  "67% of reflections receive scores≥4 (useful), while only 8% receive scores≤2 (unhelpful).",
+  "Code is available at https://github.com/Galleons2029/SRPO",
+  "Proceedings of the 43rd International Conference on Machine Learning, Seoul, South Korea. PMLR 306, 2026.",
+  "Removing reflection entirely (“direct retry”) causes a 7.5-point drop on AIME’24",
+  "The “no state reset” configuration, which appends reflections iteratively without resetting to the initial state (similar to Reflexion), performs 7.0 points worse on AIME’24.",
+  "Switching from reverse KL to forward KL causes a 3.9-point drop on AIME’24.",
+  "it reaches 70% AIME’24 performance with approximately 10× fewer FLOPs than GRPO and 30× fewer than continued SFT.",
+  "At 3 iterations, SRPO achieves 78.5% on AIME’24, approaching the performance of mod-els 4×larger."
+]

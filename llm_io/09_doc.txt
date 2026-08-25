@@ -1,0 +1,1023 @@
+ConvergeFlow: Language Flow with Provable Convergence to
+Token Embeddings
+Na Li ∗† Yuchen Jiao∗† Changxiao Cai ‡ Gen Li †
+August 25, 2026
+Abstract
+Recent advances in continuous diffusion and flow-based language models (LMs) have achieved per-
+formance competitive with discrete LMs. However, existing continuous frameworks still rely on decoders
+supervised with cross entropy (CE) because the flow trajectories are not guaranteed to terminate at valid
+tokenembeddings. Motivatedbythislimitation, weintroduceConvergeFlow, anembedding-spaceflow-
+based LM, which constrains the data predictor to the convex hull of token embeddings and trains it solely
+with the mean squared error objective induced by flow matching. Under suitable regularity conditions,
+we prove that the resulting flow converges to valid token embeddings despite errors in the data predictor,
+enabling direct token prediction without a CE-supervised decoder. We further develop three sampling
+mechanisms for controlling the trade-off between the generative perplexity and entropy. Experiments on
+OpenWebText demonstrate that ConvergeFlow achieves performance competitive with existing continu-
+ous and discrete diffusion LMs. These findings demonstrate the potential of the flow-based paradigm for
+language modeling. Our code is available athttps://github.com/Na-Li66/ConvergeFlow.
+Contents
+1 Introduction 2
+1.1 Contributions . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+1.2 Related work . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+2 Background 5
+2.1 Flow matching and diffusion models . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+2.2 Evaluation metrics for language modeling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+3 ConvergeFlow 8
+3.1 Framework and convergence theory . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8
+3.2 Sampling . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 11
+4 Experiments 13
+4.1 Empirical flow convergence to token embeddings . . . . . . . . . . . . . . . . . . . . . . . . . 13
+4.2 Effect of the training objective: MSE versus CE . . . . . . . . . . . . . . . . . . . . . . . . . . 14
+4.3 Control of quality-diversity trade-off . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 15
+4.4 Combination of three sampling techniques . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 16
+4.5 Further improvement . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 17
+5 Discussion 18
+∗The authors contributed equally. Corresponding author: Gen Li.
+†Department of Statistics and Data Science, Chinese University of Hong Kong, Hong Kong; Email: {na.li, yuchenjiao,
+genli}@cuhk.edu.hk
+‡Department of Industrial and Operations Engineering, University of Michigan, Ann Arbor, USA; Email: cxcai@umich.edu.
+1
+arXiv:2608.23551v1  [cs.CL]  24 Aug 2026
+A Proof of theorem and propositions 23
+A.1 Proof of Theorem 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 23
+A.2 Proof of Proposition 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+A.3 Proof of Proposition 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 28
+A.4 Proof of Proposition 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 29
+B Further experimental results 30
+B.1 Detailed results for quality-diversity control . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+B.2 Detailed results for combinations of sampling techniques . . . . . . . . . . . . . . . . . . . . . 30
+B.3 Detailed results for guidance allocation . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 30
+B.4 Qualitative Samples . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 35
+1 Introduction
+Diffusion models (Sohl-Dickstein et al., 2015; Song and Ermon, 2019; Ho et al., 2020) and flow matching (FM)
+(Lipman et al., 2022; Liu et al., 2022) have become the backbone for generative modeling in continuous data
+domains, with applications spanning image synthesis (Dhariwal and Nichol, 2021; Rombach et al., 2022; Esser
+et al., 2024), video generation (Ho et al., 2022; Wan et al., 2025), and protein design (Trippe et al., 2022).
+At a high level, these models learn a transport from a simple noise distribution to the data distribution.
+Diffusion models construct this transformation by learning to reverse a progressive noise corruption process,
+while FM learns the velocity field of a prescribed probability path. Once learned, the resulting generative
+dynamics iteratively transform fresh noise into new samples from the data distribution.
+Language modeling, a central task in modern generative modeling, has long been dominated by autore-
+gressive (AR) language models (LMs) (Radford et al., 2019; Brown et al., 2020). Despite their remarkable
+success in practice, AR models have two inherent drawbacks. First, the left-to-right generation order prevents
+earlier tokens from being revised using later context, limiting bidirectional reasoning and controllable gen-
+eration. Second, one-by-one sequential generation inherently restricts parallelism and creates a fundamental
+bottleneck in sampling speed.
+To overcome these limitations, substantial effort has recently been devoted to diffusion and flow-based
+language modeling (Li et al., 2022; Sahoo et al., 2024). These models offer a fundamentally different gen-
+eration principle—they iteratively refine all token positions using bidirectional context. This formulation
+permits parallel token updates and allows global planning, controllable generation, and iterative revision,
+offering the potential for faster and more flexible generation.
+Existing diffusion language models (DLMs) can be broadly categorized into continuous and discrete
+approaches. Continuous diffusion/flow-based models (Li et al., 2022; Han et al., 2023; Lovelace et al., 2023)
+map discrete tokens to continuous representations and apply Gaussian diffusion in the resulting continuous
+space.1 Discrete DLMs (Sahoo et al., 2024; Shi et al., 2024) tailor the diffusion framework to the discrete
+nature of text by leveraging discrete diffusion models (Hoogeboom et al., 2021; Austin et al., 2021; Campbell
+et al., 2022), which define categorical corruption processes directly in token space. Recent scaling efforts
+have shown that discrete DLMs can achieve performance competitive with AR models (Nie et al., 2025;
+You et al., 2025; Ye et al., 2025; Song et al., 2025; Labs et al., 2025). Despite these substantial advances,
+operating in categorical state spaces makes it difficult to apply the extensive toolkit developed for continuous
+diffusion models, including classifier-free guidance (CFG) (Ho and Salimans, 2022), self-conditioning (Chen
+et al., 2022b), few-step ODE solvers (Lu et al., 2022a,b), and distillation (Song and Dhariwal, 2024; Yin
+et al., 2024). Moreover, their reliance on discrete token states may also limit their ability to exploit the rich
+latent geometry underlying language.
+These considerations have motivated renewed interest in continuous flow-based LMs. Notably, recent
+embedding-space flow-based LMs, including LangFlow (Chen et al., 2026), ELF (Hu et al., 2026), and FLM
+(Lee et al., 2026), have achieved performance competitive with discrete DLMs. However, these continuous
+modelsstillrelyontoken-levelcrossentropy(CE)supervisionduringtraining—LangFlowandFLMapplythe
+CE objective along the flow trajectory, whereas ELF combines the FM objective at intermediate denoising
+1Because continuous diffusion models are equivalent to FM with linear Gaussian interpolation, we use the terms interchange-
+ably throughout this paper; see Section 2.
+2
+5.1 5.2 5.3 5.4 5.5 5.6
+Entropy
+20
+40
+60
+80
+100Gen. PPL
+ConvergeFlow (Schedule A)
+ConvergeFlow (Schedule B)
+LangFlow
+ELF-SDE
+ELF-ODE
+AR
+MDLM
+Duo
+FLM
+SEDD Uniform
+SEDD Absorb
+Figure 1: Gen. PPL-entropy trade-off across different models on the OWT dataset (Raffel et al., 2020).
+Curves show the trade-offs achieved by ConvergeFlow, LangFlow, ELF-SDE, and ELF-ODE, while individual
+markers indicate the reported results of the remaining baselines. Schedules A and B denote two time-adaptive
+guidance schedules for ConvergeFlow, defined in Section 3.2. The red dashed line marks the entropy of the
+OWT dataset,5.44.
+steps with the CE objective at the final decoding step. Crucially, their learned flow trajectories are not
+guaranteed to terminate at valid token embeddings, because errors in the learned data predictor or velocity
+can leave the terminal state between vocabulary embeddings. Consequently, these models require a CE-
+trained decoding mechanism to map such off-embedding states to discrete tokens. Although effective, this
+reintroduced discrete supervision is inconsistent with the continuous nature of flow-based models, and may
+limit their full potential.
+Consequently, an important question remains unresolved:
+Can the sampling trajectories of a flow-based LM converge directly to valid token embeddings,
+enabling discrete token prediction without a CE-supervised decoder?
+1.1 Contributions
+In this work, we provide an affirmative answer by introducingConvergeFlow, an embedding-space flow-
+based LM that retains a fully continuous formulation while incorporating the discrete structure of text.
+We parameterize the data predictor as a weighted average of vocabulary embeddings, first introduced in
+Plaid (Gulrajani and Hashimoto, 2023) and later adopted by LangFlow. Each coefficient is parameterized
+using a learnable weight and an exact Gaussian kernel induced by the corruption process. The resulting data
+predictor is trained using the mean squared error (MSE) loss induced by the FM objective. We emphasize
+that LangFlow directly learns the convex-combination coefficients as token posteriors using CE supervision
+and subsequently maps them to a continuous data predictor. Instead, ConvergeFlow uses the factorization
+solely as an architectural parameterization and trains the resulting continuous data predictor directly with
+the FM objective.
+Theoretically, under suitable regularity conditions, we prove that this parameterization ensures the
+learned flow converges to a valid token embedding despite errors in the learned data predictor. The same
+data predictor can therefore drive the intermediate continuous flow updates and produce the final discrete
+token prediction, thereby eliminating the need for a CE-supervised token decoder. We further validate this
+theoretical guarantee by showing that discrete tokens can be recovered accurately and directly from the
+terminal flow states.
+Our contributions can be summarized as twofold:
+•Flow-based LM with provable convergence to token embeddings.We introduceConvergeFlow, an
+embedding-space flow-based LM. We prove that the resulting flow provably converges to valid token
+embeddings, enabling direct token prediction without a CE-supervised decoder. To our knowledge,
+ConvergeFlow is the first flow-based LM with provable convergence to token embeddings.
+3
+•Quality–diversity control and strong empirical performance.We propose three sampling mechanisms
+that provide explicit control over the trade-off between generation quality, measured by generative
+perplexity (Gen. PPL), and diversity, measured by entropy. Combined with these mechanisms, Con-
+vergeFlow achieves performance competitive with continuous baselines, including LangFlow and ELF,
+as well as discrete baselines such as Duo (Sahoo et al., 2025). In particular, on the OpenWebText
+(OWT) dataset (Raffel et al., 2020), ConvergeFlow achieves a Gen. PPL of33.17while maintaining an
+entropy of5.44; see Figure 1 and Table 1 for details.
+Table 1: Comparison of Gen. PPL and entropy across different models. For ELF and LangFlow, we report
+the Gen. PPL at the point whose entropy is closest to that of the dataset; their complete Gen. PPL-entropy
+curves are shown in Figure 1. For ConvergeFlow, we report the Gen. PPL at the dataset entropy using the
+complete results in Figure 1 and Table 10. Results and model sizes marked with‡ are taken from Duo. At
+the dataset entropy of5.44, our method achieves a Gen. PPL of33.17, whereas the lowest Gen. PPL among
+the continuous flow-based LMs is approximately60, even though these models are evaluated at entropies
+below the dataset entropy.
+Model Gen. PPL (↓) Entropy (↑) Model Size
+Autoregressive
+Transformer‡ 35.90 5.58 170M
+Discrete DLMs
+MDLM‡ (Sahoo et al., 2024) 104.85 5.63 170M
+Duo‡ (Sahoo et al., 2025) 77.69 5.55 170M
+SEDD Uniform‡ (Lou et al., 2023) 99.90 5.56 170M
+SEDD Absorb‡ (Lou et al., 2023) 105.03 5.62 170M
+Continuous DLMs
+FLM (Lee et al., 2026) 62.23 5.33 179M
+LangFlow (Chen et al., 2026) 60.09 5.43 130M
+ELF (Hu et al., 2026) 65.30 5.40 105M
+ConvergeFlow 33.175.44 130M
+Dataset - 5.44 -
+1.2 Related work
+Continuous DLMs.Continuous DLMs differ primarily in the space over which Gaussian diffusion is
+performed. At the token level, embedding-space DLMs (Li et al., 2022; Dieleman et al., 2022; Gong et al.,
+2022; Gulrajani and Hashimoto, 2023) diffuse a sequence of token-level embeddings. Simplex-based DLMs
+(Han et al., 2023; Mahabadi et al., 2024; Tae et al., 2025; Potaptchik et al., 2026; Roos et al., 2026) instead
+map each token to a point on the probability simplex over the vocabulary, while Lee et al. (2026) adopts the
+one-hot encoding. Because such token-level states may not adequately capture contextual semantics, latent
+DLMs perform diffusion in sequence-level latent spaces constructed from contextual representations. Earlier
+approaches obtain these features from the outputs of a frozen pre-trained encoder (Lovelace et al., 2023;
+Zhang et al., 2023; Meshchaninov et al., 2026a), whereas more recent works jointly learn the latent encoder
+and the diffusion model (Meshchaninov et al., 2026b; Guo et al., 2026).
+Discrete DLMs.Two families dominate modern discrete DLMs, distinguished by their forward corruption
+processes: uniform diffusion models (UDMs) and masked diffusion models (MDMs). UDMs progressively
+corrupt tokens toward the uniform distribution over the vocabulary (Sahoo et al., 2025, 2026). MDMs instead
+augment the vocabulary with a special mask token as an absorbing state, and progressively replace tokens
+with it (Sahoo et al., 2024; Shi et al., 2024). In MDMs, the discrete score (Meng et al., 2022; Lou et al.,
+2023) is equivalent to the joint conditional distribution of the masked tokens given the unmasked context
+(Ou et al., 2024; Zheng et al., 2025). In practice, masked DLMs approximate this joint conditional by a
+product of token-wise conditional marginals (Nie et al., 2025; Arriola et al., 2025). Although this enables
+4
+parallel generation, it imposes a conditional independence assumption among tokens revealed in the same
+iteration and thus introduces an inherent factorization bias. Consequently, the unmasking strategy—which
+determines the number and positions of tokens to reveal at each step—plays a critical role in the performance
+of masked DLMs (Kim et al., 2025; Wu et al., 2025; Yu et al., 2025; Ben-Hamu et al., 2026; Fu et al., 2025).
+Theory for DLMs.Because masked DLMs have historically outperformed continuous DLMs and uniform
+DLMs, theoretical analyses for DLMs have largely focused on masked DLMs, particularly on characterizing
+the accuracy-speed trade-off in parallel generation. Early work studied fixed-size, random-ordering unmask-
+ing (Shi et al., 2024; Sahoo et al., 2024), which prescribes the number of sampling steps and tokens revealed
+per step while selecting their positions at random. Li and Cai (2025) derived the first convergence guar-
+antees for such strategies, which were subsequently sharpened using information-theoretic quantities that
+capture low-complexity structure in the data distribution (Chen et al., 2025; Lavenant and Zanella, 2025;
+Zhao and Cai, 2026; Wainwright, 2026; Dmitriev et al., 2026). More recently, Cai and Li (2026) established
+the provable efficiency of confidence-based unmasking (Ben-Hamu et al., 2026), which adaptively selects both
+the number and positions of tokens to reveal based on the model’s predictive confidence. Parallel to these
+sampling convergence results, statistical generalization guarantees have been established in Wakasugi and
+Suzuki (2026); Zhang et al. (2026).
+Theory for continuous diffusion models.Recent years have witnessed substantial theoretical progress
+in continuous diffusion models (Lee et al., 2022; Chen et al., 2023b; Oko et al., 2023; Cai and Li, 2025; Wu and
+Cai, 2026). In particular, a line of work derives convergence guarantees for sampling from data distributions
+under mild assumptions, such as bounded moments, without requiring globally Lipschitz score functions
+(Chen et al., 2022a, 2023a; Benton et al., 2023; Li et al., 2024; Li and Yan, 2024; Jiao and Li, 2024; Jiao
+et al., 2025). Because token-level embedding distributions have finite support and hence bounded moments,
+these results naturally apply to continuous DLMs and flow-based LMs. Provably accelerated samplers based
+on higher-order approximations are further developed in (Li and Cai, 2024; Li et al., 2025b; Jain and Zhang,
+2026). Moreover, the discrete nature of text also provides additional structure where Gaussian smoothing
+of the discrete token-embedding distribution yields a Gaussian mixture. Exploiting this structure, nearly
+dimension-free convergence guarantees have been established in Li et al. (2025a).
+2 Background
+2.1 Flow matching and diffusion models
+Flow matching (FM) (Lipman et al., 2022) is a continuous-time generative modeling framework that trans-
+ports a sample from a source distributionp 0 (typically the standard Gaussian) to a target distribution
+p1 =p data.
+The framework consists of two steps. First, one specifies a probability path(p t)t∈(0,1) interpolating
+between the sourcep0 and targetp 1. A common choice definespt as the marginal distribution of
+xt =α tx⋆ +σtz, t∈[0,1],(1)
+wherex ⋆∼p data andz∼N(0,I)is independent Gaussian noise. The differentiable schedules(α t,σt)t∈(0,1)
+are chosen such thatlimt→0αt/σt = 0andlim t→1αt/σt =∞. Under the standard endpoint conditions
+(α0,σ 0) = (0,1)and(α 1,σ 1) = (1,0), one hasx 1 =x ⋆∼p 1 andx 0 =z∼p 0.
+Second, one learns a time-dependent velocity fieldv:R d×[0,1]→R d whose induced flow realizes the
+prescribed probability path. Specifically, the velocityv(x,t)generates the probability pathpt if the solution
+to the ordinary differential equation (ODE),
+dxt
+dt =v(x t,t), t∈(0,1);x 0∼p 0,(2)
+satisfiesx t∼p t for allt∈[0,1].
+5
+Training.A natural objective for learning the velocityv t is theflow matching loss
+ℓFM(θ) :=E t,xt
+hvθ(xt,t)−v(x t,t)
+2
+2
+i
+,(3)
+wheret∼Unif(0,1)andx t∼p t. However, this objective cannot be evaluated directly because the velocityvt
+is generally unavailable. Fortunately, one can obtain a tractable objective by conditioning on the targetx⋆.
+Under the prescribed probability path (1), consider the conditional distributionpt(·|x ⋆)ofx t givenx ⋆. By
+the path construction in (1) and the ODE in (2), the conditional velocity field is given by
+v(xt,t|x ⋆) =α′
+tx⋆ +σ′
+tz= σ′
+t
+σt
+xt +
+
+α′
+t− σ′
+t
+σt
+αt
+
+x⋆ = α′
+t
+αt
+xt +
+
+σ′
+t− α′
+t
+αt
+σt
+
+z.(4)
+Thekeyobservationunderlyingconditionalflowmatching(CFM)isthatundermildregularityconditions,
+the posterior expectation of the conditional velocity,
+v(x,t) =E x⋆[v(xt,t|x ⋆)|x t =x],(5)
+yields the marginal velocityvt that generates the probability pathpt (Lipman et al., 2022). This leads to
+theconditional flow matching loss:
+ℓCFM(θ) :=E t,x⋆,z
+hvθ(xt,t)−v(x t,t|x ⋆)
+2
+2
+i
+,(6)
+wheret∼Unif(0,1),x ⋆∼p 1,z∼N(0,I), andx t =α tx⋆ +σtz. The minimizer of the objective (6) is given
+by the conditional expectation
+vθ⋆(x,t) =E x⋆
+
+v(xt,t|x ⋆)|x t =x
+
+=v(x,t).
+Therefore, the CFM loss (6) shares the same minimizer as the FM loss (3) and thus provides a tractable
+objective for learning the velocityvt. For simplicity of presentation, we will refer to the CFM loss as the
+FM loss in the rest of the paper.
+In addition, the velocity can also be expressed via either a data predictor or a noise predictor. Define
+µ(x,t) :=E[x ⋆|x t =x]andε(x,t) :=E[z|x t =x].(7)
+Combining (4) and (5), we obtain
+v(x,t) = σ′
+t
+σt
+x+
+
+α′
+t− σ′
+t
+σt
+αt
+
+µ(x,t) = α′
+t
+αt
+x+
+
+σ′
+t− α′
+t
+αt
+σt
+
+ε(x,t).(8)
+This identity shows that learning the velocity is equivalent to predicting the clean data or noise. Therefore,
+FM is essentially the probability flow ODE in diffusion models (Song et al., 2020). Since we use the linear
+Gaussian interpolation, we use FM and diffusion models interchangeably in this paper.
+Finally, for the linear scheduleαt =tandσ t = 1−t, the FM objective under the data prediction
+parameterization simplifies to
+Et,x⋆,z
+h
+(1−t) −2x⋆−µθ(xt,t)
+2
+2
+i
+.
+For general schedules, the corresponding FM objective has a schedule-dependent weighting that is not in-
+variant across schedules at a fixed signal-to-noise ratio (SNR). To remove this dependence, we instead use
+the following objective:
+Et,x⋆,z
+
+1 +αt
+σt
+2x⋆−µθ(xt,t)
+2
+2
+
+.
+6
+Inference.After learning a velocityv θ, approximate samples from the target distributionp1 can be gen-
+erated by drawingx0∼p 0 from the source distributionp0 and numerically solving the ODE
+dxt
+dt =v θ(xt,t), t∈[0,1].(9)
+In practice, one can use a forward Euler method to approximate the one-step update fromttos:
+xs−xt =
+Z s
+t
+vθ(xτ,τ) dτ≈v θ(xt,t)(s−t).
+The ODE in (9) can be reparameterized using either a data predictorµθ or a noise predictorεθ. Replacing
+µwithµ θ in the data-prediction parameterization of the velocity in (8) gives
+d
+dt
+xt
+σt
+
+=µ θ(xt,t) d
+dt
+αt
+σt
+
+.
+This leads to the data prediction-based inference procedure:
+xs
+σs
+− xt
+σt
+=
+Z s
+t
+µθ(xτ,τ) d
+ατ
+στ
+
+≈µ θ(xt,t)
+αs
+σs
+− αt
+σt
+
+.(10)
+Similarly, the noise predictor-based inference is given by
+xs
+αs
+− xt
+αt
+=
+Z s
+t
+εθ(xτ,τ) d
+στ
+ατ
+
+≈ε θ(xt,t)
+σs
+αs
+− σt
+αt
+
+.(11)
+Self-conditioning.Self-conditioning (Chen et al., 2022b) is a technique that adds an additional inputc
+to the predictor. During training, the conditional flow matching loss in (6) is modified to
+Et,x⋆,z,c
+hvθ(xt,t,c)−v(x t,t|x ⋆)
+2
+2
+i
+,
+where the inputcis constructed by
+c=
+(
+∅,with probability1−p,
+stopgrad
+ 
+vθ(xt,t,∅)
+
+,with probabilityp. (12)
+During training, the model makes an ordinary prediction without self-conditioning with a certain prob-
+ability. Otherwise, it first produces an ordinary prediction and then uses the resulting prediction as an
+additional input in a second forward pass. In this way, the model learns to refine a prediction previously
+produced by itself. During inference, self-conditioning is applied at every step. The self-conditioning input
+is initialized as empty at the first step, when no previous prediction is available, and is set to the model’s
+prediction from the preceding step thereafter.
+2.2 Evaluation metrics for language modeling
+We briefly review the metrics commonly used to evaluate language models. Letpθ denote the distribution
+induced by a trained language model.
+Because the data distributionpdata is unknown, the quality of the trained model is often assessed using a
+reference language model such as the GPT-2 Large model (Radford et al., 2019). Specifically, letpref denote
+the distribution of the reference model.Generative perplexity(Gen. PPL) is defined as
+PPLgen(pθ;p ref) := exp
+
+− 1
+L EX∼pθ[logp ref(X)]
+
+,(13)
+which satisfies the following relationship:
+log PPLgen(pθ;p ref) = 1
+L KL(pθ∥p ref) + 1
+LH(pθ),(14)
+7
+whereKL(p θ∥p ref)is the Kullback-Leibler (KL) divergence between the model distributionpθ and the ref-
+erence distributionp ref, andH(pθ)denotes the entropy ofpθ.
+Identity (14) reveals that low Gen. PPL may arise either because the generated samples have high
+likelihood under the reference model or because the model concentrates its probability mass on a small set
+of likely sequences. Therefore, it is common to evaluate the entropy of the model distribution alongside its
+Gen. PPL as a measure of diversity.
+In practice, entropy is often approximated usingunigram entropy. For a sequencex= (x(1),...,x (L)),
+define its empirical unigram distribution by
+bpx(v) = 1
+L
+LX
+i=1
+1{x(i) =v},∀v,
+and letH(bpx)denote the corresponding entropy. The unigram entropy is then defined as
+Huni(pθ) :=E X∼pθ[H(bpX)].(15)
+The unigram entropy serves as a proxy for the normalized sequence entropyL−1H(pθ)appearing in (14),
+providing a simple diagnostic of within-sequence diversity.
+In practice, the expectations defining Gen. PPL and unigram entropy are approximated by averaging
+over independent samples.
+3 ConvergeFlow
+3.1 Framework and convergence theory
+Lets= (s (1),...,s (L))be a token sequence of lengthLdrawn from the data distributionp data, where
+each tokens (i) belongs to a vocabulary of sizeV. Without loss of generality, we assume the vocabulary is
+[V] :={1,...,V}. We map tokens to continuous representations using an embedding matrixE∈R V×d,
+wheredis the embedding dimension. For eachj∈[V], lete ⊤
+j :=E j,:∈R d denote thej-th row of the
+embedding matrixE, representing the embedding of thej-th token in the vocabulary. The targetx⋆ is the
+continuous representation of the token sequence, given by
+x⋆ =
+
+es(1),...,e s(L)
+⊤
+∈R L×d.(16)
+We consider FM with general interpolation schedules(αt,σt):
+xt =α tx⋆ +σtz,
+wherez∈R L×d is a standard Gaussian random matrix with i.i.d. entrieszij
+i.i.d.
+∼ N(0,1). Using the data-
+prediction parameterization, we train a data predictorµθ :R L×d×[0,1]→R L×d using the MSE loss induced
+by the FM objective:
+Et,x⋆,z
+
+1 +αt
+σt
+2x⋆−µθ(xt,t)
+2
+F
+
+.(17)
+This objective, also used by ELF, provides purely continuous supervision and does not involve a token-level
+CE loss.
+An important caveat is that the FM objective alone does not sufficiently supervise the joint learning
+of the embedding matrix and the data predictor. Because the targetx⋆ itself is defined by the embedding
+matrix, the FM objective admits degenerate embedding-collapse solutions. We therefore use the pre-trained
+embedding matrix from LangFlow and keep it fixed throughout training and inference.
+We note that for language data, each row of the targetx⋆ is supported on a finite collection of token
+embeddings rather than an unrestricted Euclidean space. The MSE loss in (17), however, treats the data
+predictorµ θ(xt,t)as an unconstrained regressor and therefore fails to exploit this discrete support. This
+observation motivates the structured parameterization introduced next.
+8
+Embedding-weighted data predictor.Fix a token positioni∈[L]. The clean embedding of the token
+at positioniisx (i)
+⋆ =e s(i).Observe that its conditional expectation givenx t is a weighted average of all
+token embeddings according to the posterior token distribution:
+E[x(i)
+⋆ |x t] =
+VX
+j=1
+P{s(i) =j|x t}ej.(18)
+Consequently, the Bayes-optimal data predictor under the MSE loss (17) lies in the convex hull of the
+vocabulary embeddings. Moreover, the following proposition reveals a useful multiplicative structure of the
+posterior distribution: it can be factored into a context-only posterior and an exact Gaussian kernel. The
+proof is deferred to Appendix A.2.
+Proposition 1.Forx= [x (1),...,x (L)]⊤∈R L×d, denote
+x(−i) :=
+
+x(1),...,x (i−1),x (i+1),...,x (L)⊤
+∈R (L−1)×d.(19)
+The posterior token distribution satisfies
+P{s(i) =j|x t}∝P{s (i) =j|x (−i)
+t }exp
+ 
+−∥x(i)
+t −αtej∥2
+2/(2σ2
+t )
+
+.(20)
+The identity in (18) establishes an existence result—the posterior probabilities constitute one set of
+convex weights whose embedding-space barycenter equals the conditional mean of the clean embedding.
+However, these weights are generally not unique. Because the vocabulary sizeVis typically much larger
+than the embedding dimensiond, distinct convex weights can produce exactly the same data prediction.
+Nevertheless, the convex structure in (18) suggests a useful parameterization.
+Consequently, our goal is not to learn the posterior distribution itself, but to learn a valid set of con-
+vex weights whose embedding-space barycenter accurately predicts the conditional mean. Inspired by
+the multiplicative form in Proposition 1, we parameterize these convex coefficients using a learned base
+weight function and the known Gaussian corruption kernel. Specifically, we learn a base weight function
+f (i)
+θ :R L×d×[0,1]7→∆([V]), which is optimized using the MSE loss in (17). Importantly,f (i)
+θ is neither
+supervised nor interpreted as a token posterior. In particular, it is not intended to estimate the distribution
+P{s(i) =· |x (−i)
+t }appearing in Proposition 1. Rather, the proposition motivates only the form of the
+parameterization. We then define the convex weights
+w(i)
+θ (j|x t,t) = f (i)
+θ (j|x t,t) exp
+ 
+−∥x(i)
+t −αtej∥2
+2/(2σ2
+t )
+
+P
+j′∈[V] f (i)
+θ (j′|x t,t) exp
+ 
+−∥x(i)
+t −αtej′∥2
+2/(2σ2
+t )
+, j∈[V].(21)
+The resulting data predictor for the token at positioniis given by
+µ(i)
+θ (xt,t) =
+VX
+j=1
+w(i)
+θ (j|x t,t)ej =E⊤w(i)
+θ (·|x t,t).(22)
+Applying (22) to each token positioniand stacking the outputs yields the full data predictorµθ(xt,t).
+In summary, our proposed parameterization preserves the target of unconstrained MSE data prediction
+while explicitly incorporating both the discrete token structure and the known Gaussian corruption.
+Provable convergence to token embeddings.Notably, our proposed parameterization for the data
+predictor guarantees convergence of the sampling trajectory to a valid token embedding. This is formalized
+below, with the proof deferred to Appendix A.1.
+Theorem 1(Flow convergence to token embeddings).Assume that, for every token positioni∈[L], the
+learned base weight function satisfiesf (i)
+θ (j|x t,t)>0for anyj∈[V], statex t, and timet∈(0,1).
+Moreover, assume that the log-weight is Lipschitz continuous along the sampling trajectory: there exists a
+constant eLsuch that
+max
+j∈[V]
+ logf (i)
+θ (j|x t,t)−logf (i)
+θ (j|x τ,τ)
+≤eL|t−τ|,∀0<t,τ <1.
+9
+Finally, assume that the time grid0 =t0 <t 1 <...<t N <1satisfiest N→1asN→∞and
+max
+0≤k<N
+tk+1−tk
+(1−t k+1)3 <δ
+for a sufficiently smallδ >0. Then, for each token positioni∈[L], there exists someji∈[V]such that
+x(i)
+tN→e ji in probability asN→∞.(23)
+Theorem 1 shows that every token-level state converges to a valid token embedding. Consequently,
+provided that the vocabulary embeddings are distinct, nearest-neighbor decoding naturally yields the token
+prediction. In particular, no separately trained terminal decoder is required. We empirically validate this
+convergence behavior in Section 4.
+We next explain why data prediction accuracy alone does not guarantee convergence to token embeddings,
+and why additional structure, such as our convex-structured parameterization, is necessary. In particular, an
+unconstrained data predictor may be asymptotically accurate along any corruption path while its induced
+flow fails to converge to any token embedding.
+The following proposition provides a concrete counterexample. Its proof is deferred to Appendix A.3.
+Proposition 2.There exists a smooth, unconstrained data predictorµθ such that
+µθ(xt,t)→x ⋆ in probability ast→1,
+wherex t =α tx⋆ +σtzandz ij
+i.i.d.
+∼ N(0,1). Letx tN denote the flow output induced by this data predictor
+on a time grid0 =t 0 < t1 < ... < tN <1witht N→1asN→∞. Then there exists a constantc lb >0,
+independent ofN, such that, for every token positioni∈[L]and all sufficiently largeN,
+P
+
+min
+j∈[V]
+α−1
+tNx(i)
+tN−ej
+
+2≥1
+
+≥c lb.(24)
+This counterexample demonstrates that a smooth, asymptotically accurate data predictor does not by
+itself ensure convergence to the discrete vocabulary. The convex-structured parameterization provides suffi-
+cient structure to guarantee convergence to a valid token embedding.
+Moreover, recall that the data predictor is a convex combination of the token embeddings, with weights
+given byw (i)
+θ . The following proposition shows that if the data predictor converges to a token embedding,
+then the corresponding weight vectors converge to a one-hot vector. The proof is deferred to Appendix A.4.
+Proposition 3.Assume that the token embeddings{ej}j∈[V] have the same norm and are pairwise separated,
+namely,max j̸=j′
+ ⟨ej,e′
+j⟩
+∥ej∥2∥e′
+j∥2
+ ≤1−ρfor some constantρ >0. If there exists somej∈[V]such that
+µ(i)
+θ (xt,t)→e j ast→1, then one has
+w(i)
+θ (·|x t,t)→δ j ast→1,(25)
+whereδ j∈R V denotes the one-hot vector associated with tokenj.
+Comparison with embedding-space flow-based LMs.
+•Comparison with ELF (Hu et al., 2026).Both ELF and our framework use the MSE objective to train
+a data predictor. ELF directly learns the data predictor as an unconstrained regressor. At the final
+step, it invokes a distinct trained decoder. In contrast, we impose additional structure on the data
+predictor through (22). This guarantees that the flow automatically converges to a token embedding,
+so the final decoding does not require a separate decoder.
+•Comparison with LangFlow (Chen et al., 2026).Both LangFlow and our framework produce a data
+predictor through a convex combination of vocabulary embeddings. LangFlow directly learns the
+posterior distribution and trains it using the discrete CE objective. In contrast, we parameterize each
+convex weight using a learned base weight and an exact Gaussian likelihood, and train the resulting
+data predictor using the continuous MSE objective (17).
+10
+3.2 Sampling
+Given a trained data predictorµθ, we generate samples by solving the data prediction-based ODE in (10),
+initialized with a standard Gaussian random matrixxt0 with i.i.d.N(0,1)entries.
+GivenNsampling steps and a time gridt 0 <t 1 <...<t N, the ODE can be solved using the first-order
+Euler method, yielding the following update rule:
+xti+1
+σti+1
+− xti
+σti
+=µ ti
+αti+1
+σti+1
+− αti
+σti
+
+,(26)
+whereµ ti =µ θ(xti,ti)denotes the data prediction used at stepi. As we will see momentarily, the data
+predictionµ ti can be constructed in various ways, leading to different trade-offs between Gen. PPL and
+entropy.
+After the last step, we convert the generated embeddingxtN into a token sequencebs= (bs(1),...,bs (L))
+by taking the nearest neighbor in the embedding space for each token position:
+bs(i) = argminj∈[V]∥x(i)
+tN−ej∥2, i∈[L].(27)
+Alternatively, we can use the trained weightswθ(xtN,tN)as the token distribution for decoding, i.e.,
+bs(i) = argmaxj∈[V] w(i)
+θ (j|x tN,tN), i∈[L].(28)
+Notably, both token prediction rules are parameter-free and require no separately trained terminal decoder.
+Next, we describe sampling with self-conditioning. The data prediction in the ideal two-pass implemen-
+tation of self-conditioning is given by
+µti =µ θ
+ 
+xti,ti,µθ(xti,ti,∅)
+
+.
+To reduce the computational burden, it is common to construct the data predictionµti at stepiusing that
+from the preceding stepi−1as the self-conditioning input, in place of the same-step unconditional prediction
+µθ(xti,ti,∅), i.e.,
+µt0 =µ θ
+ 
+xt0,t 0,∅
+
+andµ ti =µ θ
+ 
+xti,ti,µti−1
+
+, i≥1.(29)
+The data predictionµti is then used in the sampling update (26).
+One can expect thatµti−1≈µ θ(xti,ti,∅)becauset i−1 andt i, as well asxti−1 andx ti are close when the
+solver uses sufficiently many steps. However, we observe that such a computational shortcut also introduces
+a deeper self-conditioning recursion, which will be elaborated later.
+Controlling Gen. PPL-entropy trade-off.We introduce three inference mechanisms for controlling the
+trade-off between Gen. PPL and entropy; see Table 2 for a summary.
+•self-conditioning guidance.Motivated by classifier-free guidance (CFG) (Ho and Salimans, 2022), we
+introduce a CFG-type guidance for self-conditioning. At each solver stepi, we form the guided data
+prediction via the unconditional and one-step self-conditioned predictions:
+µscg
+ti =µ θ(xti,ti,∅) +w scg
+ 
+µθ(xti,ti,cti)−µ θ(xti,ti,∅)
+
+withc ti =µ θ(xti,ti,∅).(30)
+Whenw scg = 0, this reduces to sampling without self-conditioning; whenw scg = 1, it recovers the
+ordinary sampling with self-conditioning. Values ofwscg >1extrapolate beyond the self-conditioned
+prediction and amplify the refinement induced by self-conditioning.
+Although the form in (30) resembles CFG, the condition here is generated by the model itself rather
+than supplied externally.
+•Iterative self-conditioning refinement.Recall the computational shortcut for self-conditioning in (29),
+which reuses the data prediction from the previous step. Unrolling this recursion overKsteps shows
+that the data predictionµti at timeti satisfies
+µti−j =µ θ
+ 
+xti−j,ti−j,µti−j−1
+
+, j= 0,...,K−1,
+11
+or equivalently,
+µti =µ θ
+
+xti,ti,µθ
+ 
+xti−1,ti−1,...,µ θ(xti−K+1,ti−K+1,µti−K)...
+
+.
+If the time grid is sufficiently fine, then the state and time vary little over theseKsteps, and
+µθ(xti−j,ti−j,c)≈µ θ(xti,ti,c)forj= 0,...,K−1. Consequently, the data predictionµ ti is ap-
+proximately given by
+µti≈µ θ
+
+xti,ti,µθ
+ 
+xti,ti,...,µ θ(xti,ti,µti−K)...
+
+,
+whereKrecursive evaluations are all applied to the current statexti and timeti. Thus, reusing the
+previous data prediction in self-conditioning implicitly produces a recursive refinement whose effective
+depth depends on the number and spacing of solver steps.
+Motivated by this observation, we make the self-conditioning refinement explicit. At each sampling
+stepi, we define
+u0
+ti :=µ θ(xti,ti,∅), u k
+ti :=µ θ(xti,ti,uk−1
+ti ), k= 1,...,K,(31)
+and useuK
+ti as the data prediction in the solver update. This construction makes the recursion depth
+Kan explicit hyperparameter, thereby decoupling it from the number of solver steps.
+Empirically, we observe that iterative self-conditioning refinement is less sensitive to the solver-step
+count than the standard self-conditioning shortcut in (29). Moreover, varying the depthKprovides
+an effective means of controlling the trade-off between Gen. PPL and entropy.
+•Unconditional guidance.We note that improving PPL is equivalent to increasinglogp(x), so the most
+efficient way is to move in the direction of∇logp(x). By Tweedie’s formula, we have
+∇logp t(x) =− ε(x,t)
+σt
+,withε(x,t) = x−α tµ(x,t)
+σt
+.
+Recall the standard noise prediction-based update rule from (11):
+xti+1
+αti+1
+− xti
+αti
+=
+σti+1
+αti+1
+− σti
+αti
+
+εθ(xti,ti).
+Asσ t/αt decreases along the sampling process, the coefficient on the right-hand side is negative and
+the update therefore moves in the direction of−εθ. To strengthen this motion, we multiply the update
+by a factor of1 +wug, resulting in the following sampler:
+xti+1
+αti+1
+− xti
+αti
+= (1 +w ug)
+σti+1
+αti+1
+− σti
+αti
+
+εθ(xti,ti).(32)
+Table 2: Summary of sampling techniques for quality-diversity trade-offs.
+Technique Control parameter Intended effect
+Self-conditioning guidance Coefficientw scg Amplify refinement from self-conditioning
+Iterative self-conditioning
+refinement
+Iteration countKRefine data prediction
+Unconditional guidance Coefficientw ug Strengthen movement toward gradient of
+PPL
+12
+4 Experiments
+Dataset.We follow the experimental setup used in the literature on DLMs (Chen et al., 2026; Hu et al.,
+2026; Sahoo et al., 2025). We conduct all experiments on the OpenWebText (OWT) dataset (Raffel et al.,
+2020), which contains approximately 9B tokens, and pack the text into sequences of lengthL= 1024.
+Training.We follow the architecture and setup of LangFlow (Chen et al., 2026). We use the same DiT-
+style Transformer architecture (Peebles and Xie, 2023) as LangFlow, which consists of12layers, a hidden
+dimension of768, and12attention heads, totaling approximately130M parameters. Self-conditioning is
+applied during training with probability0.25.
+Because jointly learning the token embeddings and data predictor under the MSE objective admits
+degenerate embedding-collapse solutions, we use the embedding matrix from the LangFlow checkpoint and
+keep it fixed throughout training. For all experiments except the convergence study, the remaining trainable
+parameters are also initialized from the same checkpoint.
+For a controlled comparison, we continue training our model using the MSE objective and the LangFlow
+baseline using its token-level CE objective for additional 200K steps. Both models are trained using AdamW
+(Loshchilov and Hutter, 2017) with a global batch size of480and a learning rate of10 −5. Training is
+distributed across four or eight NVIDIA A100 40 GB GPUs, depending on availability.
+Evaluation.Foreachsamplingconfiguration, wegenerate1024sampleswithlengthL= 1024. Wemeasure
+generation quality using Gen. PPL, evaluated by GPT-2 Large (Radford et al., 2019), and quantify diversity
+using unigram entropy. We compare sampling methods based on their Gen. PPL–entropy trade-off, where
+lower Gen. PPL indicates higher quality and higher entropy indicates greater diversity.
+We observe that the sampling grid used by LangFlow is highly nonuniform near the two endpoints.
+Therefore, we use the uniform gridti = (i+ 0.5)/Nfori= 0,1,...,N−1, whereNdenotes the number of
+sampling steps. This grid slightly outperforms the original one in LangFlow; see Figure 9 in Appendix B.
+Unless otherwise specified, our default sampling configuration is the standard sampler with one-step
+self-conditioning, as defined in (26) and (29), without additional techniques introduced in Section 3.2; see
+Appendix B.4 for generated examples at an entropy of 5.44. This corresponds towscg = 1,w ug = 0, and
+K= 1. We compare all sampling methods under the same number of function evaluations (NFEs). Every
+evaluation of the data predictor is counted, including additional evaluations introduced by self-conditioning
+guidance or iterative self-conditioning refinement.
+Unless otherwise stated, the results reported below use the checkpoint obtained after 175K additional
+training steps, which achieved the best performance among the evaluated checkpoints.
+4.1 Empirical flow convergence to token embeddings
+We empirically examine how the parameterization of the data predictor affects the convergence of the learned
+flow. We train two models from random initialization using the same pre-trained LangFlow embedding
+matrix, network architecture, and training configuration. The models differ only in their output parameter-
+ization. The embedding-weighted data predictor expresses its output as a weighted combination of token
+embeddings, as defined in (22), whereas the direct data predictor outputs an unconstrained vector in the
+embedding space. This controlled comparison isolates the effect of the structured parameterization: Theo-
+rem 1 guarantees the learned flow driven by the embedding-weighted data predictor converges to valid token
+embeddings, while Proposition 2 shows that such a convergence guarantee may not hold for an unconstrained
+data predictor.
+For each token positioni∈[L], we compute the normalized distance between its continuous statex(i)
+t
+and every scaled token embeddingαtej:
+∥x(i)
+t −αtej∥2
+σt
+√
+d
+, j∈[V].
+For each log-SNR value, we aggregate the smallest and second-smallest distances over all16×1024 = 16,384
+token positions from 16 generated sequences of lengthL= 1024, separately for each data predictor. For each
+13
+−8 −6 −4 −2 0 2 4
+log SNR
+2
+4
+6
+8
+10
+12
+14Distance
+Closest
+Second closest
+(a) Embedding-weighted data predictor
+−8 −6 −4 −2 0 2 4
+log SNR
+2
+4
+6
+8
+10
+12Distance
+Closest
+Second closest (b) Unconstrained direct data predictor
+Figure 2: Comparison of flow convergence between the embedding-weighted and direct data predictors. The
+two models use the same fixed LangFlow embeddings, architecture, and training configuration, differing only
+in their output parameterization. We plot the smallest and second-smallest normalized distances∥x(i)
+t −
+αtej∥2/(σt
+√
+d)from the flow state associated with each token positionx(i)
+t to the scaled token embeddings
+as functions of log-SNR.
+distance statistic, we plot the midpoint of its empirical 1st–99th percentile interval, with error bars spanning
+the full interval.
+As shown in Figure 2, the closest and second-closest distances are nearly indistinguishable in the low-
+SNR regime for both data predictors, but their behaviors diverge as the SNR increases. For the embedding-
+weighted data predictor in Figure 2(a), the closest normalized distance approaches one and remains tightly
+concentrated, whereas the second-closest distance increases rapidly, producing a clear separation. In contrast,
+for the unconstrained direct data predictor in Figure 2(b), both distances increase, exhibit substantially
+greater variation, and remain poorly separated. These empirical results validate the contrasting convergence
+behaviors characterized by Theorem 1 and Proposition 2.
+Having empirically examined convergence toward token embeddings, we next examine the consistency of
+the weight-based and distance-based token prediction rules. Theorem 1 and Proposition 3 together imply
+their asymptotic equivalence: the flow state converges to a token embedding, while the corresponding weights
+converge to its one-hot representation. As the number of sampling stepsNvaries from32to512, the two
+rules agree at99.16%–99.82%of token positions, with the agreement increasing as the sampling discretization
+becomes finer. This near-perfect agreement indicates that the two rules are effectively equivalent in practice,
+with the remaining discrepancies diminishing as the sampling time discretization becomes finer.
+4.2 Effect of the training objective: MSE versus CE
+Starting from the pre-trained LangFlow checkpoint, we continue training two models for 200K iterations
+under identical configurations, using the MSE and CE objectives, respectively. We evaluate Gen. PPL and
+entropy every 25K steps.
+The entropy remains above5.5for both objectives throughout training. As for Gen. PPL, Figure 3(a)
+shows that training with the CE objective provides no consistent improvement over the initial checkpoint
+and its Gen. PPL remains near its initial value. In contrast, training with the MSE objective steadily
+reduces Gen. PPL and maintains a clear advantage throughout training, despite some fluctuations across
+checkpoints.
+To further isolate the effect of the training objective, we conduct a crossover experiment using the check-
+points obtained after 100K steps. Specifically, we continue the CE-trained checkpoint using the MSE objec-
+tive and, conversely, continue the MSE-trained checkpoint using the CE objective. As shown in Figure 3(b),
+despite starting from the worse-performing CE-trained checkpoint, switching to MSE reduces Gen. PPL con-
+sistently. Conversely, switching the better-performing MSE-trained checkpoint to CE degrades Gen. PPL.
+This crossover experiment confirms that the improvement is attributable to the MSE objective rather than
+14
+0 25k 50k 75k 100k 125k 150k 175k 200k
+iteration
+94
+96
+98
+100
+102
+104Gen. PPL
+MSE Loss
+CE Loss
+(a) Continued training from same LangFlow checkpoint
+0 25k 50k 75k 100k 125k 150k 175k 200k
+iteration
+94
+96
+98
+100
+102
+104Gen. PPL
+MSE Loss
+CE Loss (b) Swapping objectives after 100K training steps
+Figure 3: Effect of the training objective on Gen. PPL. (a) Starting from the same pre-trained LangFlow
+checkpoint, MSE-based training yields an immediate and persistent improvement over CE-based training.
+(b) In the crossover experiment, the CE-trained checkpoint improves rapidly after switching to MSE, whereas
+the MSE-trained checkpoint degrades after switching to CE. The horizontal axis denotes additional training
+steps after the objective switch.
+favorable initialization. It further demonstrates that subsequent CE-based training can reverse gains previ-
+ously obtained through MSE-based training.
+4.3 Control of quality-diversity trade-off
+Empirically, we find that sampling guidance is most effective near the data endpoint. We therefore adopt
+time-adaptive variants of self-conditioning guidance, unconditional guidance, and iterative self-conditioning
+refinement.
+Specifically, at each stepi, we replace the constant guidance strengthswscg andw ug withw scg/(1+σti/αti)
+andw ug/(1 +σti/αti), respectively. Thus, these schedules gradually increase the guidance strength over the
+sampling trajectory.
+For iterative self-conditioning refinement, we analogously adapt the refinement count according to
+Ki =
+l Kiscr
+1 +σti/αti
+m
+.
+To ensure a fair comparison under a fixed computational budget, we choose the number of sampling steps
+separately for each configuration. In particular, the NFE for iterative self-conditioning refinement is given
+by
+NFE=
+N−1X
+i=0
+(Ki + 1).
+All three sampling mechanisms provide effective control over the quality-diversity trade-off. Figures 4(a)–
+4(c) present the results for self-conditioning guidance, unconditional guidance, and iterative self-conditioning
+refinement, respectively. Figure 4(d) compares their time-adaptive variants. Each trade-off curve is obtained
+by varying the corresponding nominal control parameter, namelyw scg,w ug, orK iscr, while holding the
+total NFE fixed. The complete results for NFE=64and NFE=128are summarized in Tables 3 and 4 in
+Appendix B.1, respectively.
+Overall, the time-adaptive variants generally improve the Gen. PPL-entropy frontier relative to their
+constant-strength counterparts. As shown in Figure 4(d), among the three adaptive techniques, self-
+conditioning guidance spans the broadest range of operating points and achieves the most favorable trade-off
+in the low- and medium-entropy regimes. Iterative self-conditioning refinement is particularly effective in
+the high-entropy regime, although it covers a narrower controllable range. Unconditional guidance yields
+only modest Gen. PPL reductions, and we investigate this further in Section 4.5.
+15
+5.35 5.40 5.45 5.50
+Entropy
+40
+50
+60
+70
+80
+90
+100Gen. PPL
+Standard
+Time-adaptive
+(a) Standard and time-adaptive self-conditioning guid-
+ance.
+5.30 5.35 5.40 5.45 5.50
+Entropy
+50
+60
+70
+80
+90Gen. PPL
+Standard
+Time-adaptive
+(b) Standard and time-adaptive unconditional guidance.
+5.505 5.510 5.515 5.520 5.525 5.530 5.535
+Entropy
+75
+80
+85
+90
+95
+100
+105Gen. PPL
+Standard
+Time-adaptive
+(c) Standard and time-adap

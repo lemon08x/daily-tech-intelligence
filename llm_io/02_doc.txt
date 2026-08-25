@@ -1,0 +1,1155 @@
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+Jialong Liu 1 Yuling Shi2 Ning Yang3 Xiaodong Gu 2 Zuchao Li 1
+Abstract
+Self-reflection is a powerful mechanism for credit
+assignment in human learning, converting sparse
+outcome feedback into actionable guidance. How-
+ever, its potential for post-training Large Lan-
+guage Models (LLMs) remains underexplored.
+We propose Self-Reflective Policy Optimization
+(SRPO), a framework that internalizes this ca-
+pability. SRPO enables LLMs to analyze their
+own completed trajectories, synthesize errors into
+concise ”reflection patches,” and use reflection-
+conditioned teacher scores on student on-policy
+rollouts as dense token-level training signals. This
+process effectively transforms sparse terminal su-
+pervision into dense, token-level learning signals
+without requiring external critics, separate reward
+models, or larger teacher models. We demonstrate
+that SRPO achieves state-of-the-art performance
+across mathematical reasoning and long-horizon
+agentic benchmarks with exceptional data effi-
+ciency. Using a Qwen3-8B base model, SRPO
+attains 73.3% on AIME’24 using only 8% (0.08×)
+of the training FLOPs required by scaled super-
+vised fine-tuning, while significantly improving
+success rates on WebShop (64.7%), ALFWorld
+(76.8%), and SWE-Bench-Lite (31.2%). Code is
+available at https://github.com/Galle
+ons2029/SRPO
+1. Introduction
+Post-training has emerged as the critical phase for unlock-
+ing the reasoning and decision-making capabilities of large
+language models (LLMs) (OpenAI et al., 2024; Grattafiori
+et al., 2024; Shao et al., 2024). Through reinforcement learn-
+ing (RL) combined with inference-time techniques such as
+1School of artificial intelligence, Wuhan University, Wuhan,
+China 2School of computer science, Shanghai Jiao Tong University,
+Shanghai, China 3Institute of automation, Chinese Academy of
+Sciences, Beijing, China. Correspondence to: Zuchao Li <zcli-
+charlie@whu.edu.cn>.
+Proceedings of the 43rd International Conference on Machine
+Learning, Seoul, South Korea. PMLR 306, 2026. Copyright 2026
+by the author(s).
+chain-of-thought prompting, modern LLMs achieve impres-
+sive performance on mathematical reasoning, code gener-
+ation, and interactive decision-making. Yet a fundamental
+bottleneck remains: current post-training methods scale
+poorly tolong-horizontasks—those requiring coherent rea-
+soning across extended interaction sequences with dozens or
+even hundreds of intermediate decisions (Gao et al., 2025;
+Laban et al., 2025).
+The root cause is thecredit assignment problemunder sparse
+supervision. Standard RL approaches such as PPO (Schul-
+man et al., 2017) and GRPO (Shao et al., 2024) receive only
+terminal feedback (success or failure) after an entire episode,
+regardless of trajectory length. This provides merelyO(1)
+bits of information per episode—an information bottleneck
+that leads to high-variance gradients and sample-inefficient
+learning (Lu & Lab, 2025). Compounding this difficulty,
+recent studies reveal that RL fine-tuning often suffers from
+entropy collapse, progressively shrinking the policy’s explo-
+ration space without genuinely expanding reasoning capac-
+ity (Cui et al., 2025; Yue et al., 2025).
+Self-reflection offers a compelling alternative by converting
+sparse outcome signals into rich textual feedback (Shinn
+et al., 2023; Madaan et al., 2023). Rather than receiv-
+ing a scalar reward, the model analyzes its own fail-
+ures, identifies specific errors, and generates corrective
+guidance—mirroring how humans learn from experience
+through deliberate reflection. However, existing reflection
+mechanisms suffer from fundamental limitations that restrict
+their utility for training. Iteratively appending reflections
+within an ongoing trajectory induces semantic drift, where
+accumulating context eventually collapses under its own
+weight (Laban et al., 2025). Furthermore, reflections con-
+ditioned on frozen parameters often fail to meaningfully
+explore the solution space, and injected reflection prompts
+can disrupt native thinking processes, producing chaotic or
+excessively verbose outputs.
+To bridge the gap between reflection-based prompting and
+reinforcement learning, we propose SRPO (Self-Reflective
+Policy Optimization), a framework that casts self-reflection
+as a mechanism for dense reward generation. Our cen-
+tral insight is that an LLM can serve as its own teacher:
+hindsight reflections on completed trajectories define a
+reflection-augmented teacher distribution that, via teacher-
+1
+arXiv:2608.23493v1  [cs.AI]  24 Aug 2026
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+forced scoring of the student’s on-policy rollouts, yields
+dense token-level supervision. Crucially, we introduce a
+reset-with-memory mechanism that prepends compact re-
+flection patches to the original prompt and regenerates from
+a clean initial state. This design preserves task specifica-
+tion fidelity while injecting learned guidance, creating a
+principled asymmetry—training with reflection, inference
+without—that drives continuous self-improvement.
+This reflection-enhanced behavior is transferred into the
+base policy through on-policy distillation with dense token-
+level supervision. Where sparse terminal rewards provide
+O(1) bits per episode, SRPO extracts O(T) bits by com-
+puting the per-token reverse KL divergence between the
+student and the reflection-augmented teacher distributions —
+a signal we refer to ashindsight-guided dense supervision,
+since reflections are generated after observing the full tra-
+jectory and densify supervision at every token rather than
+performing precise per-step causal attribution. This avoids
+the distribution shift inherent in off-policy methods.
+In summary, this work presents a scalable and effective
+framework for advancing long-horizon reasoning. We intro-
+duce SRPO to convert sparse outcome signals into hindsight-
+guided dense token-level supervision, effectively mitigating
+the credit assignment problem where standard RL struggles.
+Empirically, SRPO achieves state-of-the-art results on math-
+ematical reasoning (AIME’24: 73.3%) and complex agen-
+tic tasks (WebShop, ALFWorld, SWE-Bench-Lite), outper-
+forming reflection-trained baselines (SCoRe (Kumar et al.,
+2025), R3L (Shi et al., 2026), RISE (Qu et al., 2024)) and on-
+policy distillation from a 72B external teacher, while requir-
+ing∼3.8× fewer total FLOPs than GRPO (full Stage 1+2
+accounting).
+2. Related Work
+Post-training has become the standard paradigm for unlock-
+ing the reasoning potential of pre-trained LLMs (OpenAI
+et al., 2024; Grattafiori et al., 2024). The dominant approach
+involves Reinforcement Learning (RL) over language poli-
+cies, where Proximal Policy Optimization (PPO) (Schulman
+et al., 2017) and group-based variants like GRPO (Shao
+et al., 2024) are widely employed to align models with
+human preferences or objective correctness. Recently, ex-
+tensions such as GSPO (Zheng et al., 2025) have further
+improved stability and sample efficiency. However, apply-
+ing RL to complex reasoning tasks is non-trivial; recent
+studies highlight fundamental limitations, including entropy
+collapse and saturation effects (Cui et al., 2025; Yue et al.,
+2025), which restrict the model’s ability to explore diverse
+solution paths effectively. Our work directly addresses these
+inefficiencies by moving beyond sparse terminal rewards.
+The challenges of RL are amplified in long-horizon agen-
+tic tasks, which require planning over extended sequences
+rather than single-turn QA. Recent benchmarks and surveys
+emphasize unique difficulties in this domain, such as in-
+struction drift, context management, and error propagation
+over time (Li et al., 2025; Laban et al., 2025; Deshpande
+et al., 2025). While large-scale asynchronous RL (Gao et al.,
+2025) and system-level optimizations have been proposed to
+handle these complexities, they often demand massive com-
+putational resources. Unlike methods that rely on external
+knowledge injection to supplement domain gaps (Ovadia
+et al., 2024; Song et al., 2025), our approach focuses on opti-
+mizing the reasoning process itself within the agent’s policy,
+enabling it to self-correct dynamically during multi-turn
+interactions.
+To mitigate errors in long trajectories, a growing body
+of work leverages the model’s own reflective capabilities.
+Inference-time techniques like Self-Refine (Madaan et al.,
+2023) and Reflexion (Shinn et al., 2023) demonstrate that
+LLMs can improve by critiquing their own outputs, effec-
+tively framing verbal feedback as a reward signal. Similarly,
+CRITIC (Gou et al., 2024) extends this to tool-interactive
+settings. While promising, most of these methods oper-
+ate solely at inference time or rely on separate retrospec-
+tive modules (Yao et al., 2024). A second line of work
+moves reflection into the training loop: SCoRe (Kumar
+et al., 2025) trains a two-turn self-correction policy with RL,
+RISE (Recursive Introspection) (Qu et al., 2024) fine-tunes
+on iterative self-improvement trajectories, and R 3L (Shi
+et al., 2026) performs local repair of pivot tokens identified
+by reflection. These methods treat correction either as an
+inference-time procedure that doubles compute (SCoRe’s
+two-turn generation), as a separate supervised task (RISE),
+or as a localized suffix repair (R3L). SRPO differs from all
+three by exposing thefullreflection-augmented teacher dis-
+tribution at every student-rollout token (via teacher-forced
+scoring) and internalizing it through on-policy distillation,
+so that no reflection is needed at inference time and the
+entire trajectory — not just a local pivot — can be re-routed.
+We compare against all three as training-time baselines in
+Section??.
+Our framework is also closely related to self-distillation,
+where models learn from their own high-quality gener-
+ations (Pham et al., 2022; Yang et al., 2024). While
+standard self-distillation typically uses off-policy data, re-
+cent work emphasizes the importance of on-policy distil-
+lation—learning from the model’s current distribution—to
+improve robustness and alignment (Agarwal et al., 2024;
+Pati˜no et al., 2025). SRPO advances this direction by in-
+troducing a specific form of on-policy distillation: using
+reflection-conditioned teacher scores on student on-policy
+rollouts as dynamic targets. This allows the model to learn
+not just from correct answers, but from the process of cor-
+recting its own mistakes, thereby converting the sparse sig-
+2
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+nals characteristic of long-horizon tasks into dense, token-
+level supervision.
+3. Methodology
+3.1. Preliminaries
+Problem Setup.We study post-training of a language
+model as sequential decision making over text. Given an
+input promptx (task instruction and optional observation), a
+policyπθ generates a completiony=a 1:T token-by-token,
+which equivalently defines a trajectory τ= (s 1:T,a 1:T )
+wherest is the text history up to step t. An environment
+or automatic evaluator assigns a scalar reward R(τ)∈R ,
+which is typically sparse in long-horizon settings (often
+only available at termination). Our goal is to learn a policy
+that maximizes expected reward while remaining close to a
+reference policyπ ref to preserve language quality:
+max
+θ
+Ex∼D,τ∼π θ(·|x) [R(τ)]
+−βE x∼D [KL (πθ(·|x)∥π ref(·|x))],
+(1)
+whereD denotes the prompt distribution andβ controls the
+KL regularization strength. In interactive agent benchmarks,
+st may include the full dialogue history and environment
+feedback, and an episode terminates upon success, failure,
+or a length budget.
+Imitation learning.We consider sequential decision mak-
+ing over text, where a policy πθ generates an action se-
+quence (token sequence) a1:T conditioned on a state/his-
+tory st. Given expert demonstrations D={τ (i)} with
+trajectoriesτ= (s 1:T,a 1:T ), behavior cloning learnsπθ by
+maximum likelihood:
+LBC(θ) =−E (st,at)∼D [logπθ(at|s t)].(2)
+In interactive settings, pure behavior cloning can suffer from
+compounding errors due to distribution shift. DAgger miti-
+gates this by aggregating data collected under the learned
+policy and querying an expert for corrective labels (Ross
+et al., 2011).
+Group Relative Policy Optimization (GRPO).For post-
+training with reinforcement learning, we optimize πθ to
+maximize an expected rewardR(τ) while constraining devi-
+ation from a reference policyπref. GRPO (Shao et al., 2024)
+is a PPO-style method that replaces a learned value func-
+tion with agroup-relativebaseline computed from multiple
+sampled responses. Concretely, for each prompt/context
+x we sample a group of G rollouts{y(g)}G
+g=1∼π θ(·|x)
+and obtain scalar rewards{r(g)}. GRPO forms normalized
+advantages using group statistics, e.g.
+ˆA(g) = r(g)−µr
+σr +ϵ , µ r = 1
+G
+GX
+g=1
+r(g).(3)
+SRPO
+�
+�
+Standard training
+Self-
+Reflection
+� �
+��
+∗����
+�
+��
+∗
+＋
+Stage1: Refine Stage2: ResampleInitial prompt
+Rollout trajetory Advantages
+Policy Model Policy Model
+Figure 1.Overview of the SRPO Framework. The process consists
+of two stages using the same modelπθ. Stage 1: Given a prompt
+x and a sparse outcomeo from an initial attempt, the model gen-
+erates a concise Reflection Patch (p). This patch is prepended to
+the prompt (Reset-with-Memory) to guide the model in generating
+a high-quality “Teacher” distributionπθ(·|[p;x]) . Stage 2: The
+base model (Student), seeing only the original prompt x, gener-
+ates on-policy rollouts. It is optimized to minimize the Reverse
+KL divergence between its output distribution and the Teacher’s
+distribution, effectively converting sparse outcomes into dense,
+token-level supervision.
+Then it applies a clipped policy-gradient objective with a
+KL regularizer toπref (analogous to PPO (Schulman et al.,
+2017)), enabling stable optimization without an explicit
+critic. Related group-based variants further extend this idea
+for improved efficiency (Zheng et al., 2025).
+3.2. Self-Reflective Policy Optimization
+We present SRPO, a framework that converts sparse out-
+come signals into dense, token-level supervision via self-
+reflection, as illustrated in Figure 1. The core premise is to
+utilize the model’s own reflection-augmented distribution as
+a dynamic teacher for its base policy. By distilling this self-
+induced teacher into the student via teacher-forced scoring
+of the student’s on-policy rollouts, SRPO effectively ad-
+dresses the limitations of standard post-training paradigms:
+it provides the dense supervision lacking in sparse-reward
+RL, mitigates the exposure bias inherent in off-policy SFT,
+and establishes a self-contained improvement loop without
+relying on external teacher models. Figure 1 summarizes
+the two-stage SRPO pipeline.
+3.2.1. STAGE1: REFLECTION-GUIDEDSTATE
+AUGMENTATION
+The first stage transforms sparse terminal feedback into
+structured, reusable guidance through self-reflection on ini-
+tial rollouts.
+Initial Rollout Collection.For each prompt x∼D , we
+sample a completion y∼π θ(·|x) from the current stu-
+dent policy. In agentic settings, we execute the trajectory
+τ= (s 1:T,a 1:T ) in an interactive environment to obtain a
+terminal outcome signal o (e.g., success/failure indicator,
+environment feedback, or sparse scalar reward). Critically,
+such outcome signals are often theonlyreliable supervi-
+3
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+sion in long-horizon tasks, making credit assignment over
+intermediate decisions fundamentally difficult.
+Self-Reflection as Credit Assignment.Rather than di-
+rectly optimizing from sparse outcomes—which provides
+O(1) bits of information per episode regardless of trajectory
+length—we leverage the model’sintrinsic reflection capa-
+bilityto perform explicit credit assignment. Given the tuple
+(x,τ,o) , we query the model with a structured reflection
+prompt to generate a concisehindsight patchp:
+p= Reflect πθ(x,τ,o).(4)
+The reflection p encapsulates two components: (i) adi-
+agnostic analysisidentifying root causes of failure or key
+decisions in successful trajectories, and (ii)actionable guid-
+ancespecifying constraints to enforce, subgoals to priori-
+tize, or pitfalls to avoid. We deliberately keep p compact
+(typically 2–5 bullet points) to ensure it serves as a stable,
+non-redundant conditioning signal.
+Initial-State Reconstruction.A critical design choice
+distinguishes our approach from prior reflection meth-
+ods (Shinn et al., 2023; Madaan et al., 2023): instead of iter-
+atively appending reflections within an already-drifted con-
+text—where reflections can become repetitive, inconsistent,
+or semantically entangled with accumulated errors—we per-
+form areset with memory. We reconstruct an augmented
+initial state by prepending the reflection patch to the original
+prompt:
+˜x= Reconstruct(p,x) = [p;x].(5)
+This formulation ensures that: (1) the environment state re-
+mains unmodified, maintaining consistency with the original
+task specification; (2) the augmented distributionπθ(·|˜x)
+stays close to the original distribution πθ(·|x) , since p
+is prepended rather than interleaved; and (3) the reflection
+serves as a “prior” that guides subsequent generation with-
+out contaminating the action space.
+Rethinking Rollout (Quality Validation).From the recon-
+structed state, we optionally sample arethinking rollout:
+˜y∼πθ(·|˜x).(6)
+Empirically, ˜yexhibits substantially higher quality thany,
+evidence thatπθ(·|˜x) is a stronger policy and therefore a
+valid teacher. Importantly, ˜yisnota training target: Stage 2
+consumes only the teacher’s per-token log-probabilities un-
+der teacher-forcing on the student’s tokens.
+Self as Teacher.The central insight of our approach is that
+the model’s own reflection-conditioned policy can serve as
+its teacher. We define areflection-augmented teacher policy:
+πT (·|x) :=π θ(·|˜x) =π θ(·|[p;x]).(7)
+With a slight abuse of notation, on the student’s on-policy tra-
+jectory (st,at) we writeπT (at|s t) :=π θ(at|[p;x],y <t):
+the teacher is evaluated byteacher-forcingon the stu-
+dent’s response prefixy<t under the reflection-augmented
+prompt [p;x] . Stage 2 thus uses teacherscoringof stu-
+dent tokens under privileged context—not teacher-generated
+trajectories—which keeps the distillation strictly on-policy
+and avoids the off-policy mismatch that would arise if
+reflection-conditioned rollouts were used as targets. Un-
+like conventional distillation that requires a larger, more
+capable teacher model, our teacher πT is thesamemodel
+πθ but operating under more favorable conditions (i.e., with
+access to hindsight information). This creates an asymme-
+try: at training time, the model can leverage reflection to
+produce better outputs; at inference time, the learned policy
+must achieve comparable qualitywithoutreflection. Stage 2
+bridges this gap through on-policy distillation.
+3.2.2. STAGE2: ON-POLICYSELF-DISTILLATION
+The second stage transfers the reflection-enhanced behavior
+into the base policy through on-policy distillation, eliminat-
+ing the inference-time dependency on explicit reflection.
+On-Policy Sampling.For each prompt x∼D , we sample
+trajectories from the current student policy πθ(·|x) . Un-
+like off-policy distillation that trains on teacher-generated
+trajectories, on-policy sampling ensures the student learns
+to improve from states it actually visits, avoiding the com-
+pounding errors that arise from distribution shift (Ross et al.,
+2011). This is particularly crucial in long-horizon settings
+where small early deviations can lead to drastically different
+downstream states.
+Dense Token-Level Supervision via Reverse KL.The core
+advantage of distillation over reinforcement learning lies in
+itsreward density. While RL provides only O(1) bits of
+supervision per episode (the terminal reward), distillation
+providesO(T) bits by grading every token in the trajectory.
+We adopt a per-tokensingle-sample Monte-Carloestimator
+of the reverse-KL functional: for a state st visited by the
+cached behaviour policyπθold and a sampled action at∼
+πθold(·|s t), we define the cached log-ratio reward
+rt = sg[ logπ T (at|s t)−logπ θold(at|s t) ],(8)
+where sg[·] is the stop-gradient operator and st denotes
+the context up to position t. Both πT and πθold are pre-
+computed and detached before the actor update, so rt car-
+ries no gradient; the policy is optimised only through the
+PPO ratio ρt =π θ/πθold in Eq. (10). Taking expectation
+underπθold(·|s t) recovers−KL(πθold∥πT ) (st), sort is
+an unbiased single-sample estimator of the population re-
+verse KL at st. The negative reverse KL rewards tokens
+that align with the teacher’s distribution while penalizing
+deviations. Intuitively, tokens receiving high penalty cor-
+respond to “forking points” where the student’s choices
+diverge from the reflection-informed teacher—precisely the
+4
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+decision points where credit assignment is most valuable.
+Reverse KL possesses several desirable properties for our
+setting: (i) it ismode-seeking, encouraging the student
+to commit to the teacher’s preferred behavior rather than
+spreading probability mass across suboptimal alternatives;
+(ii) it provides anunhackablereward signal, as low KL al-
+ways corresponds to high probability under the teacher; and
+(iii) it naturally synergizes with policy gradient methods
+that optimize sequence-level reverse KL induced by reward
+models.
+Advantage Estimation.To reduce variance while main-
+taining unbiased gradients, we compute advantages using a
+trajectory-level baseline:
+¯r= 1
+|V|
+X
+t∈V
+rt, A t =r t−¯r,(9)
+whereV denotes the set of valid (non-padding) token po-
+sitions. This group-relative normalization, inspired by
+GRPO (Shao et al., 2024), eliminates the need for a learned
+value function while providing stable optimization signals.
+Clipped Policy Gradient Objective.We optimize the stu-
+dent policy using a PPO-style clipped objective (Schulman
+et al., 2017) to prevent destructively large updates:
+L(θ) =−E t [min (ρtAt,clip(ρ t,1−ϵ,1 +ϵ)A t)],
+(10)
+where ρt =π θ(at |s t)/πθold(at |s t) is the importance
+sampling ratio between the current and cached policy. The
+clipping thresholdϵ (typically 0.1–0.2) bounds the policy
+update magnitude, ensuring stable learning even with ag-
+gressive advantage signals.
+Algorithm 1 summarizes the complete training procedure.
+Through this iterative process, the student policyπθ gradu-
+ally approximates the behavior of the reflection-augmented
+teacherπT , effectively internalizing the reasoning capabili-
+ties initially derived from the reflection mechanism.
+SRPO inherits the advantages of both distillation and on-
+policy RL: it provides dense token-level supervision (O(T)
+bits per episode vs. O(1) for sparse RL), eliminates ex-
+posure bias through on-policy sampling, and requires no
+external teacher models. The reflection-augmented teacher
+πT (·|[p;x]) effectively has access to hindsight information,
+creating an asymmetry that enables self-improvement: the
+model learns to internalize decisions that were originally
+informed by outcome feedback. Counting Stage 1 and Stage
+2, SRPO uses 5.4×10 18 FLOPs versus 20.8×10 18 for
+GRPO, i.e., approximately 3.8× fewer total FLOPs. De-
+tailed theoretical analysis, including information-theoretic
+perspectives and formal treatment of the self-distillation
+mechanism, is provided in Appendix B.
+Algorithm 1SRPO: Self-Reflective Policy Optimization
+Require: Policyπθ, prompt datasetD, clipping threshold
+ϵ
+1:foreach training iterationdo
+2:foreach promptx∼Ddo
+3:// Stage 1: Reflection-Guided State Augmentation
+4:Sample initial rollout:y∼π θ(·|x)
+5:Execute trajectoryτand obtain outcomeo
+6:Generate reflection patch:p←Reflect πθ(x,τ,o)
+7:Construct augmented prompt:˜x←[p;x]
+8:// Stage 2: On-Policy Self-Distillation
+9:Define teacher:π T (·|x) :=π θ(·|˜x)// Self as
+teacher
+10:Sample on-policy trajectory:y∼π θ(·|x)
+11:foreach tokena t inydo
+12: Compute cached token reward (stop-grad):
+rt←logπ T (at|s t)−logπ θold(at|s t)//
+teacher-forcing ony<t
+13:end for
+14:Compute advantages:A t←r t− 1
+T
+P
+t′rt′
+15:Updateθvia clipped policy gradient:
+16:L=−E t [min (ρtAt,clip(ρ t,1±ϵ)A t)]
+17:end for
+18:end for
+4. Experiments
+We evaluate SRPO on reasoning benchmarks spanning math-
+ematical problem-solving and long-horizon agentic tasks.
+We compare against strong post-training and inference-time
+baselines, and ablate self-reflection and key design choices
+across model scales.
+4.1. Experimental Setup
+Base Models.We evaluate SRPO on models spanning
+multiple scales to demonstrate generalizability: Qwen3-
+1.5B, Qwen3-8B, and Qwen3-32B (Yang et al., 2025) as
+base models. For agentic tasks, we additionally evaluate on
+Llama-3.1-8B-Instruct (Grattafiori et al., 2024) to demon-
+strate cross-family generalization.
+Datasets and Benchmarks.We evaluate on the following
+benchmarks:
+• Mathematical Reasoning: AIME’24 (30 problems,
+competition-level), MATH-500 (Lightman et al.,
+2024) (500 problems across 7 categories), and
+GSM8K (Cobbe et al., 2021) (1,319 test problems)
+for grade-school math.
+• Out-of-Distribution Generalization: Deep-
+ScaleR (Luo et al., 2025) comprising 1,200
+challenging mathematical reasoning problems from
+diverse domains.
+5
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+SFT-400K PPO GRPO On-Policy
+Distill
+Reflexion
+ Self-Refine
+ SRPO
+(Ours)
+40
+50
+60
+70
+80
+90
+100Accuracy (%)
+Best across
+all benchmarks
+Mathematical Reasoning Performance Comparison
+AIME'24
+MATH-500
+GSM8K
+DeepScaleR
+Figure 2.Performance comparison on mathematical reasoning
+benchmarks. All methods start from the same SFT-400K check-
+point. SRPO achieves the best performance across all benchmarks
+with significantly fewer training FLOPs (0.08×).†Inference-time
+methods with 3 refinement iterations. Detailed numerical results
+are in Table 5.
+• Long-Horizon Agentic Tasks: WebShop (Yao et al.,
+2023) (12,087 shopping tasks with sparse success sig-
+nals), ALFWorld (Shridhar et al., 2021) (134 household
+tasks), and SWE-Bench-Lite (Jimenez et al., 2024)
+(300 real-world GitHub issues).
+Training Details.For mathematical reasoning, we initialize
+from an SFT checkpoint trained on 400K prompts from
+OpenThoughts-3 (Guha et al., 2025). We use a batch size of
+256 rollouts, learning rate of 1×10 −5 with cosine decay,
+and clip ratioϵ= 0.2 . For agentic tasks, we train with 64
+prompts per batch with 4 samples per prompt. All experi-
+ments use 8×H100 GPUs unless otherwise specified. The
+reflection prompt is structured to generate 2–5 bullet points
+of diagnostic analysis and actionable guidance.
+Baselines.We compare against the following methods:
+• SFT: Supervised fine-tuning on teacher-generated tra-
+jectories (off-policy distillation).
+• GRPO(Shao et al., 2024): Group Relative Policy
+Optimization with sparse outcome rewards.
+• PPO(Schulman et al., 2017): Standard PPO with
+learned value function.
+• On-Policy Distillation (OPD)(Lu & Lab, 2025): Dis-
+tillation from a larger teacher model (Qwen3-32B→
+Qwen3-8B).
+• Reflexion(?): Iterative reflection with memory accu-
+mulation (inference-time only).
+• Self-Refine(?): Iterative self-refinement without train-
+ing.
+4.2. Main Results: Mathematical Reasoning
+Figure 2 presents our main results on mathematical rea-
+soning benchmarks. SRPO consistently outperforms all
+Base SFT GRPO PPO Reflexion
+Self-Refine
+ SRPO
+(Ours)
+Method
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90Success Rate (%)
+(a) Long-Horizon Agentic Task Success Rates
+WebShop
+ALFWorld
+SWE-Lite
+Base SFT GRPO PPO
+Reflexion
+Self-Refine
+SRPO
+(Ours)
+Method
+0
+2
+4
+6
+8
+10
+12
+14
+16
+18Average Episode Steps
+Most efficient
+(b) Execution Efficiency
+Figure 3.Performance on long-horizon agentic benchmarks. (a)
+Success rate comparison across WebShop, ALFWorld, and SWE-
+Bench-Lite. (b) Average episode steps showing execution effi-
+ciency. SRPO achieves the highest success rates while maintaining
+the shortest episode length. Detailed numerical results are in Ta-
+ble 6.
+baselines across all four benchmarks, achieving 73.3% on
+AIME’24—a 3.3 percentage point improvement over stan-
+dard on-policy distillation and 5.3 points over GRPO. No-
+tably, SRPO achieves these gains with only 8% of the train-
+ing FLOPs required by SFT-2M extrapolation, demonstrat-
+ing superior sample efficiency.
+Analysis.The performance gap between SRPO and stan-
+dard on-policy distillation (OPD) highlights the value of
+self-generatedreflection as a teaching signal. While OPD
+relies on an external, larger teacher model (Qwen3-32B),
+SRPO uses the student’s own reflection-conditioned outputs
+as targets. This creates two advantages: (1) the teacher dis-
+tribution is naturally aligned with the student’s capability
+frontier, avoiding the “capability gap” problem where stu-
+dents struggle to imitate behaviors far beyond their current
+ability; (2) the reflection mechanism provides task-specific,
+instance-adaptive guidance rather than generic teacher be-
+havior.
+On out-of-distribution generalization (DeepScaleR), SRPO
+shows a larger relative improvement (+7.8% relative to
+OPD), suggesting that the reflection mechanism helps iden-
+tify and correct domain-specific failure modes that may not
+be addressed by generic distillation.
+4.3. Main Results: Long-Horizon Agentic Tasks
+Figure 3 presents results on long-horizon agentic tasks.
+SRPO achieves the highest success rates across all three
+benchmarks: 64.7% on WebShop (+7.9% over SFT), 76.8%
+on ALFWorld (+5.6% over Reflexion), and 31.2% on SWE-
+Bench-Lite (+4.4% over Reflexion).
+Credit Assignment in Long Horizons.The performance
+gap between SRPO and RL-based methods (GRPO, PPO)
+is particularly pronounced on these tasks, where episodes
+can span 10–50 actions. RL methods struggle with credit as-
+signment: a single terminal success/failure signal provides
+insufficient information to determine which intermediate
+decisions were critical. In contrast, SRPO’s reflection mech-
+6
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+0 1 2 3 4 5
+Number of Refinement Iterations
+55
+60
+65
+70
+75
+80
+85AIME'24 Accuracy (%)
++1.8%/iter
++1.2%/iter
++0.9%/iter
+(a) Performance vs. Refinement Iterations
+SFT
+GRPO
+SRPO (Ours)
+1 2 3 4 5 6
+Inference FLOPs (relative)
+55
+60
+65
+70
+75
+80
+85AIME'24 Accuracy (%)
+Pareto Frontier
+(b) Performance vs. Inference Compute
+SFT
+GRPO
+SRPO (Ours)
+Figure 4.Inference-time scaling on AIME’24. (a) Performance vs.
+number of refinement iterations for different methods. SRPO-
+trained models show better scaling with additional compute
+(+1.8%/iter vs +1.2%/iter for GRPO). (b) Performance vs. to-
+tal inference FLOPs, demonstrating Pareto efficiency.
+anism explicitly identifies failure modes (e.g., “navigated to
+wrong room before finding the target object”) and converts
+them into actionable guidance.
+Efficiency Gains.Interestingly, SRPO also achieves the
+shortest average episode length (10.2 steps), indicating that
+the learned policy is not only more successful but also more
+efficient. This suggests that the reflection-distilled policy
+has internalized effective planning strategies rather than
+relying on trial-and-error exploration.
+4.4. Inference-Time Scaling via Self-Refinement
+We investigate how SRPO-trained models behave when
+combined with inference-time refinement strategies. Fig-
+ure 4 shows the relationship between inference compute and
+performance.
+Setup.We compare three configurations: (1) base SFT
+model with iterative self-refinement; (2) GRPO-trained
+model with self-refinement; (3) SRPO-trained model with
+self-refinement. For each configuration, we vary the number
+of refinement iterations from 0 to 5.
+Results.SRPO-trained models exhibit superior inference-
+time scaling: each additional refinement iteration yields
++1.8% improvement on average, compared to +1.2% for
+GRPO and +0.9% for SFT. At 3 iterations, SRPO achieves
+78.5% on AIME’24, approaching the performance of mod-
+els 4×larger.
+This improved scaling can be attributed to the training ob-
+jective: SRPO explicitly trains the model to benefit from
+reflection-augmented contexts. The learned policy has inter-
+nalized the structure of effective reflections and can leverage
+them more efficiently at inference time.
+4.5. Full Fine-Tuning vs. LoRA
+Figure 5 compares full fine-tuning and LoRA adaptation for
+SRPO. We evaluate LoRA with ranks 64 and 128, applied
+to all attention and MLP layers.
+Full FT LoRA-64 LoRA-128
+Fine-tuning Method
+65
+70
+75
+80
+85
+90AIME'24 Accuracy (%)
+97.8%
+97.2%
+(a) Performance: Full FT vs. LoRA
+Qwen3-8B
+Qwen3-32B
+Full FT LoRA-64 LoRA-128
+Fine-tuning Method
+0
+50
+100
+150
+200
+250
+300GPU Memory (GB)
+72% 
+73% 
+(b) Memory Efficiency
+Qwen3-8B
+Qwen3-32B
+Figure 5.Comparison of full fine-tuning vs. LoRA adaptation for
+SRPO. (a) Performance on AIME’24 showing LoRA-128 achieves
+97.8% of full fine-tuning accuracy. (b) GPU memory requirements
+demonstrating LoRA’s efficiency with 72–73% reduction. Detailed
+numerical results are in Table 7.
+Table 1.Ablation study on AIME’24 and WebShop. Each row
+removes or modifies one component from the full SRPO system.
+Configuration AIME’24 WebShop
+SRPO (Full)73.3 64.7
+Stage 1: Reflection Design
+w/o reflection (direct retry) 65.8 54.2
+w/ verbose reflection (>10 points) 70.0 60.3
+w/ outcome-only feedback 67.2 56.8
+w/ external teacher reflection 71.5 62.4
+Stage 2: Distillation Strategy
+Forward KL instead of reverse KL 69.4 58.6
+Off-policy (teacher trajectories) 68.0 55.9
+No clipping (ϵ=∞) 70.2 61.3
+Single-sample advantage (no group) 71.1 62.0
+State Reconstruction
+Append reflection (not prepend) 68.5 57.4
+No state reset (iterative) 66.3 52.8
+Findings.LoRA-128 achieves 97.8% of full fine-tuning
+performance on AIME’24 while using only 1.3% of the
+trainable parameters and 34% of the GPU memory. This
+efficiency makes SRPO accessible for practitioners with
+limited compute resources.
+Notably, the gap between LoRA and full fine-tuning is
+smaller for SRPO compared to standard SFT (where LoRA
+lags by 13% after large-scale training, as noted in prior
+work (Lu & Lab, 2025)). We hypothesize that on-policy
+distillation’s dense token-level supervision is more compat-
+ible with low-rank updates, as it provides richer gradient
+information per sample.
+4.6. Ablation Studies
+Table 1 presents ablation studies examining key design
+choices in SRPO.
+Reflection Quality Matters.Removing reflection entirely
+(“direct retry”) causes a 7.5-point drop on AIME’24, con-
+firming that self-reflection provides meaningful guidance
+beyond random exploration. Interestingly, verbose reflec-
+7
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+1.7B 8B 32B
+Model Size
+0
+20
+40
+60
+80AIME'24 Accuracy (%)
++7.8
++5.3
++3.8
+(a) Performance vs. Model Size
+SFT
+GRPO
+SRPO (Ours)
+10 1
+ 100
+Total Training FLOPs (relative to GRPO, log scale)
+45
+50
+55
+60
+65
+70
+75
+80AIME'24 Accuracy (%)
+Matched AIME'24 accuracy
+~3.8× fewer total FLOPs
+SRPO: 0.26×
+(b) Performance vs. Training Compute
+SFT
+GRPO
+SRPO (Ours)
+Figure 6.Scaling behavior of SRPO. (a) Performance vs. model
+size shows consistent improvements across scales, with larger
+gains for smaller models (+7.8 for 1.5B vs +3.8 for 32B). (b)
+Performance vs. training compute demonstrates SRPO reaches
+70% performance with∼10×fewer FLOPs than GRPO.
+Table 2.Scaling analysis across model sizes on AIME’24. SRPO
+shows consistent improvements across all scales, with the relative
+gain increasing for smaller models.
+Model Size SFT GRPO SRPO∆vs GRPO
+Qwen3-1.5B 38.2 44.5 52.3 +7.8
+Qwen3-8B 60.0 68.0 73.3 +5.3
+Qwen3-32B 71.4 78.2 82.0 +3.8
+tions with more than 10 points actually hurt performance
+(-3.3 points), suggesting that overly detailed reflections may
+introduce noise or conflicting advice. This validates our
+design choice of compact, actionable reflections.
+Self-Generated vs. External Reflection.Using reflections
+generated by a larger external teacher (Qwen3-32B) per-
+forms worse than self-reflection (-1.8 points on AIME’24).
+We attribute this to distribution mismatch: external reflec-
+tions may reference strategies or concepts outside the stu-
+dent’s capability, leading to ineffective guidance.
+Reverse KL is Critical.Switching from reverse KL to
+forward KL causes a 3.9-point drop on AIME’24. Forward
+KL is “mean-seeking” and encourages the student to cover
+all modes of the teacher distribution, which dilutes focus on
+the most effective strategies. Reverse KL’s mode-seeking
+property better aligns with our goal of learning the teacher’s
+preferred behavior.
+State Reset is Essential.The “no state reset” configuration,
+which appends reflections iteratively without resetting to
+the initial state (similar to Reflexion), performs 7.0 points
+worse on AIME’24. This confirms our hypothesis that accu-
+mulated context can become inconsistent and interfere with
+effective reasoning.
+4.7. Scaling Analysis
+We examine how SRPO scales with model size (Table 2 and
+Figure 6).
+Consistent Gains Across Scales.SRPO provides improve-
+1 2 3 4 5
+Helpfulness Score (1-5)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45Percentage of Reflections (%)
+3%
+5%
+25%
+35%
+32%
+67%  4
+8%  2
+(a) Distribution of Reflection Quality
+1 2 3 4 5
+Reflection Helpfulness Score
+0
+10
+20
+30
+40
+50Improvement in Success Rate (%)
+r = 0.72
+High-quality:
++34% avg
+Low-quality:
++5% avg
+(b) Quality-Improvement Correlation
+Figure 7.Analysis of reflection quality. (a) Distribution of reflec-
+tion helpfulness scores rated by GPT-4: 67% of reflections receive
+scores≥4 (useful), while only 8% receive scores≤2 (unhelpful).
+(b) Strong correlation (r= 0.72 ) between reflection quality and
+improvement in rethinking rollout success rate.
+ments across all model sizes, with gains of +7.8, +5.3, and
++3.8 points over GRPO for 1.5B, 8B, and 32B models re-
+spectively. The larger relative improvement for smaller mod-
+els suggests that SRPO’s dense supervision is particularly
+valuable when model capacity is limited.
+Compute Efficiency.Figure 6 (right) shows performance
+as a function of training FLOPs. SRPO achieves superior
+Pareto efficiency: it reaches 70% AIME’24 performance
+with approximately 10× fewer FLOPs than GRPO and 30×
+fewer than continued SFT. This aligns with theoretical ex-
+pectations: distillation provides O(T) bits of supervision
+per episode compared toO(1)for RL with sparse rewards.
+4.8. Analysis: Quality of Self-Generated Reflections
+To understand when and why self-reflection helps, we an-
+alyze 500 randomly sampled reflection instances from the
+AIME’24 training set.
+Reflection Helpfulness.We use GPT-4 to rate each reflec-
+tion on a 1–5 scale for helpfulness (1=irrelevant, 5=directly
+actionable). Figure 7 (left) shows the distribution: 67% of
+reflections receive scores≥4, indicating that the model can
+reliably generate useful self-feedback. Only 8% receive
+scores≤2, typically for problems where the model lacks
+fundamental knowledge.
+Correlation with Improvement.Figure 7 (right) shows a
+strong correlation (r= 0.72 ) between reflection helpfulness
+and improvement in rethinking rollout success. High-quality
+reflections (score 5) lead to a 34% average improvement in
+success rate, while low-quality reflections (score 1–2) yield
+only 5% improvement—still positive but marginal.
+Failure Mode Analysis.We categorize unsuccessful reflec-
+tions into three types: (1)Generic advice(42%): reflections
+that provide correct but non-specific guidance (e.g., “check
+the arithmetic carefully”); (2)Incorrect diagnosis(35%):
+reflections that misidentify the root cause of failure; (3)
+Beyond capability(23%): problems requiring knowledge
+the model does not possess. These failure modes suggest
+8
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+Table 3.Comparison of self-distillation (SRPO) vs. distillation
+from larger teachers. Self-distillation achieves competitive perfor-
+mance without requiring access to larger models.
+Student Teacher AIME’24 Teacher FLOPs
+Qwen3-8B
+None (GRPO) 68.0 0
+Qwen3-32B 70.0 4.0×
+Qwen3-72B 72.5 9.0×
+Self (SRPO) 73.3 1.0×
+Qwen3-1.5B
+Qwen3-8B 48.7 5.3×
+Qwen3-32B 51.2 21.3×
+Self (SRPO) 52.3 1.0×
+Table 4.Continual learning evaluation. Models are first trained on
+math (AIME’24) then adapted to code (SWE-Lite). SRPO better
+preserves original capabilities while acquiring new skills.
+Method Math (Before) Code (After) Math (After) Retention
+SFT 60.0 28.4 48.2 80.3%
+GRPO 68.0 26.7 59.3 87.2%
+SRPO 73.331.2 69.8 95.2%
+future directions: incorporating external verification signals
+or retrieval-augmented reflection.
+4.9. Comparison with Larger Teacher Distillation
+A key advantage of SRPO is eliminating the need for larger
+teacher models. Table 3 compares SRPO against distillation
+from progressively larger teachers.
+Self-Distillation Matches or Exceeds Larger Teachers.
+Remarkably, SRPO with self-distillation outperforms distil-
+lation from Qwen3-72B (+0.8 points) while using 9× fewer
+teacher FLOPs. This suggests that the reflection mechanism
+effectively “unlocks” latent capabilities within the model
+that are difficult to transfer through conventional distillation.
+Implications for Practitioners.This finding has significant
+practical implications: practitioners can improve their mod-
+els without access to expensive API calls to larger models
+or the computational resources to run them. SRPO democra-
+tizes access to high-quality post-training by leveraging the
+model’s own capabilities.
+4.10. Continual Learning and Catastrophic Forgetting
+We evaluate SRPO’s behavior in a continual learning set-
+ting where models must acquire new capabilities without
+forgetting previous skills.
+Setup.We first train Qwen3-8B on mathematical reasoning,
+then adapt to coding tasks (SWE-Bench-Lite). We measure
+both the new capability acquisition and retention of original
+mathematical reasoning ability.
+Results.Table 13 shows that SRPO achieves 95.2% re-
+tention of mathematical reasoning performance after code
+adaptation, compared to 87.2% for GRPO and 80.3% for
+SFT. This improved retention can be attributed to SRPO’s
+on-policy learning: by training on the model’s own distri-
+bution, SRPO naturally maintains behaviors that the model
+already performs well.
+Connection to Prior Work.This finding aligns with ob-
+servations in the on-policy distillation literature (Lu & Lab,
+2025): on-policy methods cause less catastrophic forgetting
+than off-policy approaches because they do not force the
+model to imitate out-of-distribution behaviors.
+5. Conclusion
+We presented SRPO, a post-training method that con-
+verts episode-level outcomes into hindsight-guided dense,
+reflection-augmented supervision, overcoming the ineffi-
+ciency of sparse-reward RL. The mechanism is best un-
+derstood not as self-distillation but as on-policy RL with
+reflection-guided exploration: reflection-conditioned teach-
+ers steer the student into high-reward regions of itsown
+policy space rather than imitating a distribution beyond
+its representational capacity. Across 10 benchmarks span-
+ning math, code, agent, science, and logic, SRPO yields
+reproducible gains (multi-seed bootstrap CIs, p <0.005),
+matching or exceeding larger-teacher distillation while re-
+quiring∼3.8× fewer total FLOPs than GRPO and naturally
+mitigating catastrophic forgetting under continual learning.
+Moving forward, we aim to refine reflection quality via ex-
+ternal verification or better calibration, and to extend the
+framework beyond verifiable-outcome tasks, including mul-
+timodal reasoning and longer-horizon tool-use trajectories.
+9
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+Acknowledgements
+This work was supported by the National Natural Science
+Foundation of China (No. 62306216), the Technology Inno-
+vation Program of Hubei Province (No. 2024BAB043) and
+the Fundamental Research Funds for the Central Universi-
+ties (No. 2042026kf0055).
+Impact Statement
+This paper presents a post-training method intended to im-
+prove the reliability and sample efficiency of long-horizon
+reasoning and agentic behavior in LLMs. Potential positive
+impacts include better performance with lower compute and
+fewer human labels, which can broaden access to capable
+models. Potential negative impacts include enabling more
+effective autonomous agents that could be misused (e.g.,
+for scalable cyber abuse) if deployed without appropriate
+safeguards. We encourage careful evaluation, monitoring,
+and staged release practices when applying the method to
+high-stakes or open-ended agentic settings.
+References
+Agarwal, R., Vieillard, N., Zhou, Y ., Stanczyk, P., Garea,
+S. R., Geist, M., and Bachem, O. On-policy distillation of
+language models: Learning from self-generated mistakes.
+InThe Twelfth International Conference on Learning
+Representations, 2024. URL https://openreview
+.net/forum?id=3zKtaqxLhW.
+Cobbe, K., Kosaraju, V ., Bavarian, M., Chen, M., Jun, H.,
+Kaiser, L., Plappert, M., Tworek, J., Hilton, J., Nakano,
+R., Hesse, C., and Schulman, J. Training verifiers to solve
+math word problems, 2021. URL https://arxiv.
+org/abs/2110.14168.
+Cui, G., Zhang, Y ., Chen, J., Yuan, L., Wang, Z., Zuo, Y .,
+Li, H., Fan, Y ., Chen, H., Chen, W., Liu, Z., Peng, H.,
+Bai, L., Ouyang, W., Cheng, Y ., Zhou, B., and Ding,
+N. The entropy mechanism of reinforcement learning
+for reasoning language models, 2025. URL https:
+//arxiv.org/abs/2505.22617.
+Deshpande, K., Sirdeshmukh, V ., Mols, J. B., Jin, L.,
+Hernandez-Cardona, E.-Y ., Lee, D., Kritz, J., Primack,
+W. E., Yue, S., and Xing, C. MultiChallenge: A realistic
+multi-turn conversation evaluation benchmark challeng-
+ing to frontier LLMs. In Che, W., Nabende, J., Shutova,
+E., and Pilehvar, M. T. (eds.),Findings of the Asso-
+ciation for Computational Linguistics: ACL 2025, pp.
+18632–18702, Vienna, Austria, July 2025. Association
+for Computational Linguistics. ISBN 979-8-89176-256-
+5. doi: 10.18653/v1/2025.findings-acl.958. URL
+https://aclanthology.org/2025.findin
+gs-acl.958/.
+Gao, J., Fu, W., Xie, M., Xu, S., He, C., Mei, Z., Zhu, B.,
+and Wu, Y . Beyond ten turns: Unlocking long-horizon
+agentic search with large-scale asynchronous rl, 2025.
+URLhttps://arxiv.org/abs/2508.07976.
+Gou, Z., Shao, Z., Gong, Y ., Shen, Y ., Yang, Y ., Duan, N.,
+and Chen, W. CRITIC: Large language models can self-
+correct with tool-interactive critiquing. InThe Twelfth
+International Conference on Learning Representations,
+2024. URL https://openreview.net/forum
+?id=Sx038qxjek.
+Grattafiori, A., Dubey, A., et al. The llama 3 herd of models,
+2024. URL https://arxiv.org/abs/2407.2
+1783.
+Guha, E., Marten, R., Keh, S., et al. Openthoughts: Data
+recipes for reasoning models, 2025. URL https://ar
+xiv.org/abs/2506.04178.
+Jain, N., Han, K., Gu, A., Li, W.-D., Yan, F., Zhang, T.,
+Wang, S., Solar-Lezama, A., Sen, K., and Stoica, I.
+LiveCodeBench: Holistic and contamination-free eval-
+uation of large language models for code, 2024. URL
+https://arxiv.org/abs/2403.07974.
+Jimenez, C. E., Yang, J., Wettig, A., Yao, S., Pei, K., Press,
+O., and Narasimhan, K. Swe-bench: Can language
+models resolve real-world github issues?, 2024. URL
+https://arxiv.org/abs/2310.06770.
+Kumar, A., Zhuang, V ., Agarwal, R., Su, Y ., Co-Reyes, J. D.,
+Singh, A., Baumli, K., Iqbal, S., Bishop, C., Roelofs, R.,
+Zhang, L. M., McKinney, K., Shrivastava, D., Paduraru,
+C., Tucker, G., Precup, D., Behbahani, F., and Faust, A.
+Training language models to self-correct via reinforce-
+ment learning. InThe Thirteenth International Confer-
+ence on Learning Representations, 2025. URL https:
+//openreview.net/forum?id=CjwERcAU7w.
+Laban, P., Hayashi, H., Zhou, Y ., and Neville, J. Llms
+get lost in multi-turn conversation, 2025. URL https:
+//arxiv.org/abs/2505.06120.
+Li, Y ., Shen, X., Yao, X., Ding, X., Miao, Y ., Krishnan,
+R., and Padman, R. Beyond single-turn: A survey on
+multi-turn interactions with large language models, 2025.
+URLhttps://arxiv.org/abs/2504.04717.
+Lightman, H., Kosaraju, V ., Burda, Y ., Edwards, H., Baker,
+B., Lee, T., Leike, J., Schulman, J., Sutskever, I., and
+Cobbe, K. Let’s verify step by step. InThe Twelfth
+International Conference on Learning Representations,
+2024. URL https://openreview.net/forum
+?id=v8L0pN6EOi.
+10
+SRPO: Self-Reflective Policy Optimization for Long-Horizon Reasoning
+Lu, K. and Lab, T. M. On-policy distillation.Thinking
+Machines Lab: Connectionism, 2025. doi: 10.64434/tml
+.20251026. https://thinkingmachines.ai/blog/on-policy-
+distillation.
+Luo, M., Tan, S., Wong, J., Shi, X., Tang, W., Roongta, M.,
+Cai, C., Luo, J., Zhang, T., Li, E., Popa, R. A., and Stoica,
+I. Deepscaler: Surpassing o1-preview with a 1.5b model
+by scaling rl. https://pretty-radio-b75.n
+otion.site/DeepScaleR-Surpassing-O1-P
+review-with-a-1-5B-Model-by-Scaling
+-RL-19681902c1468005bed8ca303013a4e2 ,
+2025. Notion Blog.
+Madaan, A., Tandon, N., Gupta, P., Hallinan, S., Gao, L.,
+Wiegreffe, S., Alon, U., Dziri, N., Prabhumoye, S., Yang,
+Y ., Gupta, S., Majumder, B. P., Hermann, K., Welleck,
+S., Yazdanbakhsh, A., and Clark, P. Self-refine: Iterative
+refinement with self-feedback. InThirty-seventh Confer-
+ence on Neural Information Processing Systems, 2023.
+URL https://openreview.net/forum?id=
+S37hOerQLB.
+OpenAI, Achiam, J., Adler, S., Agarwal, S., Ahmad, L.,
+et al. Gpt-4 technical report, 2024. URL https://ar
+xiv.org/abs/2303.08774.
+Ovadia, O., Brief, M., Mishaeli, M., and Elisha, O. Fine-
+tuning or retrieval? comparing knowledge injection in
+LLMs. In Al-Onaizan, Y ., Bansal, M., and Chen, Y .-N.
+(eds.),Proceedings of the 2024 Conference on Empirical
+Methods in Natural Language Processing, pp. 237–250,
+Miami, Florida, USA, November 2024. Association for
+Computational Linguistics. doi: 10.18653/v1/2024.emn
+lp-main.15. URL https://aclanthology.org
+/2024.emnlp-main.15/.
+Pati˜no, C. M., Rasul, K., Gallou ´edec, Q., Burtenshaw, B.,
+Paniego, S., Srivastav, V ., Frere, T., Beeching, E., Tun-
+stall, L., von Werra, L., and Wolf, T. Unlocking on-policy
+distillation for any model family, 2025.
+Pham, M., Cho, M., Joshi, A., and Hegde, C. Revisiting
+self-distillation, 2022. URL https://arxiv.org/
+abs/2206.08491.
+Qu, Y ., Zhang, T., Garg, N., and Kumar, A. Recursive
+introspection: Teaching language model agents how to
+self-improve. InThirty-Eighth Annua

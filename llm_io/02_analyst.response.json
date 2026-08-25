@@ -1,0 +1,55 @@
+{
+  "headline": "ICML 2026论文SRPO：自反思把稀疏奖励变成稠密token级监督，8B模型AIME'24达73.3%且训练算力省3.8倍",
+  "key_facts": [
+    "ICML 2026论文（arXiv:2608.23493，2026-08-24提交，武汉大学/上海交通大学/中科院自动化所）提出SRPO：以模型自身反思增强的分布为教师，对学生on-policy rollout做自蒸馏，把稀疏终端奖励转化为稠密token级监督。",
+    "两阶段设计：Stage 1对初始轨迹做后见反思生成2-5条要点的reflection patch并前置到原始prompt（reset-with-memory）；Stage 2以逐token reverse KL为奖励，配合轨迹级基线与PPO裁剪，无需外部critic、奖励模型或更大教师模型。",
+    "Qwen3-8B上AIME'24达73.3%（GRPO 68.0、SFT 60.0、72B教师蒸馏72.5）；WebShop 64.7%、ALFWorld 76.8%、SWE-Bench-Lite 31.2%，均为对比方法中最高。",
+    "计算成本：总训练FLOPs约5.4e18，较GRPO（20.8e18）少约3.8倍；达到70% AIME'24成绩仅需GRPO约1/10的FLOPs、持续SFT约1/30。",
+    "规模效应：相对GRPO增益在小模型更大（1.5B +7.8、8B +5.3、32B +3.8个百分点）；LoRA-128达全量微调97.8%性能，可训练参数仅1.3%、GPU显存降34%。",
+    "消融：去掉反思-7.5分、不重置状态-7.0分、forward KL-3.9分、外部大模型反思-1.8分（分布不匹配）、冗长反思（>10条）-3.3分。",
+    "持续学习：数学→代码迁移后数学能力保留率95.2%（GRPO 87.2%、SFT 80.3%）；推理时scaling斜率+1.8%/迭代（GRPO +1.2%），3次迭代AIME'24达78.5%。",
+    "代码开源：https://github.com/Galleons2029/SRPO"
+  ],
+  "technical_mechanism": "SRPO针对长时程任务的信用分配瓶颈（稀疏终端奖励每回合仅提供O(1)比特信息，导致高方差梯度与样本低效）。机制分两步：(1) 模型先做初始rollout，观察完整轨迹与结果后生成紧凑的后见反思patch p（2-5条要点，含诊断分析与可执行指导）；(2) reset-with-memory——将p前置到原始prompt构造增强初始状态[p;x]，不修改环境状态、保持分布接近原策略。核心是同一模型在反思条件下的策略π_θ(·|[p;x])充当教师，通过teacher-forcing在学生on-policy rollout的每个token上计算log概率，形成缓存log-ratio奖励r_t=logπ_T(a_t|s_t)-logπ_θold(a_t|s_t)（stop-gradient）；该奖励是负reverse KL的单样本无偏估计，配合轨迹级基线归一化与PPO裁剪更新学生策略。reverse KL具有mode-seeking与不可被hack的性质。训练-推理不对称（训练时用反思、推理时不用）把反思增强行为内化进基础策略，推理阶段无需反思开销。",
+  "novelty": "已有反思方法（Reflexion、Self-Refine）仅在推理时生效，SCoRe需双轮生成使推理算力翻倍，RISE把自我改进当作独立监督任务，R3L只修复局部pivot token。SRPO的新意在于把自反思重构为稠密奖励生成机制：同一模型的反思条件分布作教师做on-policy自蒸馏，首次同时做到稠密token级监督、无需外部大教师、推理时零反思依赖。消融中外部大模型反思反而更差（-1.8分），说明价值不在更强的指导，而在与学生能力前沿对齐的指导。",
+  "maturity": "学术原型阶段：已被ICML 2026接收，代码开源，实验覆盖Qwen3-1.5B/8B/32B三个规模及Llama-3.1-8B-Instruct跨族验证，报告多seed bootstrap置信区间（p<0.005）。局限：仅适用于有可验证结果信号的任务（数学、代码、交互环境），尚未扩展到不可自动判分的开放域任务、多模态与更长工具使用轨迹。8×H100的实验规模可复现，LoRA-128进一步降低复现门槛。",
+  "outlook_6_24m": "未来6-12个月，SRPO式'反思→稠密自蒸馏'有望进入主流开源后训练流水线（GRPO/RLHF训练框架），在1.5B-8B中小模型区间增益最大，与LoRA结合使中型团队可低成本增强长时程agent能力。12-24个月，若扩展到不可验证结果（外部校验信号、检索增强反思）与多模态工具使用场景，可能成为agent后训练的标准组件，把长时程任务的训练算力需求压缩一个数量级；'自教师'范式也可能动摇'租大模型做蒸馏'的成本结构。",
+  "industry_impacts": [
+    {"segment": "大模型后训练", "direction": "positive", "horizon": "6-12m", "rationale": "RL后训练算力成本降低约3.8倍且小模型增益更大，中小规模推理模型的能力提升门槛下降"},
+    {"segment": "智能体基础设施", "direction": "positive", "horizon": "6-12m", "rationale": "长时程任务成功率与执行效率同时提升（WebShop +7.9分、平均回合步数降至10.2），降低agent部署的失败重试成本"},
+    {"segment": "模型蒸馏服务", "direction": "negative", "horizon": "12-24m", "rationale": "自蒸馏超过72B教师蒸馏且教师FLOPs仅1/9，削弱依赖大模型API或大集群做蒸馏的成本优势"},
+    {"segment": "训练算力需求", "direction": "mixed", "horizon": "12-24m", "rationale": "单位能力的训练算力下降，但能力扩展可能刺激更多训练，净效应不确定"}
+  ],
+  "risks": [
+    "依赖可验证结果信号，开放域不可自动判分任务的泛化未验证",
+    "反思质量不稳定：失败反思中42%是泛化建议、35%误诊根因、23%超出模型能力，可能引入噪声",
+    "跨模型族验证有限（仅Llama-3.1-8B-Instruct用于agent任务），结果集中于Qwen3系列",
+    "reverse KL的mode-seeking可能压缩策略多样性，与RL熵坍缩问题的关系未深入讨论",
+    "基准成绩为学术设定，生产环境长时程工具使用轨迹的增益未知"
+  ],
+  "counterpoints": [
+    "自反思可能只是解锁模型已有潜在能力而非新增能力；能力差距更大时外部大教师蒸馏仍可能更优（论文实验为同族设定）",
+    "73.3%的AIME'24仅比72B教师蒸馏的72.5%高0.8分，绝对增益有限；FLOPs对比采用自选的GRPO全阶段口径",
+    "反思质量与改进的r=0.72相关性由GPT-4评分得出，存在用模型评估模型的循环性",
+    "持续学习保留率优势（95.2%）可能来自on-policy属性本身，而非反思机制特有"
+  ],
+  "confidence": 0.82,
+  "evidence": [
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Self-reflection is a powerful mechanism for credit assignment in human learning, converting sparse outcome feedback into actionable guidance.", "locator": "Abstract"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "SRPO enables LLMs to analyze their own completed trajectories, synthesize errors into concise", "locator": "Abstract"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Counting Stage 1 and Stage 2, SRPO uses 5.4×10 18 FLOPs versus 20.8×10 18 for GRPO, i.e., approximately 3.8× fewer total FLOPs.", "locator": "3.2.2节末尾"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "SRPO achieves the highest success rates across all three benchmarks: 64.7% on WebShop (+7.9% over SFT), 76.8% on ALFWorld (+5.6% over Reflexion), and 31.2% on SWE-Bench-Lite (+4.4% over Reflexion).", "locator": "4.3节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Remarkably, SRPO with self-distillation outperforms distil-lation from Qwen3-72B (+0.8 points) while using 9× fewer teacher FLOPs.", "locator": "4.9节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "with gains of +7.8, +5.3, and +3.8 points over GRPO for 1.5B, 8B, and 32B models", "locator": "4.7节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "LoRA-128 achieves 97.8% of full fine-tuning performance on AIME’24 while using only 1.3% of the trainable parameters and 34% of the GPU memory.", "locator": "4.5节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "of mathematical reasoning performance after code adaptation, compared to 87.2% for GRPO and 80.3% for SFT.", "locator": "4.10节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "it reaches 70% AIME’24 performance with approximately 10× fewer FLOPs than GRPO and 30× fewer than continued SFT.", "locator": "4.7节"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Code is available at https://github.com/Galleons2029/SRPO", "locator": "Abstract"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Proceedings of the 43rd International Conference on Machine Learning, Seoul, South Korea. PMLR 306, 2026.", "locator": "页眉"},
+    {"document_id": "a2b6b744594297e09ec84cf8", "url": "http://arxiv.org/abs/2608.23493v1", "quote": "Removing reflection entirely (“direct retry”) causes a 7.5-point drop on AIME’24", "locator": "4.6节"}
+  ],
+  "company_hypotheses": [
+    {"code": "002230", "name": "科大讯飞", "rationale": "自研星火大模型并具备完整后训练流水线，RL训练效率提升方法可直接降低其推理模型迭代成本", "keywords": ["大模型", "强化学习", "后训练"], "confidence": 0.3},
+    {"code": "300418", "name": "昆仑万维", "rationale": "自研Skywork大模型并布局长时程agent能力，SRPO类方法适用于其agent训练场景", "keywords": ["大模型", "智能体"], "confidence": 0.25}
+  ]
+}

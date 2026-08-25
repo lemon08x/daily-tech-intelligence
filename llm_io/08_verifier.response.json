@@ -1,0 +1,10 @@
+{
+  "supported_evidence_indexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  "unsupported_claims": [
+    "公司关联（浪潮信息000977、中际旭创300308、工业富联601138）在原文中无直接依据，属假设级关联，符合待核验机制设计",
+    "原文为NVIDIA官方营销博客，'4x faster than the nearest alternative platform'等表述为厂商自述；草稿已在risks与counterpoints中如实标注，未将营销表述当独立事实"
+  ],
+  "confidence_adjustment": 0.0,
+  "verdict": "pass",
+  "notes": "12条证据均为原文逐字引用且支持对应结论；关键数字（3,400 tokens/s、100,000-token上下文、4倍、256颗LP30、512,000 GPU、90%带宽、11倍恢复速度、102.4Tb/s、1,600Gb/s、1.9倍NCCL加速）与原文一致；GPU+LPU分工、Multiplane多平面架构、Scale-In第五支柱、NVLink Fusion定制XPU接入的描述准确。来源为厂商一手公告（tier1官方博客），草稿对自述基准与未披露基线保持审慎，符合证据标准。"
+}
