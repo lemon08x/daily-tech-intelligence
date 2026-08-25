@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>科技产业情报与A股观察（GPT模型验收）</title>
+  <style>
+    :root { --bg:#f4f6f9; --panel:#fff; --ink:#172033; --muted:#667085; --line:#e5e9f0; --up:#c93d38; --down:#16805a; --brand:#2446a4; --amber:#a46000; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--bg); font:14px/1.65 "Segoe UI","Microsoft YaHei",sans-serif; }
+    main { width:min(1180px,calc(100% - 32px)); margin:28px auto 60px; }
+    header { padding:28px; border-radius:18px; color:#fff; background:linear-gradient(135deg,#111d44,#315ac4); box-shadow:0 14px 36px #203b8028; }
+    h1 { margin:0 0 5px; font-size:28px; } h2 { margin:0 0 16px; font-size:20px; } h3 { margin:0 0 8px; font-size:17px; } p { margin:6px 0; }
+    a { color:#244aaf; text-decoration:none; } a:hover { text-decoration:underline; }
+    .muted { color:var(--muted); } header .muted { color:#dbe5ff; }
+    .section,.event,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
+    .section { padding:21px; margin-top:16px; overflow:hidden; } .event { padding:20px; margin:12px 0; }
+    .event-head { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; }
+    .badge { flex:none; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:700; color:#22449e; background:#edf2ff; }
+    .badge.lead { color:var(--amber); background:#fff4dc; }
+    .fact-list { margin:10px 0 12px; padding-left:20px; } .fact-list li { margin:5px 0; }
+    .analysis-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 22px; padding:12px 0; }
+    .analysis-grid div { border-left:3px solid #dbe4ff; padding-left:11px; }
+    .subhead { margin:15px 0 7px; font-weight:750; }
+    .evidence { padding:9px 11px; margin:7px 0; color:#39445b; background:#f8fafc; border-radius:8px; }
+    .mapping { display:grid; grid-template-columns:120px 100px 1fr; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); }
+    .verified { color:#0b7650; font-weight:700; } .unverified { color:var(--amber); font-weight:700; }
+    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0; }
+    .card { padding:16px; } .metric { margin-top:3px; font-size:24px; font-weight:750; }
+    .up { color:var(--up); } .down { color:var(--down); }
+    .bar { display:flex; height:8px; border-radius:8px; overflow:hidden; background:#edf1f5; margin-top:9px; }
+    .bar .a { background:var(--up); } .bar .d { background:var(--down); }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th { text-align:left; font-size:12px; color:var(--muted); background:#f8fafc; }
+    th,td { padding:10px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
+    td.reason { white-space:normal; min-width:180px; } tr:last-child td { border-bottom:0; }
+    .score { display:inline-block; min-width:47px; padding:3px 8px; border-radius:999px; text-align:center; color:#24439b; background:#eaf0ff; font-weight:700; }
+    .industry,.status { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
+    .status { display:grid; grid-template-columns:1.1fr .8fr 1.5fr; } .stale { color:var(--amber); font-weight:700; }
+    .news { padding:11px 0; border-bottom:1px solid var(--line); } .news h3 { font-size:15px; }
+    footer { color:var(--muted); padding:18px 4px; }
+    @media (max-width:800px) { .metrics,.two,.analysis-grid { grid-template-columns:1fr 1fr; } .table-wrap { overflow:auto; } .mapping,.status { grid-template-columns:1fr; } }
+    @media (max-width:520px) { .metrics,.two,.analysis-grid { grid-template-columns:1fr; } main { width:min(100% - 18px,1180px); } header,.section,.event { padding:16px; } }
+  </style>
+</head>
+<body><main>
+  <header>
+    <h1>科技产业情报与A股观察（GPT模型验收）</h1>
+    <p class="muted">2026-08-24 · 行情交易日 2026-08-24 · 生成于 2026-08-24 17:33:52 CST</p>
+    <p class="muted">科技事件与A股关联为研究假设，不参与规则股票综合分。</p>
+  </header>
+
+  <section class="section">
+    <h2>科技前沿深研 <span class="muted" style="font-size:13px;font-weight:400">5 项 · Codex GPT示范：Luna初筛 / Sol深研与校验</span></h2>
+
+    <article class="event">
+      <div class="event-head"><h3>1. vLLM v0.27.0集中扩展新模型、推理性能与大规模容错能力</h3><span class="badge ">深度结论 · 91%</span></div>
+      <ul class="fact-list"><li>该版本包含561次提交、242名贡献者，其中64名为新贡献者。</li><li>Kimi K3在单一版本内获得模型文件、内核、Python与Rust前端、AttnRes、DeepGEMM、量化检查点及共享专家分片等全栈支持。</li><li>DeepSeek-V4相关优化覆盖序列并行、路由与工作区复用、冗余内核消除、KV缓存紧凑化和流水线缓冲区显存节省；发布说明列出多项内核级或端到端增益。</li><li>Model Runner V2扩展到编码器注意力、池化、分类、令牌嵌入及CPU多模态等非生成负载。</li><li>依赖升级至PyTorch 2.13.0、torchvision 0.28.0和Triton 3.7.1，并被明确标注为破坏性环境变更。</li></ul>
+      <div class="analysis-grid">
+        <div><strong>技术机制</strong><p>该版本沿推理服务栈分层推进：上层增加模型适配、Python/Rust前端及gRPC控制面；执行层通过Model Runner V2覆盖生成与非生成任务；算子层针对注意力、MoE、路由和DeepSeek-V4热点内核减少空启动、冗余计算及同步；存储与分布式层扩展KV卸载、预填充/解码解耦、DP+EP容错和弹性EP准备。其核心不是单一算法，而是模型、运行时、内核、缓存与控制面的协同集成。</p></div>
+        <div><strong>新颖性</strong><p>相对一般的增量版本，主要新意是同一版本内完成Kimi K3全栈落地，并把Model Runner V2、混合模型解耦服务、Rust控制面和下一代硬件适配同时向前推进。发布说明没有提供跨版本统一基准，因此更适合判断为工程集成广度提升，而非已证明的普适性能跃迁。</p></div>
+        <div><strong>成熟度</strong><p>属于可获取的正式版本级交付，模型、量化、API和多硬件支持较完整；但PyTorch升级是破坏性变更，容错框架被注明为“simplified”，弹性EP仍包含异步准备工作，Rubin等支持也被称为早期使能，生产升级仍需回归验证。</p></div>
+        <div><strong>6–24个月影响</strong><p>0-6个月内，直接收益更可能来自新增模型可服务性、特定DeepSeek-V4路径优化和首次请求预热改善；部署方同时需要处理依赖与兼容性迁移。6-24个月内，如果容错、弹性EP、KV分层卸载和异构预填充/解码路由经真实负载验证，vLLM可进一步覆盖大规模、异构及非生成推理，但文档尚不足以确认其稳定性和普适收益。</p></div>
+      </div>
+      <div class="subhead">产业链影响</div><ul><li><strong>大模型推理服务软件</strong> · 0-6m · positive：新增模型、API、非生成负载和预热能力直接扩大可服务范围，并提供多个明确的性能优化入口。</li><li><strong>分布式推理与KV缓存基础设施</strong> · 6-12m · positive：DP+EP容错、弹性EP准备、P/D解耦及多级KV卸载共同增强大规模服务能力，但仍需部署验证。</li><li><strong>AI加速器与异构计算生态</strong> · 6-12m · mixed：版本同时推进NVIDIA、ROCm、XPU和CPU路径，有利于扩大硬件覆盖；依赖升级和早期硬件使能也增加适配、构建与回归成本。</li><li><strong>模型提供方与应用开发者</strong> · 0-6m · positive：Kimi K3、Qwen3.5等模型支持及Rust控制面、Cohere和Anthropic相关API能力可缩短接入链路，但效果依赖具体模型和部署配置。</li></ul>
+
+      <div class="subhead">风险与反面证据</div><ul><li>PyTorch、torchvision和Triton的破坏性升级可能引发构建、扩展ABI或既有部署兼容问题。</li><li>561次提交横跨模型、内核、缓存、分布式和API，变更面较大，发布说明中的局部优化不能替代端到端回归。</li><li>部分性能数据限定于DeepSeek-V4、特定内核或特定硬件，不能直接外推到所有模型与负载。</li><li>容错框架仍是简化形态，弹性EP与下一代硬件支持带有早期阶段特征。</li><li>功能数量和贡献者规模不等同于生产可靠性或用户采用率。</li><li>多个百分比和倍数来自不同优化点，不能相加，也未给出统一测试环境供横向比较。</li><li>多硬件支持可能扩大覆盖面，但也可能增加维护矩阵和版本碎片化。</li></ul>
+      <div class="subhead">可定位证据</div><div class="evidence"><a href="https://github.com/vllm-project/vllm/releases/tag/v0.27.0" target="_blank" rel="noreferrer">Release Notes Highlights</a>：This release features 561 commits from 242 contributors (64 new)! Kimi K3 support with a full stack landing in one release: core model files and kernels ( #50089 , #50000 ), Python ( #50093 ) and Rust ( #50104 ) frontends, AttnRes kernels ( #50090 ), DeepGEMM support ( #50458 ), compressed-tensors quantized checkpoints ( #50500 ), DSpark AR fusion ( #50242 ), and an option to shard the shared expert instead of replicating it ( #50656 ).</div><div class="evidence"><a href="https://github.com/vllm-project/vllm/releases/tag/v0.27.0" target="_blank" rel="noreferrer">Release Notes Highlights / DeepSeek-V4 performance push</a>：DeepSeek-V4 performance push : sequence parallelism ( #46789 ), ~2x kernel improvement by skipping empty c128 launches ( #48957 ), 3.4% E2E TTFT from skipping unneeded topk/router ( #49486 ), 3.9% E2E TTFT from workspace reuse ( #49236 ), 1.88x kernel from removing a redundant full kernel ( #50298 ), adaptive topk width (1.0% E2E, #50004 ), 448 MiB GPU memory saved in the PP buffer ( #50312 ), a compact MXFP4 indexer KV cache ( #48993 ), and removal of sparse-MLA q-head padding on FlashInfer >= 0.6.14 ( #48047 ).</div><div class="evidence"><a href="https://github.com/vllm-project/vllm/releases/tag/v0.27.0" target="_blank" rel="noreferrer">Release Notes Highlights</a>：PyTorch 2.13.0 upgrade along with torchvision 0.28.0 and Triton 3.7.1 ( #48155 ) — this is a breaking environment change; XPU ( #48677 ) and CPU ( #50412 ) followed to torch 2.13 as well.</div><div class="evidence"><a href="https://github.com/vllm-project/vllm/releases/tag/v0.27.0" target="_blank" rel="noreferrer">Release Notes Highlights</a>：Resilient large-scale serving : a (simplified) fault tolerance framework for DP+EP external load-balancer deployments ( #44428 ) and async preparation for elastic EP scaling ( #47288 ).</div>
+    </article>
+
+    <article class="event">
+      <div class="event-head"><h3>2. ViTacPhys以显式物性预测驱动视触觉自适应抓取</h3><span class="badge lead">线索 · 49%</span></div>
+      <ul class="fact-list"><li>系统从人类视触觉示范中预测物体质量类别、刚度和摩擦系数类别，再以这些估计作为下游自适应抓取策略的条件。</li><li>数据集覆盖60个刚性与可变形物体，共1,800次人类抓取示范；质量和摩擦为低、中、高有序类别，刚度为连续回归目标。</li><li>在已见物体上，论文报告质量准确率97.2%、摩擦系数准确率98.8%、刚度MAPE 5.51%；在已知类别的留出物体上分别为87.5%、97.5%和9.08%。</li><li>人到机器人迁移使用有限遥操作数据、机器人风格视频增强和动作匹配的人类示范。</li><li>物性条件策略报告ID物体总抓取成功率95.0%、OOD物体83.4%；论文将其定位为系统级可行性研究。</li></ul>
+
+
+
+      <div class="subhead">风险与反面证据</div><ul><li>独立审计降级：“结构化物性条件有望成为物流与家用抓取策略的辅助模块”属于跨场景外推；材料仅将物流和家用机器人作为动机示例，实验未验证这些部署场景。</li><li>独立审计降级：“人类示范可能提高采集效率”沿用了论文对可扩展、低成本采集的宣传性表述，但材料没有与遥操作或其他采集方式的定量成本、速度对照。</li><li>60个物体和单一参与者的数据规模有限，不能证明跨操作者、类别、机器人平台和真实长期运行的泛化。</li><li>质量与摩擦系数被离散为三类，可能丢失精细控制所需的连续差异。</li><li>刚度测量包含物体、手、传感器安装和接触顺应性；摩擦系数也是物体与硅胶接触面的配对属性，跨硬件迁移可能需要重新标定。</li><li>VLM先验来自接触前视觉，遇到伪装材质、不可见填充状态或新类别时可能产生偏差，并传递给下游策略。</li><li>抓取成功率和力曲线来自论文给定评测设置，尚无更大规模、多任务或长期稳定性证据。</li><li>端到端策略可能直接从视触觉序列学习所需控制，不一定需要显式物性预测这一中间瓶颈。</li><li>论文报告的是条件策略与更高成功率的关联，有限评测不足以隔离数据增强、遥操作数据和物性令牌各自的因果贡献。</li><li>类别边界在全部标注物体上预先拟合并固定，虽未按测试表现重估，但跨数据集的边界可迁移性仍未得到证明。</li></ul>
+      <div class="subhead">可定位证据</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21355v1" target="_blank" rel="noreferrer">Abstract</a>：On held-out objects from known categories, it achieves87.5%
+mass accuracy,97.5%friction-coefficient accuracy, and9.08%
+stiffness MAPE. We transfer ViTacPhys from the human to the
+robot domain using limited teleoperation data, robot-style video
+augmentation, and matched-action human demonstrations, and
+deploy it as an online module for adaptive grasping.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21355v1" target="_blank" rel="noreferrer">Fig. 4 caption</a>：Fig. 4. Overview of ViTacPhys. (A) The predictor combines temporal visual–tactile observations, flow features, and a VLM-derived semantic prior computed
+from pre-contact RGB frames. (B) Human-to-robot transfer uses robot teleoperation, matched-action human demonstrations, and visually augmented human
+demonstrations. (C) During deployment, the VLM prior is computed before contact. After contact, the system immediately begins rolling prediction from a
+30-frame visual–tactile queue; unavailable initial entries repeat the earliest post-contact observation before 15 frames and 14 adjacent flow fields are sampled.
+Cumulative temporal voting stabilizes the predicted classes and stiffness bin before they are passed to the downstream policy.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21355v1" target="_blank" rel="noreferrer">Abstract</a>：The resulting
+physical-property-conditioned policy achieves95.0%total grasp-
+ing success on ID objects and83.4%on OOD objects.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21355v1" target="_blank" rel="noreferrer">Section III-B Data Annotation</a>：Because it includes object
+deformation and hand, sensor-mount, and contact compliance,
+this operational stiffness is not an intrinsic material constant.
+Friction Coefficient.The object is placed on a silicone-coated
+inclined plane matching the tactile contact material. At the
+critical sliding angleθ, the contact-pair coefficient isµ s =
+tan(θ); it is not an object-only property.</div>
+    </article>
+
+    <article class="event">
+      <div class="event-head"><h3>3. OmniAssistBench以固定先验路径模拟全模态助理交互，现有模型仍受视觉提示、长期记忆和延迟响应能力制约</h3><span class="badge ">深度结论 · 90%</span></div>
+      <ul class="fact-list"><li>基准通过从互联网视频反推用户目标与操作路径、切分多轮片段，离线模拟连续的人机助理交互，建设耗时超过1000个专家工时。</li><li>数据集包含300段视频、685组问答，覆盖7类主要任务、16个子任务，并包含3个平均约15轮交互的实拍真实场景。</li><li>闭源模型Gemini-3-Pro总分为66.4，开源模型Qwen3-Omni-Instruct为51.2；论文将主要缺口归纳为视觉提示跟随、长期记忆、延迟响应和跨轮目标保持。</li><li>模型上下文容量在长视频中快速耗尽：论文给出的实验设置下，MiniCPM-o-2.6约能保留380秒视频，而Qwen系列有效记忆约80秒。</li></ul>
+      <div class="analysis-grid">
+        <div><strong>技术机制</strong><p>基准先从源视频总结一条预定义的过程先验，要求模型沿唯一指定路径指导用户，从而控制同一目标存在多条合法路径造成的离线评测分叉。随后把源视频按问答时间点切成连续片段，将语音问题嵌入片段末尾，手势或手写提示以画中画方式嵌入；高级任务同时提供用户目标和过程先验。答案采用“Ground Truth Sentence+1至3个Key Points”，由GPT-5按五级规则评判语义正确性、关键点覆盖和冗余或幻觉，并归一化为百分制。长交互超过上下文窗口时使用先进先出方式删除最早历史。</p></div>
+        <div><strong>新颖性</strong><p>核心创新不是增加静态视频问答数量，而是把模型回答会改变用户后续行动这一交互问题显式纳入评测设计；通过源视频反推固定路径，使预录视频仍可用于多轮助理式评测。两层任务体系同时测量基础感知、目标导向过程跟踪、主动等待以及三个复合真实场景。</p></div>
+        <div><strong>成熟度</strong><p>处于研究基准和离线仿真阶段。数据经过重人工设计与视频编辑，任务覆盖较完整，但测试仍依赖预定义路径、预录视频、模型特定采帧及上下文管理策略，不能等同于开放环境中的实时闭环助理可靠性。</p></div>
+        <div><strong>6–24个月影响</strong><p>未来6至24个月，该基准更可能推动模型侧开发视频记忆压缩、用户与背景说话人区分、视觉手势指令对齐、事件触发式等待和跨轮目标状态管理，而不仅是继续扩大上下文窗口。论文中的降分辨率和teacher-forcing结果表明，单纯增加可容纳帧数或替换正确历史不足以解决全部问题，竞争焦点可能转向持续状态表示与多模态注意力控制。</p></div>
+      </div>
+      <div class="subhead">产业链影响</div><ul><li><strong>实时全模态助理与智能终端</strong> · 6-12m · mixed：基准提供了可重复的产品能力验收框架，但66.4的最高总分及多类交互失败说明近期更适合受控辅助，而非高可靠自主指导。</li><li><strong>长视频推理与记忆基础设施</strong> · 6-12m · positive：长交互中的上下文耗尽和跨轮遗忘直接强化了对视频摘要、状态缓存、检索式记忆及低成本长上下文推理的需求。</li><li><strong>无障碍与主动式人机交互应用</strong> · 12-24m · mixed：盲人辅助、手势指令和事件触发响应显示明确应用空间，但地图理解、目标人物识别和正确等待仍未达到可靠部署水平。</li></ul>
+
+      <div class="subhead">风险与反面证据</div><ul><li>固定先验只保留一条交互路径，可能把现实中同样有效的替代操作判为偏离目标。</li><li>互联网视频反推和离线切片不能完整复现模型输出实时改变用户行为的闭环反馈。</li><li>不同模型采用不同视频预处理方式，且长输入触发FIFO历史删除，模型间分数同时受评测管线影响。</li><li>自动评分依赖LLM judge；尽管不同judge相关性较高，仍不能消除开放答案评分偏差。</li><li>基准仅有三个复杂真实场景，难以覆盖开放环境的全部异常与安全边界。</li><li>teacher forcing虽提供正确历史，但提升并不总是明显，说明错误累积不是多轮失败的唯一原因。</li><li>把Qwen3-Omni-Instruct输入缩至360p可多容纳约50秒视频，却没有带来全基准明显变化，说明上下文长度并非唯一瓶颈。</li><li>主动响应任务在移除音频后反而提升，表明更多模态信息有时会引入背景语音干扰，而不是稳定增益。</li></ul>
+      <div class="subhead">可定位证据</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21360v1" target="_blank" rel="noreferrer">摘要</a>：To solve the issue of diverging interaction paths
+(where the same user goal can be achieved through various
+methods), we provide models with predefined priors derived
+from the source video, requiring them to guide users along
+the exact same routes. Since real interaction videos are rare,
+we construct the dataset by reverse-engineering existing In-
+ternet videos. We deduce logical user goals and segment
+the videos into multi-turn clips to simulate continuous inter-
+actions. This rigorous pipeline requiredover 1000 expert
+person-hoursto build the dataset.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21360v1" target="_blank" rel="noreferrer">第4.2.1节 Overall Performance</a>：Tables 2 and 3 present the overall performance of all eval-
+uated models on the Basic and Advanced Interaction Un-
+derstanding tasks, respectively. The leading closed-source
+model,Gemini-3-Pro, achieves a score of66.4, while the
+top-performing open-source model,Qwen3-Omni-Instruct,
+scores51.2. According to our scoring rubric, these results
+suggest that current MLLMs generally succeed in under-
+standing verbal prompts but struggle with providing accurate
+and comprehensive answers.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21360v1" target="_blank" rel="noreferrer">第4.2.3节 Advanced Tier Performance</a>：One primary challenge comes from limitation of model con-
+text length. With a 32k context window, MiniCPM-o-2.6 can
+retain approximately 380 seconds of video at 1 fps. Beyond
+this limit, the model starts to produce nonsensical words. In
+contrast, the Qwen family encodes each video frame into
+a larger number of tokens, resulting in a shorter effective
+memory of only around 80 seconds. These context capacities
+are insufficient to preserve a complete interaction history for
+the multi-turn tasks in our benchmark. Without specialized
+mechanisms for long-term memory, context limitations are
+likely to become a critical bottleneck for current models.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21360v1" target="_blank" rel="noreferrer">第4.3.4节 Influence of Input Video Resolution</a>：As shown in Fig. 11, although holding more video frames
+in the model context slightly increase the scores on most
+multi-turn questions, there is no obvious change on the
+scores across the whole benchmark. On one hand, 50 sec-
+onds longer context may still be insufficient for long videos
+that may last more than 10 minutes, such as videos in the
+Real-World Cases task. On the other hand, context limitation
+may not be the only bottleneck that prevent the model from
+giving valid responses.</div>
+    </article>
+
+    <article class="event">
+      <div class="event-head"><h3>4. 自我改进流水线无需均匀配置模型容量：生成器与修订器更敏感，小型批评器已有稳定价值</h3><span class="badge lead">线索 · 49%</span></div>
+      <ul class="fact-list"><li>论文在规划、摘要、逻辑推理、代码优化和故事生成五类基准上，使用Qwen3六种规模和Gemma 3四种规模开展逐阶段容量扫描。</li><li>控制实验每次只改变生成器、批评器或修订器中的一个模型，另外两阶段保持固定，并设置无批评器的匹配基线。</li><li>两个模型家族中，端到端性能对生成器和修订器规模更敏感，对批评器规模相对不敏感；更大的批评器通常只带来边际改善。</li><li>Qwen3-32B配置的30条修订器流水线中有12条低于初始生成；对最弱0.6B修订器的50个退化样本分析显示，41个样本在获得非误导性批评后仍因错误改写而退化。</li><li>即使采用Qwen3-0.6B作为批评器，相比匹配的无批评基线，五个基准的生成器和修订器扫描均出现正向平均增益。</li></ul>
+
+
+
+      <div class="subhead">风险与反面证据</div><ul><li>独立审计降级：展望中提出按任务风险或批评不确定性动态升级模型，论文未实验动态路由、风险分层或批评不确定性估计。</li><li>独立审计降级：产业影响中称该策略可降低固定三阶段流水线的推理成本，论文只研究模型容量与任务指标，未报告端到端token、延迟、吞吐或实际成本；只能视为待验证假设。</li><li>结论来自单轮标准三阶段结构，不能直接外推到包含检索、工具、长期记忆或多次反思的Agent。</li><li>只测试Qwen3和Gemma 3，模型训练方法、架构或专用批评数据变化后，阶段敏感度可能不同。</li><li>五个基准均使用受限子集，最难样本被部分排除，生产任务的分布外难度未被验证。</li><li>批评质量人工分析每个模型规模仅随机抽取有限样本，可能不足以描述低频但高危的误导反馈。</li><li>成本结论没有直接报告端到端延迟、并发吞吐或不同阶段token消耗，容量缩小不必然等同于系统总成本同比下降。</li><li>大批评器虽然对端到端指标提升有限，但人工分析显示其往往能发现更多错误；在高风险任务中，完整性价值可能高于平均分增益。</li><li>批评器规模不敏感可能部分源于修订器无法充分利用更完整的反馈，而不代表批评本身没有额外信息。</li><li>最弱修订器的退化既发生于正确批评，也发生于误导性批评，说明单纯加强批评器不能替代修订阶段的容量与鲁棒性。</li></ul>
+      <div class="subhead">可定位证据</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21345v1" target="_blank" rel="noreferrer">第3.2节 Stage-wise Model Size Analysis Protocol</a>：Our objective is to quantify the contribution of
+model size at each stage of the self-refinement
+pipeline. To isolate the effect of an individual stage,
+we vary exactly one stage while keeping the re-
+maining two stages fixed to the same models. This
+controlled design ensures that any performance dif-
+ferences can be attributed solely to the stage being
+varied (Figure 2).</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21345v1" target="_blank" rel="noreferrer">第5节 Results</a>：A consistent trend across all benchmarks is that
+scaling the size of the generator and the refiner
+substantially enhances the performance, which is
+visualized by the steeper lines in Figure 4 and quan-
+titatively summarized in Table 1. In contrast, the
+critic stage is relatively insensitive to model size,
+as larger critic models provide only marginal gains
+over smaller ones. Results for the Gemma 3-27B,
+Qwen3-14B, and Qwen3-8B configurations are pro-
+vided in Appendix C, D, and E. They exhibit the
+same qualitative trends.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21345v1" target="_blank" rel="noreferrer">第5.3节 Model Size Analysis of The Refiner</a>：Under the Qwen3-32B config-
+uration, 12 of the 30 evaluated refiner pipelines
+(5 benchmarks × 6 refiner sizes) perform worse
+than the corresponding initial generation. The com-
+plete pipelines of all degraded configurations are in
+Appendix F. To understand the underlying failure
+mode, we manually analyzed 50 degradation events
+from the most extreme case, P(32B,32B,0.6B),
+where the weakest refiner exhibits the greatest per-
+formance drop. In all 50 events, the 0.6B refiner
+produced a worse output than both the initial gen-
+eration and the 32B refiner under the same initial
+solution and critique.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21345v1" target="_blank" rel="noreferrer">Limitations</a>：This work analyzes stage-wise model scaling in the
+canonical generate–critique–refine pipeline with a
+single refinement iteration. Our findings may not
+directly generalize to more complex agentic sys-
+tems that incorporate additional components such
+as retrieval, planning, tool use, memory, or multiple
+refinement rounds.</div>
+    </article>
+
+    <article class="event">
+      <div class="event-head"><h3>5. VIALS揭示生命科学专业图像理解仍是多模态模型瓶颈，工具辅助显著增益但成本与残余误差突出</h3><span class="badge lead">线索 · 49%</span></div>
+      <ul class="fact-list"><li>VIALS包含161个开放回答视觉问答任务，覆盖系统发育树、流式细胞图、印迹与凝胶、质粒图、细胞计数、蛋白结构和小分子结构等专业工作产物。</li><li>任务来源包括未发表真实实验数据、科学软件程序化生成产物和CC-BY开放论文，强调真实研究中的非规整数据；任务由领域专家创建并经多轮独立复核。</li><li>直接视觉推理中，GPT-5.6 Sol与Gemini 3.7 Flash并列最高，仅为26.5%平均准确率；要求三次重复均正确时，两者可稳定处理的任务低于17%。</li><li>跨模型83%至93%的错误属于视觉计数、选错数值或特征、遗漏证据、误解表示规则这四类，表明主要缺口先发生在读取和解释科学图像阶段。</li><li>代码工具允许模型迭代裁剪、放大和测量后，准确率最多提高43个百分点，但token成本增至直接推理的10至432倍；最佳Agent仍只解决约65%的任务。</li></ul>
+
+
+
+      <div class="subhead">风险与反面证据</div><ul><li>独立审计降级：展望提出短期采用置信度门控，但论文仅评估模型自报置信度且显示严重失准，高置信回答最高准确率仅30%；除非另有外部校准机制，该建议不受当前材料支持。</li><li>独立审计降级：将结果具体外推为药物发现与高内涵筛选流程中的预筛和第二读者价值，超出了单项科学图像问答基准；论文提及药物发现和assay screening的相关性，但未验证端到端筛选决策或生产部署收益。</li><li>161个任务不足以覆盖生命科学全部专业图像、实验噪声和复杂解释活动。</li><li>开放任务公开后可能发生针对性优化，论文虽计划后续刷新，当前版本仍存在过拟合风险。</li><li>LLM-as-a-judge虽经大样本人工验证，但不能完全排除新模型输出形式导致的评分漂移。</li><li>工具辅助结果高度依赖Agent harness、工具调用策略和巨量token预算，难以直接转化为生产成本收益。</li><li>基准聚焦相关博士能快速完成的任务，没有覆盖更具歧义、需要实验上下文或后续研究决策的复杂场景。</li><li>工具辅助最高可提升43个百分点，说明部分科学知识已经存在于模型中，当前低分不应全部解释为领域知识缺失。</li><li>即使开放工具，最佳Agent仅解决65%的任务，说明感知增强并不能消除科学表示规则和领域应用错误。</li><li>某一模型GLM-4.6V在工具辅助后反而下降，表明增加推理资源不保证普遍收益。</li><li>高置信回答的最高准确率仍仅约30%，自报置信度尚不能充当可靠的自动放行机制。</li></ul>
+      <div class="subhead">可定位证据</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21357v1" target="_blank" rel="noreferrer">第3.3节 Artifact sourcing and task construction</a>：VIALS includes artifacts that are unpublished real experimental data, artifacts created through
+procedural generation with scientific software, and artifacts sourced from open-access publications
+with a CC-BY license. The benchmark emphasizes messy data artifacts that are typical in real-
+world research. Procedural generation using scientific software was used for select artifact types:
+phylogenetic trees, plasmid maps, and blots (all of which were expert-verified as realistic).</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21357v1" target="_blank" rel="noreferrer">第5.1节 Overall model performance</a>：Figure 4 shows overall accuracy of each vision-language model on VIALS. The top-performing models,
+GPT-5.6 Sol and Gemini 3.7 Flash, achieve only 26.5% accuracy, with Gemini 3.7 Flash incurring
+lower costs (Figure A2). The Pass^3 results in Figure A1 show that these models are only able to
+handle under 17% of VIALS tasks if we require that all 3 rollouts from the model are correct, a basic
+requirement for trusting a model in critical life sciences research.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21357v1" target="_blank" rel="noreferrer">第5.2节 Failure mode analysis</a>：Most failures occur while models are reading or interpreting the artifact. Across models, 83–93% of
+errors fall into the first four categories in Table 3. Visual quantification is the most common failure
+mode for every model, accounting for 28.2–41.8% of errors. Incorrect value or feature selection,
+overlooked evidence, and representation misinterpretation are also common across models.
+Quantitative reasoning errors account for 3.8–10.7% of failures, while misapplied scientific principles
+account for 2.3–6.4%. Fabricated findings are rare, accounting for at most 4.3% of errors.</div><div class="evidence"><a href="http://arxiv.org/abs/2608.21357v1" target="_blank" rel="noreferrer">第6节 Conclusion</a>：Our agentic tool-assisted evaluation further decomposes the deficit of current frontier models into
+two gaps. First, aperception gap: when the same models are given code-execution tools to iteratively
+crop, zoom, and measure the artifact, accuracy improves by up to 43 points, indicating that much
+of the required scientific knowledge is present but cannot be applied through the neural network’s
+direct visual inference (Tong et al., 2024). However, these gains come at10–432× the token cost of
+direct inference, for interpretations that trained scientists can resolve in minutes. Second, a residual
+interpretation gap: even with unrestricted iterative inspection and programmatic tool use, the best
+agent solves only 65% of tasks, with failures concentrated in reading scientific representations and
+conventions along with proper application of other domain knowledge.</div>
+    </article>
+
+  </section>
+
+  <div class="metrics">
+    <div class="card"><div class="muted">市场温度</div><div class="metric">偏弱</div></div>
+    <div class="card"><div class="muted">上涨 / 下跌</div><div class="metric"><span class="up">1460</span> / <span class="down">3965</span></div><div class="bar"><span class="a" style="width:26.311047035501893%"></span><span class="d" style="width:73.68895296449811%"></span></div></div>
+    <div class="card"><div class="muted">中位涨跌幅</div><div class="metric down">-1.22%</div></div>
+    <div class="card"><div class="muted">全市场成交额</div><div class="metric">2.02万亿</div><div class="muted">涨停近似 62 / 跌停近似 42</div></div>
+  </div>
+
+  <section class="section"><h2>主要指数</h2><div class="metrics" style="margin:0"><div><strong>上证指数</strong><div>3,882.01 <span class="down">-0.59%</span></div></div><div><strong>沪深300</strong><div>4,563.13 <span class="down">-1.21%</span></div></div><div><strong>中证500</strong><div>7,717.09 <span class="down">-1.75%</span></div></div><div><strong>深证成指</strong><div>13,794.29 <span class="down">-2.13%</span></div></div><div><strong>创业板指</strong><div>3,431.89 <span class="down">-3.21%</span></div></div></div></section>
+  <section class="section"><h2>规则观察候选 <span class="muted" style="font-size:13px;font-weight:400">基础过滤后 745 只，展示前 12 只</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>代码 / 名称</th><th>综合分</th><th>现价</th><th>今日</th><th>20日</th><th>60日</th><th>PE / PB</th><th>成交额</th><th>入选原因</th></tr></thead><tbody>
+    <tr><td>1</td><td><strong>601919</strong> 中远海控</td><td><span class="score">90.5</span></td><td>17.42</td><td class="up">2.41%</td><td>13.78%</td><td>27.15%</td><td>10.6 / 1.2</td><td>26.3亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>2</td><td><strong>000975</strong> 山金国际</td><td><span class="score">83.7</span></td><td>29.26</td><td class="up">2.38%</td><td>30.39%</td><td>30.28%</td><td>21.4 / 5.1</td><td>23.5亿</td><td class="reason">中期趋势靠前、成交活跃、量比与换手适中</td></tr><tr><td>3</td><td><strong>601318</strong> 中国平安</td><td><span class="score">83.2</span></td><td>54.92</td><td class="up">2.94%</td><td>2.83%</td><td>6.13%</td><td>6.2 / 1.0</td><td>71.5亿</td><td class="reason">估值相对占优、成交活跃、市值稳定性较高</td></tr><tr><td>4</td><td><strong>600919</strong> 江苏银行</td><td><span class="score">82.9</span></td><td>12.13</td><td class="up">1.59%</td><td>5.66%</td><td>9.70%</td><td>6.2 / 0.8</td><td>13.6亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>5</td><td><strong>000001</strong> 平安银行</td><td><span class="score">82.5</span></td><td>11.56</td><td class="up">1.31%</td><td>4.05%</td><td>9.37%</td><td>5.2 / 0.5</td><td>13.8亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>6</td><td><strong>600036</strong> 招商银行</td><td><span class="score">82.3</span></td><td>39.58</td><td class="up">1.75%</td><td>1.49%</td><td>6.95%</td><td>6.6 / 0.9</td><td>41.3亿</td><td class="reason">估值相对占优、成交活跃、量比与换手适中</td></tr><tr><td>7</td><td><strong>601233</strong> 桐昆股份</td><td><span class="score">82.2</span></td><td>24.50</td><td class="down">-0.85%</td><td>14.43%</td><td>29.22%</td><td>17.6 / 1.5</td><td>13.4亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>8</td><td><strong>600489</strong> 中金黄金</td><td><span class="score">82.0</span></td><td>27.26</td><td class="up">0.29%</td><td>29.30%</td><td>24.12%</td><td>21.1 / 4.3</td><td>42.5亿</td><td class="reason">中期趋势靠前、成交活跃、量比与换手适中</td></tr><tr><td>9</td><td><strong>601229</strong> 上海银行</td><td><span class="score">82.0</span></td><td>9.87</td><td class="up">1.33%</td><td>7.75%</td><td>12.03%</td><td>5.8 / 0.6</td><td>7.2亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>10</td><td><strong>601077</strong> 渝农商行</td><td><span class="score">81.3</span></td><td>7.04</td><td class="up">3.38%</td><td>6.99%</td><td>7.94%</td><td>6.3 / 0.6</td><td>5.6亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>11</td><td><strong>601328</strong> 交通银行</td><td><span class="score">80.6</span></td><td>7.20</td><td class="up">1.12%</td><td>2.71%</td><td>10.91%</td><td>6.6 / 0.6</td><td>11.0亿</td><td class="reason">中期趋势靠前、估值相对占优、成交活跃</td></tr><tr><td>12</td><td><strong>601939</strong> 建设银行</td><td><span class="score">80.4</span></td><td>10.66</td><td class="up">1.23%</td><td>2.90%</td><td>9.25%</td><td>8.2 / 0.8</td><td>11.5亿</td><td class="reason">估值相对占优、成交活跃、市值稳定性较高</td></tr>
+  </tbody></table></div></section>
+  <div class="two"><section class="section"><h2>相对强势行业</h2><div class="industry"><span><strong>煤炭行业</strong><br><small class="muted">领涨 上海能源</small></span><span class="up">2.07%</span></div><div class="industry"><span><strong>公路桥梁</strong><br><small class="muted">领涨 皖通高速</small></span><span class="up">2.00%</span></div><div class="industry"><span><strong>开发区</strong><br><small class="muted">领涨 市北高新</small></span><span class="up">1.87%</span></div><div class="industry"><span><strong>酿酒行业</strong><br><small class="muted">领涨 会稽山</small></span><span class="up">1.65%</span></div><div class="industry"><span><strong>金融行业</strong><br><small class="muted">领涨 锦龙股份</small></span><span class="up">1.08%</span></div><div class="industry"><span><strong>农林牧渔</strong><br><small class="muted">领涨 天山生物</small></span><span class="up">1.07%</span></div><div class="industry"><span><strong>建筑建材</strong><br><small class="muted">领涨 北方国际</small></span><span class="up">0.04%</span></div><div class="industry"><span><strong>摩托车</strong><br><small class="muted">领涨 隆鑫通用</small></span><span class="up">0.03%</span></div></section><section class="section"><h2>弱势行业</h2><div class="industry"><span><strong>玻璃行业</strong><br><small class="muted">领涨 亚玛顿</small></span><span class="down">-3.41%</span></div><div class="industry"><span><strong>医疗器械</strong><br><small class="muted">领涨 奥佳华</small></span><span class="down">-3.40%</span></div><div class="industry"><span><strong>机械行业</strong><br><small class="muted">领涨 中南文化</small></span><span class="down">-3.15%</span></div><div class="industry"><span><strong>生物制药</strong><br><small class="muted">领涨 汉森制药</small></span><span class="down">-2.89%</span></div><div class="industry"><span><strong>电子器件</strong><br><small class="muted">领涨 晓程科技</small></span><span class="down">-2.68%</span></div></section></div>
+  <section class="section"><h2>市场快讯线索 <span class="muted" style="font-size:13px;font-weight:400">低权重，不单独支撑深度结论</span></h2><article class="news"><h3><a href="https://news.10jqka.com.cn/20260824/c679226335.shtml" target="_blank" rel="noreferrer">甘李药业：GZC8072片获准开展体重控制临床试验</a></h3><p>甘李药业公告，公司全资子公司甘李药业山东有限公司于近日收到国家药品监督管理局下发的GZC8072片《药物临床试验批准通知书》，同意开展体重控制适应症临床试验。该产品为治疗用生物制品1类。截至2026年3月31日，项目累计投入研发费用4695.53万元人民币。</p><small class="muted">2026-08-24 17:04:25</small></article><article class="news"><h3><a href="https://news.10jqka.com.cn/20260824/c679226317.shtml" target="_blank" rel="noreferrer">中国人民银行将在8月27日至9月1日开展隔夜逆回购操作，每日操作量不超过6000亿元</a></h3><p>中国人民银行：为更好匹配银行体系短期流动性需求，中国人民银行将在8月27日至9月1日开展隔夜逆回购操作，采用固定利率、数量招标，每日操作量不超过6000亿元。(央行)</p><small class="muted">2026-08-24 17:03:55</small></article></section>
+
+  <section class="section"><h2>方法、模型与数据状态</h2>
+    <p class="muted">AI：Codex GPT示范：Luna初筛 / Sol深研与校验；提示词版本 codex-gpt-demo-v1；今日调用 5 次，输入 0 tokens，输出 0 tokens。综合分仍仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算。</p>
+    <h3 style="margin-top:16px">市场数据</h3><div class="status"><strong>stock_snapshot</strong><span class="stale">缓存/降级</span><span class="muted">AkShare / 腾讯证券 · 2026-08-24T17:06:54+08:00 · 离线模式：未请求实时接口</span></div><div class="status"><strong>industries</strong><span class="stale">缓存/降级</span><span class="muted">AkShare / 新浪行业 · 2026-08-24T17:06:54+08:00 · 离线模式：未请求实时接口</span></div><div class="status"><strong>indices</strong><span class="stale">缓存/降级</span><span class="muted">AkShare / 新浪指数 · 2026-08-24T17:06:54+08:00 · 离线模式：未请求实时接口</span></div><div class="status"><strong>news</strong><span class="stale">缓存/降级</span><span class="muted">AkShare / 同花顺快讯 · 2026-08-24T17:06:54+08:00 · 离线模式：未请求实时接口</span></div><div class="status"><strong>trading_calendar</strong><span class="stale">缓存/降级</span><span class="muted">AkShare / 新浪交易日历 · 2026-08-24T17:06:54+08:00 · 离线模式：未请求实时接口</span></div>
+    <h3 style="margin-top:16px">科技来源</h3><div class="status"><strong>codex_gpt_demo_30d</strong><span class="">采集成功</span><span class="muted">232 条 · GPT示范回看；日常配置仍为48小时</span></div>
+    <h3 style="margin-top:16px">独立降级记录</h3><ul class="muted"><li>3项分析因独立审计发现外推不足而降级为线索</li><li>Codex协作调用不提供token计数，元数据中保留为0并标记不可用</li></ul>
+  </section>
+  <footer>免责声明：本报告仅做公开信息整理、策略研究和后续回测候选，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
+</main></body></html>

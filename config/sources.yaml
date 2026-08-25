@@ -1,0 +1,28 @@
+arxiv:
+  enabled: true
+  id: "arxiv_frontier"
+  name: "arXiv前沿论文"
+  tier: 1
+  categories: ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.RO", "cs.CR", "eess.SY", "q-bio.BM", "q-bio.GN", "q-bio.QM"]
+
+feeds:
+  - {id: openai_news, name: OpenAI News, url: "https://openai.com/news/rss.xml", tier: 1, fetch_full_text: true}
+  - {id: deepmind_blog, name: Google DeepMind, url: "https://deepmind.google/blog/rss.xml", tier: 1, fetch_full_text: true}
+  - {id: ms_research, name: Microsoft Research, url: "https://www.microsoft.com/en-us/research/feed/", tier: 1, fetch_full_text: true}
+  - {id: nvidia_blog, name: NVIDIA Blog, url: "https://blogs.nvidia.com/feed/", tier: 1, fetch_full_text: true}
+  - {id: huggingface_blog, name: Hugging Face Blog, url: "https://huggingface.co/blog/feed.xml", tier: 1, fetch_full_text: true}
+  - {id: mit_ai, name: MIT News AI, url: "https://news.mit.edu/rss/topic/artificial-intelligence2", tier: 1, fetch_full_text: true}
+  - {id: ieee_spectrum, name: IEEE Spectrum, url: "https://spectrum.ieee.org/feeds/feed.rss", tier: 2, fetch_full_text: true}
+  - {id: nature_ai, name: Nature Machine Intelligence, url: "https://www.nature.com/natmachintell.rss", tier: 1, fetch_full_text: true}
+  - {id: nature_biotech, name: Nature Biotechnology, url: "https://www.nature.com/nbt.rss", tier: 1, fetch_full_text: true}
+  - {id: us_doe, name: U.S. Department of Energy, url: "https://www.energy.gov/rss.xml", tier: 1, fetch_full_text: true}
+
+github_releases:
+  - {id: pytorch_releases, name: PyTorch Releases, repo: pytorch/pytorch, tier: 1}
+  - {id: transformers_releases, name: Transformers Releases, repo: huggingface/transformers, tier: 1}
+  - {id: vllm_releases, name: vLLM Releases, repo: vllm-project/vllm, tier: 1}
+  - {id: llamacpp_releases, name: llama.cpp Releases, repo: ggml-org/llama.cpp, tier: 1}
+  - {id: langgraph_releases, name: LangGraph Releases, repo: langchain-ai/langgraph, tier: 1}
+  - {id: rdagent_releases, name: RD-Agent Releases, repo: microsoft/RD-Agent, tier: 1}
+  - {id: qlib_releases, name: Qlib Releases, repo: microsoft/qlib, tier: 1}
+  - {id: autoware_releases, name: Autoware Releases, repo: autowarefoundation/autoware, tier: 1}

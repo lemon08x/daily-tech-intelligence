@@ -1,0 +1,25 @@
+topics:
+  - id: foundation_models
+    name: "大模型与Agent"
+    keywords: ["large language model", "llm", "foundation model", "agent", "reasoning", "multimodal", "大模型", "智能体", "多模态", "推理模型"]
+  - id: compute_chips
+    name: "芯片算力"
+    keywords: ["gpu", "accelerator", "inference", "training", "semiconductor", "chip", "data center", "芯片", "算力", "推理", "训练", "数据中心"]
+  - id: robotics
+    name: "机器人与具身智能"
+    keywords: ["robot", "robotics", "embodied", "humanoid", "具身智能", "机器人", "人形机器人"]
+  - id: cloud_devtools
+    name: "云与开发工具"
+    keywords: ["cloud", "database", "compiler", "developer tool", "open source", "runtime", "云计算", "数据库", "编译器", "开发工具", "开源"]
+  - id: cybersecurity
+    name: "网络安全"
+    keywords: ["security", "cybersecurity", "vulnerability", "zero day", "privacy", "网络安全", "漏洞", "隐私"]
+  - id: smart_mobility
+    name: "智能汽车"
+    keywords: ["autonomous driving", "self-driving", "vehicle", "lidar", "adas", "自动驾驶", "智能汽车", "激光雷达"]
+  - id: energy_tech
+    name: "能源科技"
+    keywords: ["battery", "solar", "fusion", "grid", "energy storage", "hydrogen", "电池", "储能", "光伏", "核聚变", "电网", "氢能"]
+  - id: biotech
+    name: "生物技术"
+    keywords: ["biotechnology", "drug discovery", "protein", "genomics", "crispr", "bioinformatics", "生物技术", "药物发现", "蛋白质", "基因组"]

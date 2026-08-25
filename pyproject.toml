@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daily-a-share-digest"
+version = "0.2.0"
+description = "Evidence-grounded daily technology intelligence with A-share market context."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT" }
+dependencies = [
+  "akshare==1.18.94",
+  "Jinja2==3.1.6",
+  "pandas>=2.2,<3.1",
+  "PyYAML==6.0.2",
+  "feedparser==6.0.11",
+  "openai>=2.20,<3",
+  "pydantic>=2.10,<3",
+  "pypdf>=5.9,<7",
+  "rapidfuzz>=3.12,<4",
+  "trafilatura>=2.0,<3",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.4.2"]
+
+[project.scripts]
+daily-a-share = "daily_intel.app.cli:main"
+daily-intel = "daily_intel.app.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["daily_intel*", "daily_a_share*"]
+
+[tool.setuptools.package-data]
+daily_intel = ["publication/templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

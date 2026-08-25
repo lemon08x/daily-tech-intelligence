@@ -1,0 +1,43 @@
+app:
+  title: "A股每日信息精选"
+  timezone: "Asia/Shanghai"
+  top_stocks: 12
+  top_industries: 8
+  weak_industries: 5
+  top_news: 10
+
+data:
+  cache_dir: "data/cache"
+  output_dir: "output"
+  # 腾讯行情包含量比、换手率、估值和阶段涨跌幅；失败时自动降级到新浪行情。
+  snapshot_providers: ["tencent", "sina"]
+
+screening:
+  include_beijing_exchange: false
+  exclude_name_keywords: ["ST", "退", "N", "C"]
+  min_price: 3.0
+  max_price: 300.0
+  min_daily_change: -5.0
+  max_daily_change: 7.0
+  min_amount_cny: 100000000
+  min_market_cap_cny: 5000000000
+  min_turnover_rate: 0.5
+  max_turnover_rate: 15.0
+  min_pe_ttm: 0.0
+  max_pe_ttm: 100.0
+  max_pb: 15.0
+  min_momentum_60d: -15.0
+  max_momentum_60d: 60.0
+
+factor_weights:
+  momentum: 0.30
+  value: 0.20
+  liquidity: 0.15
+  activity: 0.15
+  daily_strength: 0.10
+  size: 0.10
+
+news:
+  include_unmatched: false
+  base_keywords:
+    ["A股", "沪指", "深证", "创业板", "央行", "证监会", "政策", "经济", "产业", "人民币", "融资", "AI", "半导体"]
