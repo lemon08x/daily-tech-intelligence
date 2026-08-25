@@ -69,10 +69,15 @@ class FakeLLM(LLMClient):
             if self.fail_analyst:
                 raise ValueError("invalid model JSON")
             value = AnalysisDraft(
-                headline="加速器基准更新", key_facts=["已发布新的基准结果"],
+                headline="加速器基准更新", key_facts=[
+                    "已发布新的基准结果",
+                    "来源披露了技术实现路径",
+                    "结果仍需要独立复现",
+                ],
                 technical_mechanism="通过新架构提升推理吞吐。", novelty="新的工程实现。",
                 maturity="原型验证。", outlook_6_24m="可能影响部署成本。",
-                risks=["基准尚未独立复现"], counterpoints=["实际负载可能不同"], confidence=.8,
+                risks=["基准尚未独立复现", "实际部署成本仍不确定"],
+                counterpoints=["实际负载可能不同"], confidence=.8,
                 evidence=[
                     Evidence(document_id="doc-1", url="https://example.com/doc", quote="First supported technical fact in the source.", locator="正文1"),
                     Evidence(document_id="doc-1", url="https://example.com/doc", quote="Second supported benchmark result in the source.", locator="正文2"),
@@ -112,6 +117,26 @@ def test_ai_pipeline_deep_analysis_and_same_day_reuse(tmp_path, monkeypatch) -> 
     assert len(first.analyses[0].evidence) == 2
     assert second.analyses[0].event_id == first.analyses[0].event_id
     assert llm.calls == ["scout", "analyst", "verifier"]
+    assert first.analysis_cache_misses == 1
+    assert second.analysis_cache_hits == 1
+    assert first.model_runtime["models"]["analyst"] == "analyst"
+    assert second.model_runtime["models"] == {}
+    assert second.model_runtime["analysis_models"] == ["analyst"]
+
+    alternate = pipeline.run(
+        NOW, snapshot, pd.DataFrame(), experiment_id="alternate-model"
+    )
+    assert alternate.cache_scope != first.cache_scope
+    assert llm.calls == [
+        "scout", "analyst", "verifier",
+        "scout", "analyst", "verifier",
+    ]
+    forced = pipeline.run(
+        NOW, snapshot, pd.DataFrame(),
+        experiment_id="alternate-model", force_analysis=True,
+    )
+    assert forced.analysis_cache_misses == 1
+    assert llm.calls[-2:] == ["analyst", "verifier"]
 
 
 def test_invalid_ai_output_is_retried_then_skipped(tmp_path, monkeypatch) -> None:

@@ -10,7 +10,7 @@ from typing import Any, Iterator
 from daily_intel.core.models import Analysis, Document, Event
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class SQLiteIntelligenceRepository:
@@ -79,6 +79,18 @@ class SQLiteIntelligenceRepository:
                     analysis_json TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS analysis_variants (
+                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    cache_scope TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    analysis_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(event_id, cache_scope)
+                );
+                CREATE INDEX IF NOT EXISTS idx_analysis_variants_created
+                    ON analysis_variants(created_at);
                 CREATE TABLE IF NOT EXISTS evidence (
                     event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
                     position INTEGER NOT NULL,
@@ -129,6 +141,15 @@ class SQLiteIntelligenceRepository:
                     value TEXT NOT NULL
                 );
                 """
+            )
+            db.execute(
+                """INSERT OR IGNORE INTO analysis_variants(
+                    event_id, cache_scope, status, model, prompt_version,
+                    analysis_json, created_at
+                )
+                SELECT event_id, 'legacy', status, model, prompt_version,
+                       analysis_json, created_at
+                FROM analyses"""
             )
             db.execute(
                 "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
@@ -211,13 +232,39 @@ class SQLiteIntelligenceRepository:
                 ),
             )
 
-    def get_analysis(self, event_id: str) -> Analysis | None:
+    def get_analysis(
+        self, event_id: str, cache_scope: str = "default",
+    ) -> Analysis | None:
         with self._connect() as db:
-            row = db.execute("SELECT analysis_json FROM analyses WHERE event_id=?", (event_id,)).fetchone()
+            row = db.execute(
+                """SELECT analysis_json FROM analysis_variants
+                WHERE event_id=? AND cache_scope=?""",
+                (event_id, cache_scope),
+            ).fetchone()
+            if row is None and cache_scope in {"default", "legacy"}:
+                row = db.execute(
+                    "SELECT analysis_json FROM analyses WHERE event_id=?", (event_id,)
+                ).fetchone()
         return Analysis.model_validate_json(row["analysis_json"]) if row else None
 
-    def save_analysis(self, analysis: Analysis) -> None:
+    def save_analysis(
+        self, analysis: Analysis, cache_scope: str = "default",
+    ) -> None:
         with self._connect() as db:
+            db.execute(
+                """INSERT INTO analysis_variants VALUES(?,?,?,?,?,?,?)
+                ON CONFLICT(event_id,cache_scope) DO UPDATE SET
+                status=excluded.status, model=excluded.model,
+                prompt_version=excluded.prompt_version,
+                analysis_json=excluded.analysis_json,
+                created_at=excluded.created_at""",
+                (
+                    analysis.event_id, cache_scope, analysis.status.value,
+                    analysis.model, analysis.prompt_version,
+                    analysis.model_dump_json(), analysis.created_at.isoformat(),
+                ),
+            )
+            # Keep the original table as a latest-analysis compatibility view.
             db.execute(
                 """INSERT INTO analyses VALUES(?,?,?,?,?,?)
                 ON CONFLICT(event_id) DO UPDATE SET status=excluded.status, model=excluded.model,
@@ -241,11 +288,30 @@ class SQLiteIntelligenceRepository:
                 [(analysis.event_id, i, item.model_dump_json()) for i, item in enumerate(analysis.company_mappings)],
             )
 
-    def get_latest_analyses(self, limit: int) -> list[Analysis]:
+    def get_latest_analyses(
+        self, limit: int, cache_scope: str | None = None,
+    ) -> list[Analysis]:
         with self._connect() as db:
-            rows = db.execute(
-                "SELECT analysis_json FROM analyses ORDER BY created_at DESC LIMIT ?", (limit,)
-            ).fetchall()
+            if cache_scope is not None:
+                rows = db.execute(
+                    """SELECT analysis_json FROM analysis_variants
+                    WHERE cache_scope=? ORDER BY created_at DESC LIMIT ?""",
+                    (cache_scope, limit),
+                ).fetchall()
+            else:
+                rows = db.execute(
+                    """WITH ranked AS (
+                        SELECT event_id, analysis_json, created_at,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY event_id ORDER BY created_at DESC
+                               ) AS position
+                        FROM analysis_variants
+                    )
+                    SELECT analysis_json FROM ranked
+                    WHERE position=1
+                    ORDER BY created_at DESC LIMIT ?""",
+                    (limit,),
+                ).fetchall()
         return [Analysis.model_validate_json(row["analysis_json"]) for row in rows]
 
     def record_llm_run(self, stage: str, event_id: str | None, model: str, prompt_version: str,

@@ -13,6 +13,12 @@ if /I "%~1"=="--no-open" set "OPEN_SWITCH="
 if /I "%~1"=="--offline" set "EXTRA_SWITCHES=%EXTRA_SWITCHES% -Offline"
 if /I "%~1"=="--no-ai" set "EXTRA_SWITCHES=%EXTRA_SWITCHES% -NoAI"
 if /I "%~1"=="--require-ai" set "EXTRA_SWITCHES=%EXTRA_SWITCHES% -RequireAI"
+if /I "%~1"=="--force-analysis" set "EXTRA_SWITCHES=%EXTRA_SWITCHES% -ForceAnalysis"
+if /I "%~1"=="--experiment-id" (
+    if "%~2"=="" goto :bad_args
+    set "EXTRA_SWITCHES=%EXTRA_SWITCHES% -ExperimentId ""%~2"""
+    shift
+)
 shift
 goto parse_args
 
@@ -32,6 +38,10 @@ if errorlevel 1 goto :failed
 popd
 endlocal
 exit /b 0
+
+:bad_args
+echo Missing value after --experiment-id.
+goto :failed
 
 :failed
 echo.

@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
-DB = Path(__file__).resolve().parent.parent / "data" / "intelligence.db"
-EVENT_IDS = ["d01e73827cd5f8d3241df1c8", "053ed8c795f3d0fe2688fb70", "156d2a9b9485b67df9522427"]
+DB = Path(__file__).resolve().parents[2] / "data" / "intelligence.db"
+EVENT_IDS = sys.argv[1:]
+
+if not EVENT_IDS:
+    raise SystemExit("用法: python scripts/diagnostics/inspect_events.py <event-id> [...]")
 
 con = sqlite3.connect(DB)
 cur = con.cursor()

@@ -24,6 +24,14 @@ def build_parser() -> argparse.ArgumentParser:
     ai_group = run.add_mutually_exclusive_group()
     ai_group.add_argument("--no-ai", action="store_true", help="采集科技信息但不调用模型")
     ai_group.add_argument("--require-ai", action="store_true", help="缺少AI密钥时返回失败")
+    run.add_argument(
+        "--experiment-id", default="default",
+        help="本次模型/实验标识，用于隔离缓存和区分同日多份输出",
+    )
+    run.add_argument(
+        "--force-analysis", action="store_true",
+        help="忽略当前实验的分析缓存并重新调用模型",
+    )
     doctor = subparsers.add_parser("doctor", help="检查依赖、配置、缓存与AI密钥状态")
     doctor.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     return parser
@@ -67,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         settings = load_settings(args.config)
         outputs = run_application(
             settings, offline=args.offline, no_ai=args.no_ai, require_ai=args.require_ai,
+            experiment_id=args.experiment_id, force_analysis=args.force_analysis,
         )
         print("生成完成：")
         for kind, path in outputs.items():

@@ -2,7 +2,9 @@ param(
     [switch]$Offline,
     [switch]$Open,
     [switch]$NoAI,
-    [switch]$RequireAI
+    [switch]$RequireAI,
+    [string]$ExperimentId = "default",
+    [switch]$ForceAnalysis
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +25,8 @@ if ($Offline) { $Arguments += "--offline" }
 if ($Open) { $Arguments += "--open" }
 if ($NoAI) { $Arguments += "--no-ai" }
 if ($RequireAI) { $Arguments += "--require-ai" }
+if ($ExperimentId) { $Arguments += @("--experiment-id", $ExperimentId) }
+if ($ForceAnalysis) { $Arguments += "--force-analysis" }
 
 & $Python @Arguments *>&1 | Tee-Object -FilePath (Join-Path $LogDir "latest.log")
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

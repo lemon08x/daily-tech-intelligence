@@ -5,7 +5,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-DB = Path(__file__).resolve().parent.parent / "data" / "intelligence.db"
+DB = Path(__file__).resolve().parents[2] / "data" / "intelligence.db"
 con = sqlite3.connect(DB)
 cur = con.cursor()
 
@@ -16,5 +16,11 @@ for event_id, status, analysis_json in cur.execute("select event_id, status, ana
     print(f"    confidence={data['confidence']} evidence={len(data['evidence'])} mappings={len(data['company_mappings'])}")
 
 print("\n== company_mappings ==")
-for row in cur.execute("select event_id, code, name, status, confidence from company_mappings"):
-    print(" ", row)
+for event_id, payload_json in cur.execute(
+    "select event_id, payload_json from company_mappings order by event_id, position"
+):
+    payload = json.loads(payload_json)
+    print(
+        f"  {event_id} | {payload.get('code')} {payload.get('name')} | "
+        f"{payload.get('status')} | {payload.get('confidence')}"
+    )

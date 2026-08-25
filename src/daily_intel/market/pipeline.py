@@ -7,6 +7,7 @@ from typing import Any
 
 import pandas as pd
 
+from daily_intel.core.ports import MarketProvider
 from daily_intel.market.cache import CsvCache, Dataset
 from daily_intel.market.normalize import (
     clean_text,
@@ -79,10 +80,19 @@ def _status(dataset: Dataset) -> dict[str, Any]:
 class MarketPipeline:
     """Deterministic market pipeline; intelligence output never enters this score path."""
 
-    def __init__(self, settings: dict[str, Any], cache_dir, now: datetime, offline: bool) -> None:
+    def __init__(
+        self,
+        settings: dict[str, Any],
+        cache_dir,
+        now: datetime,
+        offline: bool,
+        provider: MarketProvider | None = None,
+    ) -> None:
         self.settings = settings
         self.now = now
-        self.provider = AkShareProvider(CsvCache(cache_dir), now=now, offline=offline)
+        self.provider = provider or AkShareProvider(
+            CsvCache(cache_dir), now=now, offline=offline
+        )
 
     def run(self) -> MarketRunResult:
         config = self.settings

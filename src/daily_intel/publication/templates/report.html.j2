@@ -47,7 +47,7 @@
 <body><main>
   <header>
     <h1>{{ title }}</h1>
-    <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
+    <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('legacy') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
     <p class="muted">科技事件与A股关联为研究假设，不参与规则股票综合分。</p>
   </header>
 
@@ -56,6 +56,8 @@
     {% for analysis in analyses %}
     <article class="event">
       <div class="event-head"><h3>{{ loop.index }}. {{ analysis.headline }}</h3><span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span></div>
+      <p class="muted">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}） · 策略 {{ analysis.quality.policy_version }}{% if analysis.quality.issues %}<br>质量门降级原因：{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}</p>
+      {% if analysis.quality.unsupported_claims %}<div class="evidence"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
       {% if analysis.key_facts %}<ul class="fact-list">{% for item in analysis.key_facts %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
       {% if analysis.technical_mechanism or analysis.outlook_6_24m %}<div class="analysis-grid">
         {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
@@ -86,7 +88,8 @@
   {% if news_records %}<section class="section"><h2>市场快讯线索 <span class="muted" style="font-size:13px;font-weight:400">低权重，不单独支撑深度结论</span></h2>{% for item in news_records %}<article class="news"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noreferrer">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><small class="muted">{{ item.published_at }}</small></article>{% endfor %}</section>{% endif %}
 
   <section class="section"><h2>方法、模型与数据状态</h2>
-    <p class="muted">AI：{{ ai_status_label }}；提示词版本 {{ prompt_version }}；今日调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens。综合分仍仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算。</p>
+    <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.estimated %}（估算）{% endif %}。综合分仍仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算。</p>
+    <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('legacy') }}；平均质量分 {{ quality_summary.average_score|default(0) }}；通过 {{ quality_summary.passed|default(0) }} 项，降级 {{ quality_summary.downgraded|default(0) }} 项。</p>
     <h3 style="margin-top:16px">市场数据</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
     <h3 style="margin-top:16px">科技来源</h3>{% for item in intelligence_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '失败/缓存' if item.stale else '采集成功' }}</span><span class="muted">{{ item.count|default(0) }} 条{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
     {% if pipeline_errors %}<h3 style="margin-top:16px">独立降级记录</h3><ul class="muted">{% for item in pipeline_errors %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}

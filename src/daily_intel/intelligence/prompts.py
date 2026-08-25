@@ -14,13 +14,15 @@ ANALYST_SYSTEM = """你是审慎的科技产业研究员。只可使用输入文
 写出技术机制、新颖性、成熟度、未来6至24个月影响、风险及反面观点。
 evidence.quote必须逐字复制输入文档中的连续文本，并填写对应document_id和URL。
 公司关联只是待核验假设，每个事件最多3个；不能确定六位A股代码和名称时不要输出。
+严格遵守requirements.quality_contract的数量和长度边界；不要为了填满字段重复事实或堆砌引用。
 输出严格JSON，不要Markdown。"""
 
 
 VERIFIER_SYSTEM = """你是独立证据审计员。检查草稿是否被给定文档支持。
 supported_evidence_indexes只能列出引用确实存在且能支持相关结论的零基索引。
 发现过度推断、营销表述当事实或公司映射缺乏依据时写入unsupported_claims。
-证据不足时必须downgrade或reject。输出严格JSON。"""
+只要存在实质性unsupported_claims，verdict就不得为pass；证据不足时必须downgrade或reject。
+不要因文字完整、引用数量多或模型自报置信度高而放宽标准。输出严格JSON。"""
 
 
 def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -> str:
@@ -43,7 +45,9 @@ def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -
     )
 
 
-def analyst_user(event: Event, documents: list[Document]) -> str:
+def analyst_user(
+    event: Event, documents: list[Document], quality_contract: dict | None = None,
+) -> str:
     payload = {
         "event": event.model_dump(mode="json"),
         "documents": [
@@ -57,6 +61,7 @@ def analyst_user(event: Event, documents: list[Document]) -> str:
         "requirements": {
             "language": "简体中文", "evidence_minimum": 2,
             "company_hypotheses_maximum": 3, "schema": AnalysisDraft.model_json_schema(),
+            "quality_contract": quality_contract or {},
         },
     }
     return json.dumps(payload, ensure_ascii=False)

@@ -77,6 +77,19 @@ class CompanyMapping(StrictModel):
     evidence: list[Evidence] = Field(default_factory=list)
 
 
+class AnalysisQuality(StrictModel):
+    """Deterministic audit result applied after all model stages."""
+
+    policy_version: str = "legacy"
+    passed: bool = False
+    score: int = Field(default=0, ge=0, le=100)
+    supported_evidence: int = Field(default=0, ge=0)
+    primary_sources: int = Field(default=0, ge=0)
+    source_diversity: int = Field(default=0, ge=0)
+    unsupported_claims: list[str] = Field(default_factory=list, max_length=12)
+    issues: list[str] = Field(default_factory=list, max_length=12)
+
+
 class Analysis(StrictModel):
     event_id: str
     status: AnalysisStatus
@@ -92,6 +105,7 @@ class Analysis(StrictModel):
     confidence: float = Field(ge=0, le=1)
     evidence: list[Evidence] = Field(default_factory=list, max_length=12)
     company_mappings: list[CompanyMapping] = Field(default_factory=list, max_length=3)
+    quality: AnalysisQuality = Field(default_factory=AnalysisQuality)
     model: str = ""
     prompt_version: str = ""
     created_at: datetime
@@ -139,16 +153,18 @@ class CompanyHypothesis(StrictModel):
 
 class AnalysisDraft(StrictModel):
     headline: str
-    key_facts: list[str] = Field(default_factory=list, max_length=8)
+    # Draft limits are deliberately wider than published limits. The deterministic
+    # quality gate normalizes verbose model responses before building Analysis.
+    key_facts: list[str] = Field(default_factory=list, max_length=16)
     technical_mechanism: str
     novelty: str
     maturity: str
     outlook_6_24m: str
-    industry_impacts: list[IndustryImpact] = Field(default_factory=list, max_length=8)
-    risks: list[str] = Field(default_factory=list, max_length=8)
-    counterpoints: list[str] = Field(default_factory=list, max_length=8)
+    industry_impacts: list[IndustryImpact] = Field(default_factory=list, max_length=16)
+    risks: list[str] = Field(default_factory=list, max_length=16)
+    counterpoints: list[str] = Field(default_factory=list, max_length=16)
     confidence: float = Field(ge=0, le=1)
-    evidence: list[Evidence] = Field(default_factory=list, max_length=12)
+    evidence: list[Evidence] = Field(default_factory=list, max_length=24)
     company_hypotheses: list[CompanyHypothesis] = Field(default_factory=list, max_length=3)
 
     @field_validator("evidence")

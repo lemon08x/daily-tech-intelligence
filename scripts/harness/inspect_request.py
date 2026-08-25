@@ -1,15 +1,26 @@
-"""把 llm_io 请求文件中的 user payload 格式化打印，便于代理审阅。"""
+"""格式化打印Harness请求文件，便于人工审阅。"""
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
-IO_DIR = Path(__file__).resolve().parent.parent / "llm_io"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _latest_request() -> Path:
+    candidates = list(
+        (PROJECT_ROOT / "output").glob(
+            "*/runs/*/harness_io/*.request.json"
+        )
+    )
+    if not candidates:
+        raise FileNotFoundError("没有找到Harness请求文件，请显式传入路径")
+    return max(candidates, key=lambda item: item.stat().st_mtime)
 
 
 def main() -> None:
-    request_path = Path(sys.argv[1]) if len(sys.argv) > 1 else sorted(IO_DIR.glob("*.request.json"))[-1]
+    request_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _latest_request()
     data = json.loads(request_path.read_text(encoding="utf-8"))
     print(f"== {request_path.name} | stage={data['stage']} | schema={data['schema']}")
     user = data["user"]

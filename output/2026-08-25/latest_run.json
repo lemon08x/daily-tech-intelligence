@@ -1,0 +1,14 @@
+{
+  "run_name": "legacy-qwen-code-agent",
+  "experiment_id": "qwen3.8-27b",
+  "generated_at": "2026-08-25T12:17:19+08:00",
+  "paths": {
+    "html": "runs/legacy-qwen-code-agent/daily_digest.html",
+    "markdown": "runs/legacy-qwen-code-agent/daily_digest.md",
+    "csv": "runs/legacy-qwen-code-agent/candidates.csv",
+    "snapshot": "runs/legacy-qwen-code-agent/market_snapshot.csv",
+    "intelligence": "runs/legacy-qwen-code-agent/intelligence.json",
+    "metadata": "runs/legacy-qwen-code-agent/run_meta.json"
+  },
+  "legacy_metadata_note": "runs/legacy-qwen-code-agent/README.md"
+}

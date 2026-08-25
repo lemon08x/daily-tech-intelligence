@@ -5,13 +5,20 @@ import json
 import sqlite3
 from pathlib import Path
 
-DB = Path(__file__).resolve().parent.parent / "data" / "intelligence.db"
+DB = Path(__file__).resolve().parents[2] / "data" / "intelligence.db"
 
 con = sqlite3.connect(DB)
 cur = con.cursor()
 
 print("== analyses ==")
 for row in cur.execute("select event_id, status, model, prompt_version, created_at from analyses"):
+    print(" ", row)
+
+print("\n== analysis_variants ==")
+for row in cur.execute(
+    "select event_id, cache_scope, status, model, prompt_version, created_at "
+    "from analysis_variants order by created_at"
+):
     print(" ", row)
 
 print("\n== pipeline_state ==")
