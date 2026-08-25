@@ -9,6 +9,7 @@ from pathlib import Path
 
 from daily_intel.app.orchestrator import run_application
 from daily_intel.core.settings import load_settings, resolve_path
+from daily_intel.intelligence.sources.factory import configured_source_count
 
 
 DEFAULT_CONFIG = Path("config/settings.yaml")
@@ -53,11 +54,7 @@ def run_doctor(config_path: Path) -> int:
         "pydantic", "pypdf", "rapidfuzz", "trafilatura",
     ):
         print(f"{distribution}: {_version(distribution)}")
-    source_count = (
-        int(bool(settings["sources"].get("arxiv", {}).get("enabled", True)))
-        + len([item for item in settings["sources"].get("feeds", []) if item.get("enabled", True)])
-        + len([item for item in settings["sources"].get("github_releases", []) if item.get("enabled", True)])
-    )
+    source_count = configured_source_count(settings["sources"])
     key_env = settings["llm"]["api_key_env"]
     print(f"科技来源: {source_count} 个已启用")
     print(f"AI密钥 {key_env}: {'已设置' if os.getenv(key_env, '').strip() else '未设置（将生成线索版日报）'}")

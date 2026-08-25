@@ -7,7 +7,7 @@ import trafilatura
 from pypdf import PdfReader
 
 from daily_intel.core.models import Document
-from daily_intel.intelligence.sources.feeds import USER_AGENT
+from daily_intel.intelligence.sources.common import USER_AGENT
 
 
 def enrich_document(document: Document, timeout: int, max_chars: int) -> Document:

@@ -8,12 +8,12 @@ import pandas as pd
 
 from daily_intel.core.models import Document
 from daily_intel.core.ports import IntelligenceRepository, SourceAdapter
-from daily_intel.intelligence.sources.feeds import (
-    _content_hash,
-    _document_id,
-    build_sources,
+from daily_intel.intelligence.sources.common import (
     canonicalize_url,
+    content_hash,
+    document_id,
 )
+from daily_intel.intelligence.sources.factory import build_sources
 
 
 SourceFactory = Callable[[dict[str, Any], int], list[SourceAdapter]]
@@ -111,7 +111,7 @@ class DocumentCollector:
             url = str(row.get("url", "")) or f"radar://{index}"
             external_id = url if not url.startswith("radar://") else f"{published_at.isoformat()}:{title}"
             documents.append(Document(
-                id=_document_id(source_id, external_id),
+                id=document_id(source_id, external_id),
                 source_id=source_id,
                 source_name="同花顺/新浪快讯线索",
                 external_id=external_id,
@@ -122,7 +122,7 @@ class DocumentCollector:
                 fetched_at=now,
                 summary=summary,
                 content=summary,
-                content_hash=_content_hash(title, summary),
+                content_hash=content_hash(title, summary),
                 source_tier=3,
                 content_type="news_radar",
                 extraction_quality="summary",

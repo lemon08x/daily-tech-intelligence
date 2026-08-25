@@ -62,7 +62,7 @@ MarketWorkflow ─────────────────> app/orchestr
 
 ### 增加数据来源
 
-实现 `SourceAdapter.collect(since, limit)`，在 `config/sources.yaml` 增加配置，并由来源工厂创建适配器。来源只输出 `Document`，不得直接调用聚类、模型或发布模块。为解析、超时、降级和去重增加 fixture 测试。
+实现 `SourceAdapter.collect(since, limit)`，在 `config/sources.yaml` 增加配置，并由来源工厂创建适配器。来源只输出 `Document`，不得直接调用聚类、模型或发布模块。采集游标使用唯一的适配器 `id`；同一发布者可用共享 `publisher_id` 防止分类查询、社区精选和转载被误计为独立证据。为解析、超时、降级和去重增加 fixture 测试。来源等级和已验证端点见 [`sources.md`](sources.md)。
 
 ### 优化分析流程
 

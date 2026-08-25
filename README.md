@@ -128,20 +128,20 @@ src/daily_intel/
 ## 科技情报流程
 
 1. 首次回看 48 小时；之后每个来源从自己的上次成功游标继续，并保留 6 小时重叠。
-2. arXiv、RSS/Atom 和 GitHub Release 先做来源级去重、主题过滤和 72 小时事件聚类；明显的 nightly/build 自动记录在进入 AI 前丢弃。
+2. 分组 arXiv、RSS/Atom、官方 sitemap、结构化论文 API 和 GitHub Release 先做来源级去重、主题过滤和 72 小时事件聚类；明显的 nightly/build 自动记录在进入 AI 前丢弃。
 3. 初筛模型最多处理 40 个候选事件；最终排序由确定性分数 65% 与模型分数 35% 融合，模型漏项时回退到确定性排序，避免模型完全控制选题。
 4. 深研最多 5 个事件，再由独立校验阶段审计；只有至少两条原文逐字证据且包含权威一手来源时才标为“深度结论”，否则确定性降级成“线索”。无效 JSON 或单事件模型失败会重试一次，仍失败则跳过，不合成伪分析。
 5. A 股代码和名称必须存在于当日快照；巨潮行业分类只作背景，必须有近 365 天巨潮公告证据才能标为“已核验关联”，否则只能是“待核验假设”。
 
 模型输出还会经过统一质量契约：事实、证据、产业影响、风险与反面观点都有固定上下限；重复项和伪造引用会被程序剔除；存在 `unsupported_claims` 时，即使校验模型返回 `pass` 也强制降级；单一来源和线索状态都有置信度上限。质量分、证据数、来源数与降级原因会写入 HTML、Markdown、`intelligence.json` 和 `run_meta.json`。
 
-首批主题为大模型与 Agent、芯片算力、机器人、云与开发工具、网络安全、智能汽车、能源科技、生物技术。来源白名单见 `config\sources.yaml`，包括 arXiv、OpenAI、DeepMind、Microsoft Research、NVIDIA、Hugging Face、MIT、IEEE、Nature、美国能源部以及配置的 GitHub 项目。市场快讯仅是低权重雷达，不能单独支撑深度结论。
+首批主题为大模型与 Agent、芯片算力、机器人、云与开发工具、网络安全、智能汽车、能源科技、生物技术。来源白名单见 `config\sources.yaml`，覆盖分组 arXiv、OpenAI、Anthropic、DeepMind、Microsoft Research、NVIDIA、Mistral、Meta、Hugging Face Daily Papers、bioRxiv、Isomorphic Labs、Nature、能源与硬件行业源，以及国内外官方 GitHub Release。市场快讯仅是低权重雷达，不能单独支撑深度结论。分层依据、已验证端点和暂缓来源见 [`docs/sources.md`](docs/sources.md)。
 
 ## 配置
 
 - `config\settings.yaml`：路径、市场规则、情报窗口、模型和参数；
 - `config\topics.yaml`：主题及中英文关键词；
-- `config\sources.yaml`：权威来源白名单与 GitHub 仓库；
+- `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库；
 - `config.yaml`：保留一版的旧配置兼容入口。
 
 默认模型端点为 `https://api.deepseek.com`，密钥变量为 `DEEPSEEK_API_KEY`。初筛模型 `deepseek-v4-flash`，深研/校验模型 `deepseek-v4-pro`；这些名称、采样参数和供应商扩展参数全部可在 YAML 修改。运行元数据记录客户端报告的实际提供方和模型，不再直接把静态 YAML 当作实际运行结果；文件代理无法获得真实 token 时会明确标为“估算”。

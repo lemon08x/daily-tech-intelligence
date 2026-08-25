@@ -5,11 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from daily_intel.app.cli import build_parser
 from daily_intel.app.orchestrator import run_application
 from daily_intel.core.models import Analysis, AnalysisStatus, Evidence
-from daily_intel.core.settings import load_settings, resolve_path
+from daily_intel.core.settings import _validate_sources, load_settings, resolve_path
+from daily_intel.intelligence.sources.factory import configured_source_count
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.pipeline import IntelligenceRunResult
 from daily_intel.market.pipeline import MarketRunResult
@@ -23,6 +25,22 @@ def test_new_and_legacy_config_resolve_same_project_paths() -> None:
     assert resolve_path(new, "cache_dir") == (root / "data" / "cache").resolve()
     assert resolve_path(legacy, "cache_dir") == (root / "data" / "cache").resolve()
     assert new["market"]["factor_weights"] == legacy["market"]["factor_weights"]
+    assert configured_source_count(new["sources"]) >= 30
+    assert len(new["sources"]["arxiv_sources"]) == 3
+
+
+def test_source_config_rejects_duplicate_ids_and_unknown_api_types() -> None:
+    with pytest.raises(ValueError, match="重复来源 id"):
+        _validate_sources({
+            "feeds": [
+                {"id": "same", "url": "https://example.com/a", "tier": 1},
+                {"id": "same", "url": "https://example.com/b", "tier": 2},
+            ]
+        })
+    with pytest.raises(ValueError, match="不支持的 API 类型"):
+        _validate_sources({
+            "apis": [{"id": "unknown", "type": "unknown", "tier": 1}]
+        })
 
 
 def test_cli_supports_new_flags_and_legacy_command_name() -> None:

@@ -125,6 +125,7 @@ def _validate(settings: dict[str, Any]) -> None:
     topic_ids = [item["id"] for item in settings["topics"]]
     if len(topic_ids) != len(set(topic_ids)):
         raise ValueError("topics.yaml 中存在重复主题 id")
+    _validate_sources(settings["sources"])
     intelligence = settings["intelligence"]
     selection_weights = (
         float(intelligence["selection_deterministic_weight"]),
@@ -146,6 +147,40 @@ def _validate(settings: dict[str, Any]) -> None:
     ):
         if not 0 <= float(quality[key]) <= 1:
             raise ValueError(f"quality.{key} 必须位于 0 到 1 之间")
+
+
+def _validate_sources(sources: dict[str, Any]) -> None:
+    entries: list[tuple[str, dict[str, Any]]] = []
+    arxiv_groups = sources.get("arxiv_sources")
+    if arxiv_groups is None:
+        legacy = sources.get("arxiv")
+        arxiv_groups = [legacy] if legacy else []
+    entries.extend(("arxiv", item) for item in arxiv_groups if item)
+    for section, source_type in (
+        ("feeds", "feed"),
+        ("sitemaps", "sitemap"),
+        ("apis", "api"),
+        ("github_releases", "github_release"),
+    ):
+        entries.extend((source_type, item) for item in sources.get(section, []))
+
+    ids = [str(item.get("id", "")).strip() for _, item in entries]
+    if any(not item for item in ids):
+        raise ValueError("sources.yaml 中每个来源都必须有非空 id")
+    if len(ids) != len(set(ids)):
+        raise ValueError("sources.yaml 中存在重复来源 id")
+    for source_type, item in entries:
+        tier = int(item.get("tier", 0))
+        if tier not in {1, 2, 3}:
+            raise ValueError(f"来源 {item['id']} 的 tier 必须为 1、2 或 3")
+        if source_type == "arxiv" and not item.get("categories"):
+            raise ValueError(f"arXiv 来源 {item['id']} 缺少 categories")
+        if source_type in {"feed", "sitemap"} and not str(item.get("url", "")).startswith("https://"):
+            raise ValueError(f"来源 {item['id']} 必须使用 HTTPS URL")
+        if source_type == "api" and item.get("type") not in {"huggingface_daily_papers"}:
+            raise ValueError(f"来源 {item['id']} 使用了不支持的 API 类型")
+        if source_type == "github_release" and "/" not in str(item.get("repo", "")):
+            raise ValueError(f"GitHub 来源 {item['id']} 的 repo 格式无效")
 
 
 def resolve_path(settings: dict[str, Any], key: str) -> Path:

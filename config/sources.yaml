@@ -1,23 +1,105 @@
-arxiv:
-  enabled: true
-  id: "arxiv_frontier"
-  name: "arXiv前沿论文"
-  tier: 1
-  categories: ["cs.AI", "cs.LG", "cs.CL", "cs.CV", "cs.RO", "cs.CR", "eess.SY", "q-bio.BM", "q-bio.GN", "q-bio.QM"]
+# Tier 1: 原始论文、官方机构、官方产品或项目发布。
+# Tier 2: 有编辑筛选和技术深度的行业媒体，不可单独支撑深度结论。
+# Tier 3: 市场线索；由市场流水线提供，不在本白名单重复配置。
+
+# 分组查询避免所有 arXiv 类别争用同一个 30 条窗口。publisher_id 统一为
+# arxiv，确保分类查询与 Hugging Face 精选命中同一论文时只算一个证据来源。
+arxiv_sources:
+  - id: arxiv_ai_software
+    publisher_id: arxiv
+    name: "arXiv（AI与软件）"
+    tier: 1
+    categories: [cs.AI, cs.LG, cs.CL, cs.CV, cs.RO, cs.CR, cs.SE]
+  - id: arxiv_compute_systems
+    publisher_id: arxiv
+    name: "arXiv（芯片、系统与应用物理）"
+    tier: 1
+    categories: [cs.AR, eess.SY, eess.SP, physics.app-ph, cond-mat.mes-hall]
+  - id: arxiv_biotech
+    publisher_id: arxiv
+    name: "arXiv（计算生物）"
+    tier: 1
+    categories: [q-bio.BM, q-bio.GN, q-bio.QM]
 
 feeds:
+  # 国际实验室、企业和研究机构的一手发布。
   - {id: openai_news, name: OpenAI News, url: "https://openai.com/news/rss.xml", tier: 1, fetch_full_text: true}
   - {id: deepmind_blog, name: Google DeepMind, url: "https://deepmind.google/blog/rss.xml", tier: 1, fetch_full_text: true}
   - {id: ms_research, name: Microsoft Research, url: "https://www.microsoft.com/en-us/research/feed/", tier: 1, fetch_full_text: true}
   - {id: nvidia_blog, name: NVIDIA Blog, url: "https://blogs.nvidia.com/feed/", tier: 1, fetch_full_text: true}
   - {id: huggingface_blog, name: Hugging Face Blog, url: "https://huggingface.co/blog/feed.xml", tier: 1, fetch_full_text: true}
+  - {id: mistral_news, name: Mistral AI News, url: "https://mistral.ai/news/rss", tier: 1, fetch_full_text: true}
+  - id: meta_newsroom_ai
+    name: Meta Newsroom（AI过滤）
+    url: "https://about.fb.com/feed/"
+    tier: 1
+    fetch_full_text: true
+    max_items: 15
+    include_keywords: [artificial intelligence, AI, Llama, open source model, smart glasses, augmented reality, wearable, data center]
   - {id: mit_ai, name: MIT News AI, url: "https://news.mit.edu/rss/topic/artificial-intelligence2", tier: 1, fetch_full_text: true}
-  - {id: ieee_spectrum, name: IEEE Spectrum, url: "https://spectrum.ieee.org/feeds/feed.rss", tier: 2, fetch_full_text: true}
   - {id: nature_ai, name: Nature Machine Intelligence, url: "https://www.nature.com/natmachintell.rss", tier: 1, fetch_full_text: true}
   - {id: nature_biotech, name: Nature Biotechnology, url: "https://www.nature.com/nbt.rss", tier: 1, fetch_full_text: true}
   - {id: us_doe, name: U.S. Department of Energy, url: "https://www.energy.gov/rss.xml", tier: 1, fetch_full_text: true}
 
+  # AI4Science 预印本。先做主题过滤，入选后再提取原文。
+  - id: biorxiv_ai4science
+    name: bioRxiv（AI4Science过滤）
+    url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=all"
+    tier: 1
+    content_type: paper
+    fetch_full_text: true
+    include_keywords: [machine learning, artificial intelligence, foundation model, deep learning, protein, genome, genomic, CRISPR, drug, molecule, biotechnology, bioinformatics]
+
+  # 有编辑筛选的行业源，只作为第二来源或产业动态线索。
+  - {id: ieee_spectrum, name: IEEE Spectrum, url: "https://spectrum.ieee.org/feeds/feed.rss", tier: 2, fetch_full_text: true}
+  - id: toms_hardware_frontier
+    name: "Tom's Hardware（前沿硬件过滤）"
+    url: "https://www.tomshardware.com/feeds.xml"
+    tier: 2
+    fetch_full_text: true
+    max_items: 15
+    include_keywords: [GPU, NPU, accelerator, semiconductor, chip, CPU architecture, data center, inference, AI server, HBM, foundry, lithography]
+    exclude_keywords: [deal, save $, lowest price, best buy, amazon]
+  - id: cleantechnica_frontier
+    name: CleanTechnica（能源技术过滤）
+    url: "https://cleantechnica.com/feed/"
+    tier: 2
+    fetch_full_text: true
+    max_items: 15
+    include_keywords: [battery, energy storage, grid, solar, fusion, hydrogen, heat pump, renewable, clean energy, nuclear, electricity]
+
+# 没有稳定 RSS 的官方站点通过带 lastmod 的 sitemap 增量采集。
+sitemaps:
+  - id: anthropic_official
+    name: Anthropic News & Research
+    url: "https://www.anthropic.com/sitemap.xml"
+    tier: 1
+    fetch_full_text: true
+    fetch_page_metadata: true
+    max_items: 15
+    include_paths: [/news/, /research/, /engineering/]
+    exclude_paths: [/research/team/]
+  - id: isomorphic_labs_articles
+    name: Isomorphic Labs Articles
+    url: "https://www.isomorphiclabs.com/sitemap.xml"
+    tier: 1
+    fetch_full_text: true
+    fetch_page_metadata: true
+    max_items: 10
+    include_paths: [/articles/]
+
+# 社区排序只负责发现；文档身份、链接和证据仍归属原始 arXiv 论文。
+apis:
+  - id: huggingface_daily_papers
+    type: huggingface_daily_papers
+    publisher_id: arxiv
+    name: "arXiv（Hugging Face Daily Papers精选）"
+    url: "https://huggingface.co/api/daily_papers"
+    tier: 1
+    max_items: 15
+
 github_releases:
+  # 国际关键开源基础设施。
   - {id: pytorch_releases, name: PyTorch Releases, repo: pytorch/pytorch, tier: 1}
   - {id: transformers_releases, name: Transformers Releases, repo: huggingface/transformers, tier: 1}
   - {id: vllm_releases, name: vLLM Releases, repo: vllm-project/vllm, tier: 1}
@@ -26,3 +108,10 @@ github_releases:
   - {id: rdagent_releases, name: RD-Agent Releases, repo: microsoft/RD-Agent, tier: 1}
   - {id: qlib_releases, name: Qlib Releases, repo: microsoft/qlib, tier: 1}
   - {id: autoware_releases, name: Autoware Releases, repo: autowarefoundation/autoware, tier: 1}
+
+  # 国内机构没有稳定 RSS，使用其官方开源组织的正式 Release。
+  - {id: flagembedding_releases, name: BAAI FlagEmbedding Releases, repo: FlagOpen/FlagEmbedding, tier: 1}
+  - {id: flagscale_releases, name: BAAI FlagScale Releases, repo: FlagOpen/FlagScale, tier: 1}
+  - {id: flaggems_releases, name: BAAI FlagGems Releases, repo: FlagOpen/FlagGems, tier: 1}
+  - {id: lmdeploy_releases, name: Shanghai AI Lab LMDeploy Releases, repo: InternLM/lmdeploy, tier: 1}
+  - {id: mmengine_releases, name: Shanghai AI Lab MMEngine Releases, repo: open-mmlab/mmengine, tier: 1}
