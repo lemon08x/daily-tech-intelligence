@@ -9,7 +9,7 @@ import pytest
 
 from daily_intel.app.cli import build_parser
 from daily_intel.app.orchestrator import run_application
-from daily_intel.core.models import Analysis, AnalysisStatus, Evidence
+from daily_intel.core.models import Analysis, AnalysisQuality, AnalysisStatus, Evidence
 from daily_intel.core.settings import _validate_sources, load_settings, resolve_path
 from daily_intel.intelligence.sources.factory import configured_source_count
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -18,15 +18,19 @@ from daily_intel.market.pipeline import MarketRunResult
 from daily_intel.publication.reporting import publish
 
 
-def test_new_and_legacy_config_resolve_same_project_paths() -> None:
+def test_project_config_resolves_expected_paths_and_sources() -> None:
     root = Path(__file__).resolve().parents[1]
-    new = load_settings(root / "config" / "settings.yaml")
-    legacy = load_settings(root / "config.yaml")
-    assert resolve_path(new, "cache_dir") == (root / "data" / "cache").resolve()
-    assert resolve_path(legacy, "cache_dir") == (root / "data" / "cache").resolve()
-    assert new["market"]["factor_weights"] == legacy["market"]["factor_weights"]
-    assert configured_source_count(new["sources"]) >= 30
-    assert len(new["sources"]["arxiv_sources"]) == 3
+    settings = load_settings(root / "config" / "settings.yaml")
+    assert resolve_path(settings, "cache_dir") == (root / "data" / "cache").resolve()
+    assert configured_source_count(settings["sources"]) >= 30
+    assert len(settings["sources"]["arxiv_sources"]) == 3
+
+
+def test_settings_rejects_obsolete_root_shape(tmp_path) -> None:
+    path = tmp_path / "config.yaml"
+    path.write_text("app: {}\ndata: {}\nscreening: {}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="当前版本必需段"):
+        load_settings(path)
 
 
 def test_source_config_rejects_duplicate_ids_and_unknown_api_types() -> None:
@@ -43,7 +47,7 @@ def test_source_config_rejects_duplicate_ids_and_unknown_api_types() -> None:
         })
 
 
-def test_cli_supports_new_flags_and_legacy_command_name() -> None:
+def test_cli_supports_run_flags() -> None:
     args = build_parser().parse_args([
         "run", "--offline", "--no-ai",
         "--experiment-id", "qwen3.8-27b", "--force-analysis",
@@ -56,12 +60,27 @@ def test_cli_supports_new_flags_and_legacy_command_name() -> None:
 def test_publish_writes_unified_outputs(tmp_path) -> None:
     now = datetime(2026, 8, 24, 10, tzinfo=timezone.utc)
     analysis = Analysis(
-        event_id="event-1", status=AnalysisStatus.LEAD, headline="技术线索",
-        key_facts=["AI未启用，仅展示来源线索"], risks=["尚未深研"], confidence=.3,
-        evidence=[Evidence(
-            document_id="doc-1", url="https://example.com/source",
-            quote="This is a sufficiently long source quotation.", locator="来源摘要",
-        )], model="none", prompt_version="test-v1", created_at=now,
+        event_id="event-1", status=AnalysisStatus.DEEP, headline="技术深研",
+        key_facts=["第一条核心事实", "第二条核心事实", "第三条补充事实"],
+        technical_mechanism="这里解释技术机制。", novelty="这里说明新颖性。",
+        maturity="原型验证阶段。", outlook_6_24m="未来影响仍取决于工程验证。",
+        risks=["尚未经过大规模部署"], counterpoints=["现有方案仍有成本优势"],
+        confidence=.82,
+        evidence=[
+            Evidence(
+                document_id="doc-1", url="https://example.com/source",
+                quote="This is a sufficiently long source quotation.", locator="原文第一段",
+            ),
+            Evidence(
+                document_id="doc-2", url="https://example.com/second-source",
+                quote="This is a second sufficiently long source quotation.", locator="原文第二段",
+            ),
+        ],
+        quality=AnalysisQuality(
+            policy_version="evidence-gate-v1", passed=True, score=100,
+            supported_evidence=2, primary_sources=2, source_diversity=2,
+        ),
+        model="fixture-model", prompt_version="test-v1", created_at=now,
     )
     breadth = {
         "mood": "分化", "advancing": 1, "declining": 1, "flat": 0,
@@ -75,7 +94,11 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
         "prompt_version": "test-v1", "pipeline_errors": [], "breadth": breadth,
         "eligible_count": 0, "candidate_records": [], "hot_industry_records": [],
-        "weak_industry_records": [], "index_records": [], "news_records": [],
+        "weak_industry_records": [], "index_records": [], "news_records": [{
+            "title": "市场简讯", "summary": "用于验证新闻页的短摘要。",
+            "url": "https://example.com/brief", "published_at": "2026-08-24 09:00",
+            "tags": "AI",
+        }],
         "market_source_status": [], "intelligence_source_status": [],
         "weights": {"momentum": .3, "value": .2, "liquidity": .15, "activity": .15, "daily_strength": .1, "size": .1},
     }
@@ -89,15 +112,23 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         tmp_path, now,
     )
     assert set(outputs) == {"html", "markdown", "csv", "snapshot", "intelligence", "metadata"}
-    assert "科技前沿深研" in outputs["html"].read_text(encoding="utf-8")
+    html = outputs["html"].read_text(encoding="utf-8")
+    markdown = outputs["markdown"].read_text(encoding="utf-8")
+    assert 'role="tab"' in html
+    assert 'id="news-panel"' in html
+    assert 'id="market-panel"' in html and 'aria-labelledby="market-tab" hidden' in html
+    assert '<details class="deep-dive">' in html
+    assert 'href="https://example.com/source"' in html
+    assert "阅读原文" in html and "市场简讯" in html
+    collapsed, expanded = html.split('<details class="deep-dive">', 1)
+    assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
+    assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
+    assert "[技术深研](https://example.com/source)" in markdown
     payload = json.loads(outputs["intelligence"].read_text(encoding="utf-8"))
-    assert payload["analyses"][0]["status"] == "lead"
+    assert payload["analyses"][0]["status"] == "deep"
     assert outputs["html"].parent == tmp_path / "2026-08-24" / "runs" / "100000-test"
-    assert (tmp_path / "2026-08-24" / "daily_digest.html").exists()
-    latest = json.loads(
-        (tmp_path / "2026-08-24" / "latest_run.json").read_text(encoding="utf-8")
-    )
-    assert latest["run_name"] == "100000-test"
+    assert not (tmp_path / "2026-08-24" / "daily_digest.html").exists()
+    assert not (tmp_path / "2026-08-24" / "latest_run.json").exists()
 
 
 def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
@@ -130,10 +161,7 @@ def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
     )
     assert first["html"].exists() and second["html"].exists()
     assert first["html"] != second["html"]
-    latest = json.loads(
-        (tmp_path / "2026-08-24" / "latest_run.json").read_text(encoding="utf-8")
-    )
-    assert latest["run_name"] == "run-b"
+    assert not (tmp_path / "2026-08-24" / "latest_run.json").exists()
 
 
 def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadata(

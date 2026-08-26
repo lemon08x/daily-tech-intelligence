@@ -51,9 +51,8 @@ MarketWorkflow ─────────────────> app/orchestr
 ## 运行与输出
 
 一次运行由 `experiment_id`、唯一 `run_name` 和模型指纹共同标识。每次发布
-写入 `output/YYYY-MM-DD/runs/<run-name>`；日目录根部只保存最新运行兼容副本
-及 `latest_run.json`。SQLite的 `analysis_variants` 保存同一事件的多个模型
-实验版本，旧 `analyses` 表继续提供最新结果兼容视图。
+只写入 `output/YYYY-MM-DD/runs/<run-name>`，不生成日期根副本或“最新运行”
+清单。SQLite 的 `analysis_variants` 保存同一事件的多个模型实验版本。
 
 `--force-analysis` 只绕过当前实验/模型作用域内的分析缓存，不删除任何历史
 输出。Harness请求与响应与报告归档在同一运行目录，便于后续高级模型复盘。
@@ -77,4 +76,4 @@ MarketWorkflow ─────────────────> app/orchestr
 - 任何模型或提示词变更都要运行固定响应集，比较通过率、降级原因、证据有效率和输出长度，而不只比较文字观感。
 - 市场 fixture 的标准化、候选分和关键报告区块必须保持回归。
 - `run_meta.json` 必须记录实际客户端元数据；无法读取真实用量时标记 `usage_reporting=estimated`。
-- 旧 `Analysis` JSON 缺少质量字段时仍可读取，但联网 AI 运行不会把 `legacy` 分析当作当前质量策略结果复用。
+- `Analysis` 必须显式包含质量字段；不符合当前契约的旧数据不会进入现行发布流程。

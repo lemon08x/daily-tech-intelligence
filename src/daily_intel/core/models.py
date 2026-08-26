@@ -80,7 +80,7 @@ class CompanyMapping(StrictModel):
 class AnalysisQuality(StrictModel):
     """Deterministic audit result applied after all model stages."""
 
-    policy_version: str = "legacy"
+    policy_version: str = "evidence-gate-v1"
     passed: bool = False
     score: int = Field(default=0, ge=0, le=100)
     supported_evidence: int = Field(default=0, ge=0)
@@ -105,7 +105,7 @@ class Analysis(StrictModel):
     confidence: float = Field(ge=0, le=1)
     evidence: list[Evidence] = Field(default_factory=list, max_length=12)
     company_mappings: list[CompanyMapping] = Field(default_factory=list, max_length=3)
-    quality: AnalysisQuality = Field(default_factory=AnalysisQuality)
+    quality: AnalysisQuality
     model: str = ""
     prompt_version: str = ""
     created_at: datetime

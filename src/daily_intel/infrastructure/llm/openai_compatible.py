@@ -41,18 +41,6 @@ class OpenAICompatibleLLM(LLMClient):
             raise RuntimeError(f"缺少环境变量 {self.config['api_key_env']}")
         stage_config = self.config[stage]
         extra_body = dict(stage_config.get("extra_body", {}))
-        # One-version compatibility for earlier DeepSeek-oriented configuration.
-        if not extra_body and (
-            "thinking" in stage_config or "reasoning_effort" in stage_config
-        ):
-            extra_body = {
-                "thinking": {
-                    "type": "enabled"
-                    if stage_config.get("thinking", False)
-                    else "disabled"
-                },
-                "reasoning_effort": stage_config.get("reasoning_effort", "low"),
-            }
         request = {
             "model": stage_config["model"],
             "messages": [

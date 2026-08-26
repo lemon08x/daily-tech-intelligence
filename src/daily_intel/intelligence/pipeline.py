@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from daily_intel.core.models import Analysis, Document
+from daily_intel.core.models import Analysis
 from daily_intel.core.ports import IntelligenceRepository, LLMClient
 from daily_intel.intelligence.clustering import is_obvious_build_title
 from daily_intel.intelligence.collection import DocumentCollector
@@ -86,7 +86,7 @@ class IntelligencePipeline:
         if offline:
             return self._offline_result(cache_scope)
 
-        documents, source_status = self._collect_sources(now)
+        documents, source_status = self.collector.collect_sources(now)
         documents.extend(self.collector.radar_documents(radar_news, now))
         event_docs = self.catalog.index_and_discover(documents, now)
 
@@ -195,9 +195,3 @@ class IntelligencePipeline:
             analysis_cache_misses=analysis_cache_misses,
             errors=errors or [],
         )
-
-    def _collect_sources(
-        self, now: datetime
-    ) -> tuple[list[Document], list[dict[str, Any]]]:
-        """Compatibility proxy retained for existing tests and local integrations."""
-        return self.collector.collect_sources(now)

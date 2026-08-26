@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -60,8 +59,8 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
         f"# {context['title']} · {context['report_date']}", "",
         f"> 行情交易日：**{context['market_date']}**；AI状态：**{context['ai_status_label']}**；"
         f"实验：**{context.get('experiment_id', 'default')}**；"
-        f"运行：**{context.get('run_name', 'legacy')}**。", "",
-        "## 科技前沿深研", "",
+        f"运行：**{context.get('run_name', 'default')}**。", "",
+        "## 新闻精选", "",
     ]
     if not analyses:
         lines.extend(["今日没有可发布的科技事件。请查看数据源状态或在联网后重试。", ""])
@@ -72,8 +71,11 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
             f"质量分 {quality.score}/100 · 有效证据 {quality.supported_evidence} · "
             f"来源 {quality.source_diversity}（一手 {quality.primary_sources}）"
         )
+        headline = _markdown_text(analysis.headline)
+        if analysis.evidence:
+            headline = f"[{headline}]({analysis.evidence[0].url})"
         lines.extend([
-            f"### {index}. {analysis.headline}", "",
+            f"### {index}. {headline}", "",
             f"**状态：{label} · 置信度 {analysis.confidence:.0%} · {audit}**", "",
         ])
         if quality.issues:
@@ -115,6 +117,17 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
                 lines.append(f"- [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
         lines.append("")
 
+    if context.get("news_records"):
+        lines.extend(["## 简讯", "", "以下为低权重市场雷达，不单独支撑深度结论。", ""])
+        for item in context["news_records"]:
+            title = _markdown_text(item.get("title", ""))
+            if item.get("url"):
+                title = f"[{title}]({item['url']})"
+            lines.extend([
+                f"### {title}", "",
+                _markdown_text(item.get("summary", "")), "",
+            ])
+
     lines.extend([
         "## A股市场观察", "",
         f"市场温度：**{breadth['mood']}**；上涨 {breadth['advancing']} 家，下跌 {breadth['declining']} 家，中位涨跌幅 {breadth['median_change']:.2f}%。", "",
@@ -144,7 +157,7 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
         f"- 本次模型调用：{usage.get('calls', 0)} 次；输入 {usage.get('input_tokens', 0)} tokens；"
         f"输出 {usage.get('output_tokens', 0)} tokens"
         f"{'（估算）' if usage.get('estimated') else ''}",
-        f"质量策略：{context.get('quality_summary', {}).get('policy_version') or 'legacy'}；"
+        f"质量策略：{context.get('quality_summary', {}).get('policy_version') or '未产生分析'}；"
         f"平均质量分 {context.get('quality_summary', {}).get('average_score', 0)}；"
         f"通过 {context.get('quality_summary', {}).get('passed', 0)} 项，"
         f"降级 {context.get('quality_summary', {}).get('downgraded', 0)} 项。",
@@ -173,7 +186,7 @@ def publish(
 ) -> dict[str, Path]:
     day_dir = output_dir / now.strftime("%Y-%m-%d")
     run_name = sanitize_run_identifier(
-        str(metadata.get("run_name") or f"{now:%H%M%S}-legacy")
+        str(metadata.get("run_name") or f"{now:%H%M%S}-default")
     )
     run_dir = day_dir / "runs" / run_name
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -232,19 +245,4 @@ def publish(
         "html": html_path, "markdown": markdown_path, "csv": candidate_path,
         "snapshot": snapshot_path, "intelligence": intelligence_path, "metadata": metadata_path,
     }
-    # Keep the historical day-root filenames as latest-run compatibility aliases.
-    for path in outputs.values():
-        shutil.copy2(path, day_dir / path.name)
-    latest_manifest = {
-        "run_name": run_name,
-        "experiment_id": metadata.get("experiment_id", "default"),
-        "generated_at": now.isoformat(),
-        "paths": {
-            key: path.relative_to(day_dir).as_posix()
-            for key, path in outputs.items()
-        },
-    }
-    (day_dir / "latest_run.json").write_text(
-        json.dumps(latest_manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
     return outputs

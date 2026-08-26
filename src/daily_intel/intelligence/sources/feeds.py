@@ -165,14 +165,3 @@ class ArxivSource:
                 )
             )
         return documents
-
-
-# One-version compatibility for local integrations that imported the former factory/helpers.
-_document_id = document_id
-_content_hash = content_hash
-
-
-def build_sources(config: dict, timeout: int):
-    from daily_intel.intelligence.sources.factory import build_sources as factory
-
-    return factory(config, timeout)

@@ -10,7 +10,7 @@ from typing import Any, Iterator
 from daily_intel.core.models import Analysis, Document, Event
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class SQLiteIntelligenceRepository:
@@ -71,14 +71,6 @@ class SQLiteIntelligenceRepository:
                 );
                 CREATE INDEX IF NOT EXISTS idx_events_last_seen ON events(last_seen);
 
-                CREATE TABLE IF NOT EXISTS analyses (
-                    event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-                    status TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    prompt_version TEXT NOT NULL,
-                    analysis_json TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
                 CREATE TABLE IF NOT EXISTS analysis_variants (
                     event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
                     cache_scope TEXT NOT NULL,
@@ -141,15 +133,6 @@ class SQLiteIntelligenceRepository:
                     value TEXT NOT NULL
                 );
                 """
-            )
-            db.execute(
-                """INSERT OR IGNORE INTO analysis_variants(
-                    event_id, cache_scope, status, model, prompt_version,
-                    analysis_json, created_at
-                )
-                SELECT event_id, 'legacy', status, model, prompt_version,
-                       analysis_json, created_at
-                FROM analyses"""
             )
             db.execute(
                 "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
@@ -241,10 +224,6 @@ class SQLiteIntelligenceRepository:
                 WHERE event_id=? AND cache_scope=?""",
                 (event_id, cache_scope),
             ).fetchone()
-            if row is None and cache_scope in {"default", "legacy"}:
-                row = db.execute(
-                    "SELECT analysis_json FROM analyses WHERE event_id=?", (event_id,)
-                ).fetchone()
         return Analysis.model_validate_json(row["analysis_json"]) if row else None
 
     def save_analysis(
@@ -263,15 +242,6 @@ class SQLiteIntelligenceRepository:
                     analysis.model, analysis.prompt_version,
                     analysis.model_dump_json(), analysis.created_at.isoformat(),
                 ),
-            )
-            # Keep the original table as a latest-analysis compatibility view.
-            db.execute(
-                """INSERT INTO analyses VALUES(?,?,?,?,?,?)
-                ON CONFLICT(event_id) DO UPDATE SET status=excluded.status, model=excluded.model,
-                prompt_version=excluded.prompt_version, analysis_json=excluded.analysis_json,
-                created_at=excluded.created_at""",
-                (analysis.event_id, analysis.status.value, analysis.model, analysis.prompt_version,
-                 analysis.model_dump_json(), analysis.created_at.isoformat()),
             )
             for table in ("evidence", "industry_mappings", "company_mappings"):
                 db.execute(f"DELETE FROM {table} WHERE event_id=?", (analysis.event_id,))

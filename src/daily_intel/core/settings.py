@@ -43,11 +43,13 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 def load_settings(path: Path) -> dict[str, Any]:
     path = path.resolve()
     raw = _read_yaml(path)
-    if "paths" not in raw and "screening" in raw:
-        raw = _upgrade_legacy(raw, path.parent)
-        config_dir = path.parent / "config"
-    else:
-        config_dir = path.parent
+    config_dir = path.parent
+    required = {"app", "paths", "market", "intelligence", "llm"}
+    missing = sorted(required.difference(raw))
+    if missing:
+        raise ValueError(
+            "settings.yaml 配置缺少当前版本必需段: " + ", ".join(missing)
+        )
     for key, value in INTELLIGENCE_DEFAULTS.items():
         raw["intelligence"].setdefault(key, value)
     quality = raw.setdefault("quality", {})
@@ -57,60 +59,9 @@ def load_settings(path: Path) -> dict[str, Any]:
     raw["sources"] = _read_yaml(config_dir / "sources.yaml")
     raw["_config_path"] = path
     raw["_config_dir"] = config_dir
-    raw["_project_root"] = config_dir.parent if config_dir.name == "config" else config_dir
+    raw["_project_root"] = config_dir.parent
     _validate(raw)
     return raw
-
-
-def _upgrade_legacy(raw: dict[str, Any], base: Path) -> dict[str, Any]:
-    return {
-        "app": raw["app"],
-        "paths": {
-            "cache_dir": str(base / raw["data"]["cache_dir"]),
-            "output_dir": str(base / raw["data"]["output_dir"]),
-            "intelligence_db": str(base / "data/intelligence.db"),
-        },
-        "market": {
-            "snapshot_providers": raw["data"]["snapshot_providers"],
-            **raw["screening"],
-            "factor_weights": raw["factor_weights"],
-        },
-        "intelligence": {
-            "first_run_lookback_hours": 48, "resume_overlap_hours": 6,
-            "cluster_window_hours": 72, "max_items_per_source": 30,
-            "max_scout_events": 40, "max_deep_events": 5,
-            "max_company_hypotheses": 3, "full_text_max_chars": 50000,
-            "title_similarity_threshold": 88, "source_fetch_timeout_seconds": 20,
-            "publish_leads_when_ai_unavailable": True,
-            **INTELLIGENCE_DEFAULTS,
-        },
-        "quality": dict(QUALITY_DEFAULTS),
-        "llm": {
-            "provider": "openai_compatible", "base_url": "https://api.deepseek.com",
-            "api_key_env": "DEEPSEEK_API_KEY", "prompt_version": "tech-intel-v2",
-            "scout": {
-                "model": "deepseek-v4-flash", "max_output_tokens": 6000,
-                "temperature": 0,
-                "extra_body": {
-                    "thinking": {"type": "disabled"}, "reasoning_effort": "low",
-                },
-            },
-            "analyst": {
-                "model": "deepseek-v4-pro", "max_output_tokens": 6000,
-                "temperature": 0,
-                "extra_body": {
-                    "thinking": {"type": "enabled"}, "reasoning_effort": "high",
-                },
-            },
-            "verifier": {
-                "model": "deepseek-v4-pro", "max_output_tokens": 3000,
-                "temperature": 0,
-                "extra_body": {
-                    "thinking": {"type": "enabled"}, "reasoning_effort": "high",
-                },
-            },
-        },
-    }
 
 
 def _validate(settings: dict[str, Any]) -> None:
@@ -151,10 +102,7 @@ def _validate(settings: dict[str, Any]) -> None:
 
 def _validate_sources(sources: dict[str, Any]) -> None:
     entries: list[tuple[str, dict[str, Any]]] = []
-    arxiv_groups = sources.get("arxiv_sources")
-    if arxiv_groups is None:
-        legacy = sources.get("arxiv")
-        arxiv_groups = [legacy] if legacy else []
+    arxiv_groups = sources.get("arxiv_sources", [])
     entries.extend(("arxiv", item) for item in arxiv_groups if item)
     for section, source_type in (
         ("feeds", "feed"),

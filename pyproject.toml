@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily-a-share-digest"
-version = "0.3.0"
+version = "0.4.0"
 description = "Evidence-grounded daily technology intelligence with A-share market context."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
@@ -26,7 +26,6 @@ dependencies = [
 dev = ["pytest==8.4.2"]
 
 [project.scripts]
-daily-a-share = "daily_intel.app.cli:main"
 daily-intel = "daily_intel.app.cli:main"
 
 [tool.setuptools]
@@ -35,7 +34,7 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["daily_intel*", "daily_a_share*"]
+include = ["daily_intel*"]
 
 [tool.setuptools.package-data]
 daily_intel = ["publication/templates/*.j2"]

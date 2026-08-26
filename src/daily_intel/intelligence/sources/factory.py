@@ -10,11 +10,7 @@ from daily_intel.intelligence.sources.sitemaps import SitemapSource
 
 
 def iter_source_configs(config: dict[str, Any]) -> Iterator[tuple[str, dict[str, Any]]]:
-    arxiv_groups = config.get("arxiv_sources")
-    if arxiv_groups is None:
-        legacy = config.get("arxiv")
-        arxiv_groups = [legacy] if legacy else []
-    for item in arxiv_groups:
+    for item in config.get("arxiv_sources", []):
         if item and item.get("enabled", True):
             yield "arxiv", item
     for item in config.get("feeds", []):

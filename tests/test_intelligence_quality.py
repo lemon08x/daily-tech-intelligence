@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from daily_intel.core.models import (
     Analysis,
     AnalysisDraft,
@@ -157,17 +159,16 @@ def test_duplicate_facts_do_not_game_minimum_and_single_source_caps_confidence()
     assert accepted.confidence == QualityPolicy().max_single_source_confidence
 
 
-def test_old_analysis_json_without_quality_remains_readable() -> None:
+def test_analysis_requires_explicit_quality_contract() -> None:
     payload = {
-        "event_id": "legacy-event",
+        "event_id": "event-without-quality",
         "status": "lead",
-        "headline": "Legacy analysis",
+        "headline": "Incomplete analysis",
         "key_facts": [],
         "confidence": .3,
-        "model": "legacy-model",
-        "prompt_version": "legacy-v1",
+        "model": "model",
+        "prompt_version": "v2",
         "created_at": NOW.isoformat(),
     }
-    analysis = Analysis.model_validate(payload)
-    assert analysis.quality.policy_version == "legacy"
-    assert analysis.quality.passed is False
+    with pytest.raises(ValueError, match="quality"):
+        Analysis.model_validate(payload)

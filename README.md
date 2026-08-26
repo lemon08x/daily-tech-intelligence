@@ -51,8 +51,8 @@ $env:DEEPSEEK_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 相同模型需要强制重新分析时追加 `--force-analysis`。项目级 Harness
 行为约束见 [`AGENTS.md`](AGENTS.md)，这里不使用 Skill。
 
-旧入口仍可用：`python -m daily_a_share`、`daily-a-share`、根目录
-`config.yaml` 都会转入 `src` 下的新实现。旧缓存和历史输出不会被迁移或删除。
+当前版本只保留 `daily_intel` 应用、`daily-intel` 命令和
+`config/settings.yaml` 配置入口，不再维护旧包名、旧命令或旧根配置。
 
 ## 每日输出
 
@@ -60,23 +60,25 @@ $env:DEEPSEEK_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 
 ```text
 output/YYYY-MM-DD/
-├── runs/
-│   ├── HHMMSS-run-id-qwen3.8-27b/
-│   └── HHMMSS-run-id-deepseek-v4-flash/
-├── latest_run.json
-└── daily_digest.html 等最新运行兼容副本
+└── runs/
+    ├── HHMMSS-run-id-qwen3.8-27b/
+    └── HHMMSS-run-id-deepseek-v4-flash/
 ```
 
 每个 `runs/<run-name>` 都包含完整 HTML、Markdown、JSON、CSV 和运行元数据；
 Harness 运行还包含 `harness_io` 请求/响应审计。同一天重复运行不会覆盖此前
-运行目录，日目录根部的同名文件只作为“最新一次”兼容入口。
+运行目录，也不会在日期根目录生成重复副本。
 
-- `daily_digest.html`：统一可视化日报；
+- `daily_digest.html`：默认显示新闻精选，并通过页签切换到A股行情；
 - `daily_digest.md`：适合推送和二次编辑；
 - `intelligence.json`：稳定的科技分析数据契约；
 - `candidates.csv`：规则过滤后的完整股票候选及因子分；
 - `market_snapshot.csv`：标准化全市场快照；
 - `run_meta.json`：模型、提示词版本、token、失败源、缓存和新鲜度状态。
+
+HTML 默认进入“新闻精选”：每条常显两点摘要，标题和“阅读原文”链接到
+可定位来源，技术机制、产业影响、风险、证据及A股映射按需展开；市场温度、
+指数、候选股与行业强弱集中在独立的“A股行情”页签。
 
 持久化情报位于 `data\intelligence.db`，包括文档、事件、证据、按实验及
 模型指纹隔离的分析版本、产业/公司映射、LLM调用和流水线游标。市场CSV缓存
@@ -117,8 +119,7 @@ src/daily_intel/
 - `DigestPublisher`：报告渲染、文件输出或后续消息推送的替换边界；
 - `MarketSignal`：为下一轮 Qlib/RD-Agent 预留，但本轮没有安装或调用这些项目。
 
-`src/daily_a_share` 只是已安装包的兼容层，业务实现都在 `daily_intel`；
-根目录不再保留一份重复实现。
+应用实现只位于 `src/daily_intel`，不存在第二套兼容包或重复实现。
 
 情报流水线内部继续拆为 `collection.py`、`discovery.py`、`selection.py`、
 `modeling.py`、`research.py` 和 `quality.py`。主 `pipeline.py` 只编排阶段，
@@ -141,8 +142,7 @@ src/daily_intel/
 
 - `config\settings.yaml`：路径、市场规则、情报窗口、模型和参数；
 - `config\topics.yaml`：主题及中英文关键词；
-- `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库；
-- `config.yaml`：保留一版的旧配置兼容入口。
+- `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库。
 
 默认模型端点为 `https://api.deepseek.com`，密钥变量为 `DEEPSEEK_API_KEY`。初筛模型 `deepseek-v4-flash`，深研/校验模型 `deepseek-v4-pro`；这些名称、采样参数和供应商扩展参数全部可在 YAML 修改。运行元数据记录客户端报告的实际提供方和模型，不再直接把静态 YAML 当作实际运行结果；文件代理无法获得真实 token 时会明确标为“估算”。
 

@@ -166,7 +166,7 @@ def test_huggingface_daily_papers_cites_original_arxiv_source(
     assert docs[0].metadata["pdf_url"].endswith("2608.12345")
 
 
-def test_source_factory_supports_grouped_arxiv_sitemaps_apis_and_legacy_arxiv() -> None:
+def test_source_factory_supports_configured_source_types() -> None:
     config = {
         "arxiv_sources": [{
             "id": "arxiv_ai", "publisher_id": "arxiv", "name": "arXiv AI",
@@ -193,10 +193,9 @@ def test_source_factory_supports_grouped_arxiv_sitemaps_apis_and_legacy_arxiv() 
     assert {type(item).__name__ for item in sources} == {
         "ArxivSource", "FeedSource", "SitemapSource", "HuggingFaceDailyPapersSource",
     }
-    legacy = build_sources({
-        "arxiv": {"id": "old", "name": "Old", "tier": 1, "categories": ["cs.RO"]},
-    }, 5)
-    assert len(legacy) == 1 and isinstance(legacy[0], ArxivSource)
+    assert build_sources({
+        "arxiv": {"id": "ignored", "name": "Ignored", "tier": 1, "categories": ["cs.RO"]},
+    }, 5) == []
 
 
 def _document(identifier: str, title: str, published: datetime) -> Document:

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from daily_a_share.normalize import normalize_snapshot
+from daily_intel.market.normalize import normalize_snapshot
 
 
 def test_normalize_tencent_units_and_code() -> None:

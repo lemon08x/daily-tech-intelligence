@@ -56,8 +56,8 @@ Before reporting success, verify:
   token flag, source failures, and quality summary;
 - every deep conclusion passed the deterministic quality gate;
 - no company mapping is marked verified without official evidence;
-- day-root files are only latest-run compatibility aliases; earlier run
-  directories remain intact.
+- no report copies or latest-run manifest were written at the date root;
+- earlier run directories remain intact.
 
 Do not commit or push merely because a daily run completed. Commit and push only
 when the user explicitly requests repository delivery.

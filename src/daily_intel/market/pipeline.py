@@ -118,7 +118,7 @@ class MarketPipeline:
         hot = industries.head(int(config["app"]["top_industries"]))
         weak = industries.tail(int(config["app"]["weak_industries"])).sort_values("pct_change")
 
-        # This is retained only as a low-weight market radar and legacy report section.
+        # Market headlines remain low-weight radar inputs and short news briefs.
         keywords = [
             "A股", "沪指", "深证", "创业板", "央行", "证监会", "政策", "经济",
             "产业", "人民币", "融资", "AI", "半导体",

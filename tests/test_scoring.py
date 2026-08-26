@@ -1,6 +1,6 @@
 import pandas as pd
 
-from daily_a_share.scoring import market_breadth, percentile, screen_and_score, target_score
+from daily_intel.market.scoring import market_breadth, percentile, screen_and_score, target_score
 
 
 def test_percentile_direction_and_target_score() -> None:

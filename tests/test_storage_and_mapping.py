@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
 from daily_intel.core.models import (
     Analysis,
+    AnalysisQuality,
     AnalysisStatus,
     CompanyHypothesis,
     Document,
@@ -52,6 +52,7 @@ def test_sqlite_keeps_model_scoped_analysis_variants(tmp_path) -> None:
     first = Analysis(
         event_id=event.id, status=AnalysisStatus.LEAD, headline="Model A",
         confidence=.3, model="model-a", prompt_version="v2",
+        quality=AnalysisQuality(policy_version="evidence-gate-v1"),
         created_at=document.published_at,
     )
     second = first.model_copy(update={
@@ -65,56 +66,6 @@ def test_sqlite_keeps_model_scoped_analysis_variants(tmp_path) -> None:
     latest = repository.get_latest_analyses(5)
     assert len(latest) == 1
     assert latest[0].model == "model-b"
-
-
-def test_sqlite_migrates_legacy_analysis_into_variant_scope(tmp_path) -> None:
-    path = tmp_path / "legacy.db"
-    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
-    legacy = Analysis(
-        event_id="legacy-event", status=AnalysisStatus.LEAD,
-        headline="Legacy", confidence=.3, model="legacy-model",
-        prompt_version="v1", created_at=now,
-    )
-    with sqlite3.connect(path) as db:
-        db.executescript(
-            """
-            CREATE TABLE events (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                topic_id TEXT NOT NULL,
-                topic_name TEXT NOT NULL,
-                document_ids_json TEXT NOT NULL,
-                first_seen TEXT NOT NULL,
-                last_seen TEXT NOT NULL,
-                source_quality REAL NOT NULL,
-                deterministic_score REAL NOT NULL
-            );
-            CREATE TABLE analyses (
-                event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-                status TEXT NOT NULL,
-                model TEXT NOT NULL,
-                prompt_version TEXT NOT NULL,
-                analysis_json TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
-            """
-        )
-        db.execute(
-            "INSERT INTO events VALUES(?,?,?,?,?,?,?,?,?)",
-            ("legacy-event", "Legacy", "compute", "芯片算力", "[]",
-             now.isoformat(), now.isoformat(), 80, 80),
-        )
-        db.execute(
-            "INSERT INTO analyses VALUES(?,?,?,?,?,?)",
-            ("legacy-event", "lead", "legacy-model", "v1",
-             legacy.model_dump_json(), now.isoformat()),
-        )
-    repository = SQLiteIntelligenceRepository(path)
-    migrated = repository.get_analysis("legacy-event", "legacy")
-    assert migrated is not None
-    assert migrated.model == "legacy-model"
-
-
 def test_company_mapping_requires_exact_snapshot_and_announcement(monkeypatch) -> None:
     snapshot = pd.DataFrame([{"code": "600000", "name": "浦发银行"}])
     mapper = CompanyMapper(snapshot, datetime(2026, 8, 24, tzinfo=timezone.utc))

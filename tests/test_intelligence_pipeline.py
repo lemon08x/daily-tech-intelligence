@@ -101,7 +101,7 @@ def _pipeline(tmp_path, llm: LLMClient, monkeypatch) -> IntelligencePipeline:
     repository = SQLiteIntelligenceRepository(tmp_path / "intel.db")
     pipeline = IntelligencePipeline(settings(), repository, llm)
     monkeypatch.setattr(
-        pipeline, "_collect_sources",
+        pipeline.collector, "collect_sources",
         lambda now: ([document()], [{"name": "primary", "source": "Primary", "fetched_at": now.isoformat(), "stale": False, "count": 1, "error": ""}]),
     )
     return pipeline

@@ -5,94 +5,224 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
   <style>
-    :root { --bg:#f4f6f9; --panel:#fff; --ink:#172033; --muted:#667085; --line:#e5e9f0; --up:#c93d38; --down:#16805a; --brand:#2446a4; --amber:#a46000; }
+    :root {
+      --bg:#f2f4f7; --panel:#fff; --ink:#18202f; --muted:#697386;
+      --line:#e3e7ee; --brand:#2455b8; --brand-soft:#edf3ff;
+      --up:#c63f3a; --down:#117a57; --amber:#9a5b00;
+    }
     * { box-sizing:border-box; }
-    body { margin:0; color:var(--ink); background:var(--bg); font:14px/1.65 "Segoe UI","Microsoft YaHei",sans-serif; }
-    main { width:min(1180px,calc(100% - 32px)); margin:28px auto 60px; }
-    header { padding:28px; border-radius:18px; color:#fff; background:linear-gradient(135deg,#111d44,#315ac4); box-shadow:0 14px 36px #203b8028; }
-    h1 { margin:0 0 5px; font-size:28px; } h2 { margin:0 0 16px; font-size:20px; } h3 { margin:0 0 8px; font-size:17px; } p { margin:6px 0; }
-    a { color:#244aaf; text-decoration:none; } a:hover { text-decoration:underline; }
-    .muted { color:var(--muted); } header .muted { color:#dbe5ff; }
-    .section,.event,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
-    .section { padding:21px; margin-top:16px; overflow:hidden; } .event { padding:20px; margin:12px 0; }
-    .event-head { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; }
-    .badge { flex:none; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:700; color:#22449e; background:#edf2ff; }
-    .badge.lead { color:var(--amber); background:#fff4dc; }
-    .fact-list { margin:10px 0 12px; padding-left:20px; } .fact-list li { margin:5px 0; }
-    .analysis-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 22px; padding:12px 0; }
-    .analysis-grid div { border-left:3px solid #dbe4ff; padding-left:11px; }
-    .subhead { margin:15px 0 7px; font-weight:750; }
-    .evidence { padding:9px 11px; margin:7px 0; color:#39445b; background:#f8fafc; border-radius:8px; }
-    .mapping { display:grid; grid-template-columns:120px 100px 1fr; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); }
-    .verified { color:#0b7650; font-weight:700; } .unverified { color:var(--amber); font-weight:700; }
+    [hidden] { display:none !important; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--bg); font:15px/1.75 "Segoe UI","Microsoft YaHei",sans-serif; }
+    a { color:var(--brand); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    main { width:min(1000px,calc(100% - 32px)); margin:26px auto 64px; }
+    header { padding:30px 34px; border-radius:18px; color:#fff; background:linear-gradient(135deg,#12204a,#315fc7); box-shadow:0 16px 40px #203b8028; }
+    h1 { margin:0 0 8px; font-size:30px; line-height:1.3; }
+    h2 { margin:0 0 18px; font-size:22px; line-height:1.45; }
+    h3 { margin:0 0 9px; font-size:19px; line-height:1.45; }
+    p { margin:7px 0; }
+    ul { padding-left:22px; }
+    .muted { color:var(--muted); }
+    header .muted { color:#dbe5ff; }
+    .report-tabs { display:flex; gap:8px; margin:18px 0 0; padding:6px; border:1px solid var(--line); border-radius:14px; background:#fff; box-shadow:0 4px 18px #1720330a; }
+    .report-tabs button { flex:1; min-height:44px; border:0; border-radius:10px; color:#596275; background:transparent; font:inherit; font-weight:750; cursor:pointer; }
+    .report-tabs button[aria-selected="true"] { color:#fff; background:var(--brand); box-shadow:0 5px 14px #2446a42e; }
+    .report-tabs button:focus-visible { outline:3px solid #91adf3; outline-offset:2px; }
+    .tab-panel { margin-top:16px; }
+    .section,.story,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
+    .section { padding:24px; margin-top:16px; overflow:hidden; }
+    .section-intro { max-width:760px; margin-top:-10px; }
+    .story { padding:26px 28px; margin:14px 0; }
+    .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
+    .story-title a { color:var(--ink); }
+    .story-title a::after { content:" ↗"; color:var(--brand); font-size:.8em; }
+    .badge { flex:none; padding:3px 10px; border-radius:999px; color:#22449e; background:var(--brand-soft); font-size:12px; font-weight:750; }
+    .badge.lead { color:var(--amber); background:#fff2d8; }
+    .quality-line { font-size:13px; }
+    .highlights { margin:16px 0; padding:14px 18px 14px 36px; border-left:4px solid #9bb5ef; border-radius:0 9px 9px 0; background:#f7f9fd; }
+    .highlights li { margin:4px 0; }
+    .story-actions { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-top:14px; }
+    .source-link { display:inline-flex; align-items:center; min-height:38px; padding:6px 13px; border:1px solid #b8c8ee; border-radius:9px; background:#f7f9ff; font-weight:750; }
+    details.deep-dive { margin-top:14px; border-top:1px solid var(--line); }
+    details.deep-dive > summary { padding:14px 2px 2px; color:var(--brand); font-weight:750; cursor:pointer; list-style:none; }
+    details.deep-dive > summary::-webkit-details-marker { display:none; }
+    details.deep-dive > summary::before { content:"＋"; display:inline-block; width:20px; }
+    details.deep-dive[open] > summary::before { content:"－"; }
+    .deep-body { padding-top:8px; }
+    .analysis-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; margin:12px 0; }
+    .analysis-grid > div { padding-left:12px; border-left:3px solid #dbe4ff; }
+    .subhead { margin:18px 0 8px; font-weight:800; }
+    .evidence,.quality-alert { padding:10px 12px; margin:8px 0; color:#39445b; background:#f7f9fc; border-radius:8px; }
+    .quality-alert { color:#744700; background:#fff6e5; }
+    .mapping { display:grid; grid-template-columns:130px 105px 1fr; gap:10px; padding:11px 0; border-bottom:1px solid var(--line); }
+    .verified { color:#08714b; font-weight:750; }
+    .unverified { color:var(--amber); font-weight:750; }
+    .brief { padding:15px 0; border-bottom:1px solid var(--line); }
+    .brief:last-child { border-bottom:0; }
+    .brief h3 { font-size:17px; }
+    .brief-meta { font-size:13px; }
+    .runtime summary { cursor:pointer; font-size:18px; font-weight:800; }
     .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0; }
-    .card { padding:16px; } .metric { margin-top:3px; font-size:24px; font-weight:750; }
-    .up { color:var(--up); } .down { color:var(--down); }
-    .bar { display:flex; height:8px; border-radius:8px; overflow:hidden; background:#edf1f5; margin-top:9px; }
-    .bar .a { background:var(--up); } .bar .d { background:var(--down); }
+    .card { padding:16px; }
+    .metric { margin-top:3px; font-size:24px; font-weight:750; }
+    .up { color:var(--up); }
+    .down { color:var(--down); }
+    .bar { display:flex; height:8px; margin-top:9px; overflow:hidden; border-radius:8px; background:#edf1f5; }
+    .bar .a { background:var(--up); }
+    .bar .d { background:var(--down); }
     .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
     table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-    th { text-align:left; font-size:12px; color:var(--muted); background:#f8fafc; }
+    th { text-align:left; color:var(--muted); background:#f8fafc; font-size:12px; }
     th,td { padding:10px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    td.reason { white-space:normal; min-width:180px; } tr:last-child td { border-bottom:0; }
-    .score { display:inline-block; min-width:47px; padding:3px 8px; border-radius:999px; text-align:center; color:#24439b; background:#eaf0ff; font-weight:700; }
+    td.reason { min-width:180px; white-space:normal; }
+    tr:last-child td { border-bottom:0; }
+    .score { display:inline-block; min-width:47px; padding:3px 8px; border-radius:999px; color:#24439b; background:#eaf0ff; text-align:center; font-weight:750; }
     .industry,.status { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
-    .status { display:grid; grid-template-columns:1.1fr .8fr 1.5fr; } .stale { color:var(--amber); font-weight:700; }
-    .news { padding:11px 0; border-bottom:1px solid var(--line); } .news h3 { font-size:15px; }
-    footer { color:var(--muted); padding:18px 4px; }
-    @media (max-width:800px) { .metrics,.two,.analysis-grid { grid-template-columns:1fr 1fr; } .table-wrap { overflow:auto; } .mapping,.status { grid-template-columns:1fr; } }
-    @media (max-width:520px) { .metrics,.two,.analysis-grid { grid-template-columns:1fr; } main { width:min(100% - 18px,1180px); } header,.section,.event { padding:16px; } }
+    .status { display:grid; grid-template-columns:1.1fr .8fr 1.5fr; }
+    .stale { color:var(--amber); font-weight:750; }
+    footer { padding:20px 4px; color:var(--muted); }
+    @media (max-width:800px) {
+      .metrics,.analysis-grid { grid-template-columns:1fr 1fr; }
+      .table-wrap { overflow:auto; }
+      .mapping,.status { grid-template-columns:1fr; }
+    }
+    @media (max-width:560px) {
+      body { font-size:14px; }
+      main { width:calc(100% - 18px); margin-top:10px; }
+      header,.section,.story { padding:18px; }
+      h1 { font-size:25px; }
+      .metrics,.two,.analysis-grid { grid-template-columns:1fr; }
+      .report-tabs { position:sticky; top:0; z-index:5; }
+      .story-kicker { align-items:flex-start; }
+    }
+    @media print {
+      body { background:#fff; }
+      main { width:100%; margin:0; }
+      header { color:#111; background:#fff; box-shadow:none; border:1px solid var(--line); }
+      header .muted { color:var(--muted); }
+      .report-tabs { display:none; }
+      .tab-panel[hidden] { display:block !important; }
+      details:not([open]) > *:not(summary) { display:block; }
+      .section,.story,.card { break-inside:avoid; box-shadow:none; }
+    }
   </style>
 </head>
-<body><main>
+<body>
+<main>
   <header>
     <h1>{{ title }}</h1>
-    <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('legacy') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">科技事件与A股关联为研究假设，不参与规则股票综合分。</p>
+    <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
+    <p class="muted">先阅读科技新闻，再按需查看A股行情。科技事件与公司关联为研究假设，不参与规则股票综合分。</p>
   </header>
 
-  <section class="section">
-    <h2>科技前沿深研 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
+  <nav class="report-tabs" role="tablist" aria-label="日报内容">
+    <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">新闻精选</button>
+    <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">A股行情</button>
+  </nav>
+
+  <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
+    <section class="section">
+      <h2>今日科技精选 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
+      <p class="muted section-intro">每条先给出两点摘要；技术机制、产业影响、风险、证据及A股关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
+    </section>
+
     {% for analysis in analyses %}
-    <article class="event">
-      <div class="event-head"><h3>{{ loop.index }}. {{ analysis.headline }}</h3><span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span></div>
-      <p class="muted">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}） · 策略 {{ analysis.quality.policy_version }}{% if analysis.quality.issues %}<br>质量门降级原因：{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}</p>
-      {% if analysis.quality.unsupported_claims %}<div class="evidence"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
-      {% if analysis.key_facts %}<ul class="fact-list">{% for item in analysis.key_facts %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-      {% if analysis.technical_mechanism or analysis.outlook_6_24m %}<div class="analysis-grid">
-        {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
-        {% if analysis.novelty %}<div><strong>新颖性</strong><p>{{ analysis.novelty }}</p></div>{% endif %}
-        {% if analysis.maturity %}<div><strong>成熟度</strong><p>{{ analysis.maturity }}</p></div>{% endif %}
-        {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
-      </div>{% endif %}
-      {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
-      {% if analysis.company_mappings %}<div class="subhead">A股关联假设（不参与评分）</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
-      {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-      {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noreferrer">{{ item.locator }}</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
+    <article class="story">
+      <div class="story-kicker">
+        <span>科技精选 {{ '%02d'|format(loop.index) }}</span>
+        <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
+      </div>
+      <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
+      <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
+
+      {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+
+      <div class="story-actions">
+        {% if analysis.evidence %}<a class="source-link" href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a><span class="muted">{{ analysis.evidence[0].locator }} · 共 {{ analysis.evidence|length }} 条证据</span>{% else %}<span class="muted">本条暂无可定位原文</span>{% endif %}
+      </div>
+
+      <details class="deep-dive">
+        <summary>展开深度分析</summary>
+        <div class="deep-body">
+          {% if analysis.key_facts|length > 2 %}<div class="subhead">更多事实</div><ul>{% for item in analysis.key_facts[2:] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.quality.issues %}<div class="quality-alert"><strong>质量门降级原因：</strong>{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
+          {% if analysis.quality.unsupported_claims %}<div class="quality-alert"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
+          {% if analysis.technical_mechanism or analysis.novelty or analysis.maturity or analysis.outlook_6_24m %}<div class="analysis-grid">
+            {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
+            {% if analysis.novelty %}<div><strong>新颖性</strong><p>{{ analysis.novelty }}</p></div>{% endif %}
+            {% if analysis.maturity %}<div><strong>成熟度</strong><p>{{ analysis.maturity }}</p></div>{% endif %}
+            {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
+          </div>{% endif %}
+          {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.company_mappings %}<div class="subhead">A股关联假设（不参与评分）</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
+          {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
+        </div>
+      </details>
     </article>
-    {% else %}<p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p>{% endfor %}
+    {% else %}
+    <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
+    {% endfor %}
+
+    {% if news_records %}<section class="section"><h2>简讯 <span class="muted" style="font-size:13px;font-weight:400">低权重市场雷达，不单独支撑深度结论</span></h2>{% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}</section>{% endif %}
+
+    <details class="section runtime">
+      <summary>运行、模型与来源状态</summary>
+      <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.estimated %}（估算）{% endif %}。</p>
+      <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('未产生分析', true) }}；平均质量分 {{ quality_summary.average_score|default(0) }}；通过 {{ quality_summary.passed|default(0) }} 项，降级 {{ quality_summary.downgraded|default(0) }} 项。</p>
+      <h3>科技来源</h3>{% for item in intelligence_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '失败/缓存' if item.stale else '采集成功' }}</span><span class="muted">{{ item.count|default(0) }} 条{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
+      <h3 style="margin-top:16px">市场数据</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
+      {% if pipeline_errors %}<h3 style="margin-top:16px">独立降级记录</h3><ul class="muted">{% for item in pipeline_errors %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    </details>
   </section>
 
-  <div class="metrics">
-    <div class="card"><div class="muted">市场温度</div><div class="metric">{{ breadth.mood }}</div></div>
-    <div class="card"><div class="muted">上涨 / 下跌</div><div class="metric"><span class="up">{{ breadth.advancing }}</span> / <span class="down">{{ breadth.declining }}</span></div><div class="bar"><span class="a" style="width:{{ breadth.advance_ratio * 100 }}%"></span><span class="d" style="width:{{ (1-breadth.advance_ratio) * 100 }}%"></span></div></div>
-    <div class="card"><div class="muted">中位涨跌幅</div><div class="metric {{ 'up' if breadth.median_change >= 0 else 'down' }}">{{ breadth.median_change|num }}%</div></div>
-    <div class="card"><div class="muted">全市场成交额</div><div class="metric">{{ breadth.amount_cny|money }}</div><div class="muted">涨停近似 {{ breadth.limit_up_like }} / 跌停近似 {{ breadth.limit_down_like }}</div></div>
-  </div>
+  <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
+    <div class="metrics">
+      <div class="card"><div class="muted">市场温度</div><div class="metric">{{ breadth.mood }}</div></div>
+      <div class="card"><div class="muted">上涨 / 下跌</div><div class="metric"><span class="up">{{ breadth.advancing }}</span> / <span class="down">{{ breadth.declining }}</span></div><div class="bar"><span class="a" style="width:{{ breadth.advance_ratio * 100 }}%"></span><span class="d" style="width:{{ (1-breadth.advance_ratio) * 100 }}%"></span></div></div>
+      <div class="card"><div class="muted">中位涨跌幅</div><div class="metric {{ 'up' if breadth.median_change >= 0 else 'down' }}">{{ breadth.median_change|num }}%</div></div>
+      <div class="card"><div class="muted">全市场成交额</div><div class="metric">{{ breadth.amount_cny|money }}</div><div class="muted">涨停近似 {{ breadth.limit_up_like }} / 跌停近似 {{ breadth.limit_down_like }}</div></div>
+    </div>
 
-  {% if index_records %}<section class="section"><h2>主要指数</h2><div class="metrics" style="margin:0">{% for row in index_records %}<div><strong>{{ row.name }}</strong><div>{{ row.price|num }} <span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div></div>{% endfor %}</div></section>{% endif %}
-  <section class="section"><h2>规则观察候选 <span class="muted" style="font-size:13px;font-weight:400">基础过滤后 {{ eligible_count }} 只，展示前 {{ candidate_records|length }} 只</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>代码 / 名称</th><th>综合分</th><th>现价</th><th>今日</th><th>20日</th><th>60日</th><th>PE / PB</th><th>成交额</th><th>入选原因</th></tr></thead><tbody>
-    {% for row in candidate_records %}<tr><td>{{ loop.index }}</td><td><strong>{{ row.code }}</strong> {{ row.name }}</td><td><span class="score">{{ row.score|num(1) }}</span></td><td>{{ row.price|num }}</td><td class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</td><td>{{ row.momentum_20d|num }}%</td><td>{{ row.momentum_60d|num }}%</td><td>{{ row.pe_ttm|num(1) }} / {{ row.pb|num(1) }}</td><td>{{ row.amount_cny|money }}</td><td class="reason">{{ row.reasons }}</td></tr>{% else %}<tr><td colspan="10">当前过滤条件下没有候选。</td></tr>{% endfor %}
-  </tbody></table></div></section>
-  <div class="two"><section class="section"><h2>相对强势行业</h2>{% for row in hot_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section><section class="section"><h2>弱势行业</h2>{% for row in weak_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section></div>
-  {% if news_records %}<section class="section"><h2>市场快讯线索 <span class="muted" style="font-size:13px;font-weight:400">低权重，不单独支撑深度结论</span></h2>{% for item in news_records %}<article class="news"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noreferrer">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><small class="muted">{{ item.published_at }}</small></article>{% endfor %}</section>{% endif %}
-
-  <section class="section"><h2>方法、模型与数据状态</h2>
-    <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.estimated %}（估算）{% endif %}。综合分仍仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算。</p>
-    <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('legacy') }}；平均质量分 {{ quality_summary.average_score|default(0) }}；通过 {{ quality_summary.passed|default(0) }} 项，降级 {{ quality_summary.downgraded|default(0) }} 项。</p>
-    <h3 style="margin-top:16px">市场数据</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
-    <h3 style="margin-top:16px">科技来源</h3>{% for item in intelligence_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '失败/缓存' if item.stale else '采集成功' }}</span><span class="muted">{{ item.count|default(0) }} 条{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
-    {% if pipeline_errors %}<h3 style="margin-top:16px">独立降级记录</h3><ul class="muted">{% for item in pipeline_errors %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+    {% if index_records %}<section class="section"><h2>主要指数</h2><div class="metrics" style="margin:0">{% for row in index_records %}<div><strong>{{ row.name }}</strong><div>{{ row.price|num }} <span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div></div>{% endfor %}</div></section>{% endif %}
+    <section class="section"><h2>规则观察候选 <span class="muted" style="font-size:13px;font-weight:400">基础过滤后 {{ eligible_count }} 只，展示前 {{ candidate_records|length }} 只</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>代码 / 名称</th><th>综合分</th><th>现价</th><th>今日</th><th>20日</th><th>60日</th><th>PE / PB</th><th>成交额</th><th>入选原因</th></tr></thead><tbody>
+      {% for row in candidate_records %}<tr><td>{{ loop.index }}</td><td><strong>{{ row.code }}</strong> {{ row.name }}</td><td><span class="score">{{ row.score|num(1) }}</span></td><td>{{ row.price|num }}</td><td class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</td><td>{{ row.momentum_20d|num }}%</td><td>{{ row.momentum_60d|num }}%</td><td>{{ row.pe_ttm|num(1) }} / {{ row.pb|num(1) }}</td><td>{{ row.amount_cny|money }}</td><td class="reason">{{ row.reasons }}</td></tr>{% else %}<tr><td colspan="10">当前过滤条件下没有候选。</td></tr>{% endfor %}
+    </tbody></table></div></section>
+    <div class="two"><section class="section"><h2>相对强势行业</h2>{% for row in hot_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section><section class="section"><h2>弱势行业</h2>{% for row in weak_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section></div>
+    <section class="section"><p class="muted">综合分仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算；新闻与AI分析不会进入评分。</p></section>
   </section>
+
   <footer>免责声明：本报告仅做公开信息整理、策略研究和后续回测候选，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
-</main></body></html>
+</main>
+<script>
+  (() => {
+    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const panels = {news: document.getElementById('news-panel'), market: document.getElementById('market-panel')};
+    const activate = (name, updateHistory = false) => {
+      if (!panels[name]) name = 'news';
+      tabs.forEach((tab) => {
+        const selected = tab.dataset.tab === name;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      Object.entries(panels).forEach(([key, panel]) => { panel.hidden = key !== name; });
+      if (updateHistory) history.pushState(null, '', `#${name}`);
+    };
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activate(tab.dataset.tab, true));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        const delta = event.key === 'ArrowRight' ? 1 : -1;
+        const next = tabs[(index + delta + tabs.length) % tabs.length];
+        activate(next.dataset.tab, true);
+        next.focus();
+      });
+    });
+    window.addEventListener('popstate', () => activate(location.hash.slice(1), false));
+    activate(location.hash.slice(1) || 'news', false);
+  })();
+</script>
+</body>
+</html>
