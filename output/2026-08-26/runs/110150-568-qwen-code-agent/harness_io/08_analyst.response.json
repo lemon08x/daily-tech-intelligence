@@ -1,0 +1,44 @@
+{
+  "headline": "波士顿学院/哥伦比亚论文：AI金融分析师'检索-整合缺口'——检索100%准确但风险披露对判断的影响衰减至噪声水平",
+  "key_facts": [
+    "arXiv:2608.24842（2026-08-25，波士顿学院+哥伦比亚商学院，初步稿）识别长上下文金融分析中的'检索-整合缺口'：固定焦点公司信息、仅将无关上下文从2,000扩至128,000 token，风险披露对投资判断的影响降至实验噪声水平，而直接检索保持100%准确（12家公司全部检索到、中性文件零误检）。",
+    "实验设计：为12家美国上市公司构建可定量验证的风险披露（契约阈值、结算金额、赔偿上限），定义'边际决策影响'为披露存在与5个等长中性替换的判断差；模式在3个独立训练模型家族复现，并用20份真实10-K验证（完整文件中真实披露影响近乎为零，但20例全部正确检索）。",
+    "因果记忆干预识别两条传递通道：压缩循环状态（摘要）与基于注意力的源文本查找。移植压缩状态可移除约2/3的披露影响（即使源文本仍可查找），植入披露到状态恢复约1/2影响；两通道效应统计上不可区分——失败在整合而非理解。",
+    "工作流实验：扩展推理不恢复影响（短上下文反而降低）；通用chunk-and-summarize更差（所有长度消除影响，因有界笔记在决策阶段前就遗漏目标信息）；决策点逐字重复也几乎无效。",
+    "有效补救：把披露的决策相关事实做目标化、结构化重述并置于投资判断紧邻之前（源文件保持可用）——128,000 token处披露影响恢复至8.5个百分点，12家公司全部按预测方向响应；实验者撰写与模型自提取的重述同样有效。结论：AI分析师性能由模型能力与工作流架构共同决定。"
+  ],
+  "technical_mechanism": "论文用受控实验把检索与决策影响分开测量：对12家公司各构建公司专属、可定量验证的风险披露，定义边际决策影响为模型投资判断在披露存在与同位置5个等长中性替换平均之间的差值；然后仅扩展经济上无关、体裁匹配的周围文本（2,000→128,000 token），把上下文负载效应与合法信息更新分离。机制识别利用模型中间表示的可检查性：表示分析显示披露的风险内容在所有上下文长度下都稳定编码（模型形成了可用表示），但在决策位置，标准探针无法恢复披露特异内容，待决决策的可读性随上下文增长恶化。因果干预分离两条传递通道：(1) 在匹配文档间移植压缩状态——从状态中擦除披露即移除约2/3影响（源文本仍可供查找）；(2) 把披露植入不含它的文档的压缩状态——恢复约1/2影响；(3) 匹配的注意力blackout实验识别出幅度相当的披露特异查找效应。两通道统计不可区分，把失败定位在整合阶段：披露保持编码且可检索，但携带它进入判断的通道随竞争上下文增长而减弱。",
+  "novelty": "已有长上下文退化研究（lost in the middle等）表明额外上下文会降低检索与推理准确率，本文贡献在于：(1) 测量经济上有后果的下游判断（投资决策）而非检索准确率本身，固定焦点信息集以隔离上下文负载；(2) 提出边际决策影响——连续反事实度量，揭示基于检索的评估可以'认证'那些判断对所检索事实实际不变的系统；(3) 用内部因果干预识别两条传递通道（压缩状态+注意力查找）；(4) 导出'决策近端表示原则'：对判断关键的信息应提取为目标化结构化表示并置于判断点，而非经过通用、容量受限的摘要。把IS委托研究从'人机任务分配'推进到'agent工件内部的信息传递'。",
+  "maturity": "学术早期阶段：明确标注'very preliminary draft'（2026年8月），复制包预计9月底发布，实验材料可向作者索取；计算支持来自Columbia Business School Research Grid。实验覆盖3个独立训练模型家族+商用生产模型、构建披露+20份真实10-K，机制识别为因果干预（非相关）。局限：作者明确研究AI处理器而非人类认知，不考察用户是否信任、接受或推翻建议；金融披露为主要场景。",
+  "outlook_6_24m": "未来6-12个月，'检索-整合缺口'有望改变AI分析师的评估方式：检索准确率/QA基准不再充分，边际决策影响类反事实度量成为AI研究产品验证要求；'决策近端结构化重述'工作流模式（提取决策相关事实置于决策点）将进入金融LLM应用的标准架构，替代通用chunk-and-summarize。12-24个月，该框架可推广到合同审查、临床指南、合规分析等其他长文档决策场景，'机器可读性vs机器决策有用性'的区分可能影响披露监管设计。",
+  "industry_impacts": [
+    {"segment": "AI金融研究", "direction": "mixed", "horizon": "6-12m", "rationale": "基于检索的评估被证明可认证忽略已检索信息的系统，AI分析师产品需以决策影响度量重新验证"},
+    {"segment": "长上下文应用架构", "direction": "positive", "horizon": "6-12m", "rationale": "决策近端表示原则给出明确架构模式：决策点结构化重述优于扩展推理与通用摘要"},
+    {"segment": "投资决策流程", "direction": "mixed", "horizon": "12-24m", "rationale": "AI分析师的有效决策上下文不等于标称上下文窗口，长文档的整合衰减需纳入使用规范"},
+    {"segment": "披露监管", "direction": "uncertain", "horizon": "24m+", "rationale": "机器可读呈现与成功检索不证明披露对机器读者有决策有用性，监管或需新验证标准"}
+  ],
+  "risks": [
+    "初步稿（very preliminary draft），复制包未发布（预计9月底），结果尚未经同行评审",
+    "主实验使用构建的风险披露，真实10-K实验为探索性（20份文件）",
+    "作者明确不研究人类认知，未考察用户是否信任、接受或推翻AI建议",
+    "工作流补救（决策近端重述）需要提取步骤，其在真实系统中的成本与误差传播未量化"
+  ],
+  "counterpoints": [
+    "重述后8.5pp的影响恢复仍低于主模型2,000 token时的3.2pp量级关系，补救并非完全恢复",
+    "模型家族与任务限于金融披露场景，缺口在其他领域（法律、医疗）的可推广性未验证",
+    "更强模型'推迟但不消除'缺口，论文未排除未来模型通过架构变化根本消除该失败模式的可能"
+  ],
+  "confidence": 0.78,
+  "evidence": [
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "We identify a retrieval–integration gap in long-context financial analysis.", "locator": "Abstract"},
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "Holding focal-firm information fixed and varying only unrelated context from 2,000 to 128,000 tokens, we find that a risk disclosure’s influence on investment judg-ments falls to the experimental noise floor even as direct retrieval remains accurate.", "locator": "Abstract"},
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "At 128,000 tokens, the primary model retrieves the disclosure for all twelve firms and produces no false retrievals on neutral filings", "locator": "1 Introduction"},
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "Transplanting the compressed state between matched documents removes roughly two-thirds of the disclo-3 sure’s influence when the disclosure is erased from that state, even though its source text remains available for lookup.", "locator": "1 Introduction"},
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "This workflow raises the disclosure’s influence at 128,000 tokens to 8.5 percentage points, with all twelve firms responding in the predicted direction.", "locator": "1 Introduction"},
+    {"document_id": "222a84764a9f978024174158", "url": "http://arxiv.org/abs/2608.24842v1", "quote": "information critical to a judg-ment should be extracted into a targeted, structured representation and placed at the point of judgment rather than routed through generic, capacity-constrained summaries.", "locator": "1 Introduction（贡献3）"}
+  ],
+  "company_hypotheses": [
+    {"code": "600570", "name": "恒生电子", "rationale": "金融IT龙头，AI投研产品需按决策影响而非检索准确率重新验证长文档分析能力", "keywords": ["金融IT", "AI投研", "大模型"], "confidence": 0.25},
+    {"code": "002230", "name": "科大讯飞", "rationale": "金融大模型应用厂商，长上下文整合衰减与其AI分析师类产品架构相关", "keywords": ["大模型", "金融应用"], "confidence": 0.15}
+  ]
+}

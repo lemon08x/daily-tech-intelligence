@@ -1,0 +1,8 @@
+[
+  "We present PhageLysData, an evidence-aware and AI-ready resource constructed through reproducible multisource integration, provenance tracking, and exact-sequence consolidation.",
+  "The release integrates 807,366 source observations from seven primary resources into 759,105 unique exact-sequence entities, comprising an evidence-supported Core of 11,867 entities, a Prediction Extension of 745,092 prediction-only candidates, and 2,146 Context entities retained for provenance and reference.",
+  "Core entities are enriched with harmonized biological annotations, physicochemical properties, independent InterProScan-derived functional annotations, mapped PDB and AlphaFold DB structural assets, and reusable numerical representations.",
+  "For 11,259 eligible Core sequences, PhageLysData provides embeddings from 11 protein language models together with one-hot encoding under a common representation contract.",
+  "Release-facing examples demonstrate latent-space exploration, unsupervised clustering, supervised classification, and evidence-aware candidate retrieval without defining a universal predictive benchmark.",
+  "PhageLysData provides a traceable, versioned, and computationally accessible foundation for protein retrieval, comparative analysis, task-specific dataset construction, and machine-learning applications involving phage lytic enzymes and depolymerases."
+]

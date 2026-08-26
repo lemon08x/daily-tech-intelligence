@@ -1,0 +1,17 @@
+[
+  "We identify a retrieval–integration gap in long-context financial analysis.",
+  "Holding focal-firm information fixed and varying only unrelated context from 2,000 to 128,000 tokens, we find that a risk disclosure’s influence on investment judg-ments falls to the experimental noise floor even as direct retrieval remains accurate.",
+  "The pattern replicates across model families and judgment tasks and in experiments re-moving real disclosures from actual 10-K filings.",
+  "More capable models postpone but do not eliminate the gap.",
+  "Causal memory interventions show that compressed summaries and source-text lookup jointly transmit disclosures into judgments.",
+  "chunk-and-summarize pipelines evict relevant information, whereas a targeted, structured restatement adjacent to the decision restores its influence.",
+  "AI analyst performance is therefore jointly determined by model capability and workflow architecture.",
+  "Retrieval-based evaluations can certify systems whose investment judgments ignore information they demonstrably retrieved.",
+  "the disclosure raises the model’s sell probability by 3.2 percentage points in a 2,000-token filing",
+  "At 128,000 tokens, the primary model retrieves the disclosure for all twelve firms and produces no false retrievals on neutral filings",
+  "Transplanting the compressed state between matched documents removes roughly two-thirds of the disclo-3 sure’s influence when the disclosure is erased from that state, even though its source text remains available for lookup.",
+  "This workflow raises the disclosure’s influence at 128,000 tokens to 8.5 percentage points, with all twelve firms responding in the predicted direction.",
+  "information critical to a judg-ment should be extracted into a targeted, structured representation and placed at the point of judgment rather than routed through generic, capacity-constrained summaries.",
+  "we introducemarginal decision influence, a continuous counterfactual measure of how much a particular input changes an AI system’s judgment while all other decision-relevant information is held fixed.",
+  "arXiv:2608.24842v1  [cs.CL]  25 Aug 2026"
+]

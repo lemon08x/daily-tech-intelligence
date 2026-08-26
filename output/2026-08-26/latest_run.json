@@ -1,0 +1,13 @@
+{
+  "run_name": "110150-568-qwen-code-agent",
+  "experiment_id": "qwen-code-agent",
+  "generated_at": "2026-08-26T11:01:50.568001+08:00",
+  "paths": {
+    "html": "runs/110150-568-qwen-code-agent/daily_digest.html",
+    "markdown": "runs/110150-568-qwen-code-agent/daily_digest.md",
+    "csv": "runs/110150-568-qwen-code-agent/candidates.csv",
+    "snapshot": "runs/110150-568-qwen-code-agent/market_snapshot.csv",
+    "intelligence": "runs/110150-568-qwen-code-agent/intelligence.json",
+    "metadata": "runs/110150-568-qwen-code-agent/run_meta.json"
+  }
+}

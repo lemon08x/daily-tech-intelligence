@@ -1,0 +1,214 @@
+{
+  "request_id": "04_analyst",
+  "stage": "analyst",
+  "harness_name": "qwen-code",
+  "experiment_id": "qwen-code-agent",
+  "model_name": "qwen-code-agent",
+  "system": "你是审慎的科技产业研究员。只可使用输入文档中的事实，不得用记忆补全。\n写出技术机制、新颖性、成熟度、未来6至24个月影响、风险及反面观点。\nevidence.quote必须逐字复制输入文档中的连续文本，并填写对应document_id和URL。\n公司关联只是待核验假设，每个事件最多3个；不能确定六位A股代码和名称时不要输出。\n严格遵守requirements.quality_contract的数量和长度边界；不要为了填满字段重复事实或堆砌引用。\n输出严格JSON，不要Markdown。",
+  "user": "{\"event\": {\"id\": \"f0b01b2c8e1bdef2f02277fa\", \"title\": \"PhageLysData: an evidence-aware and AI-ready dataset of phage lytic enzymes and depolymerases\", \"topic_id\": \"biotech\", \"topic_name\": \"生物技术\", \"document_ids\": [\"b254ca4d341d1964f4ab37a1\"], \"first_seen\": \"2026-08-25T00:00:00Z\", \"last_seen\": \"2026-08-25T00:00:00Z\", \"source_quality\": 100.0, \"deterministic_score\": 75.75}, \"documents\": [{\"document_id\": \"b254ca4d341d1964f4ab37a1\", \"source\": \"bioRxiv（AI4Science过滤）\", \"source_tier\": 1, \"url\": \"https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1\", \"title\": \"PhageLysData: an evidence-aware and AI-ready dataset of phage lytic enzymes and depolymerases\", \"published_at\": \"2026-08-25T00:00:00+00:00\", \"content\": \"Bacteriophage lytic enzymes and depolymerases are relevant to phage biology, antimicrobial development, and protein engineering, but their sequence and annotation data remain dispersed across general databases, specialized resources, genome-centred collections, and prediction-oriented datasets. We present PhageLysData, an evidence-aware and AI-ready resource constructed through reproducible multisource integration, provenance tracking, and exact-sequence consolidation. The release integrates 807,366 source observations from seven primary resources into 759,105 unique exact-sequence entities, comprising an evidence-supported Core of 11,867 entities, a Prediction Extension of 745,092 prediction-only candidates, and 2,146 Context entities retained for provenance and reference. This architecture preserves broad sequence-space coverage while maintaining a clear distinction between non-predictive and prediction-derived support. Core entities are enriched with harmonized biological annotations, physicochemical properties, independent InterProScan-derived functional annotations, mapped PDB and AlphaFold DB structural assets, and reusable numerical representations. For 11,259 eligible Core sequences, PhageLysData provides embeddings from 11 protein language models together with one-hot encoding under a common representation contract. Release-facing examples demonstrate latent-space exploration, unsupervised clustering, supervised classification, and evidence-aware candidate retrieval without defining a universal predictive benchmark. PhageLysData provides a traceable, versioned, and computationally accessible foundation for protein retrieval, comparative analysis, task-specific dataset construction, and machine-learning applications involving phage lytic enzymes and depolymerases.\"}], \"requirements\": {\"language\": \"简体中文\", \"evidence_minimum\": 2, \"company_hypotheses_maximum\": 3, \"schema\": {\"$defs\": {\"CompanyHypothesis\": {\"additionalProperties\": false, \"properties\": {\"code\": {\"pattern\": \"^\\\\d{6}$\", \"title\": \"Code\", \"type\": \"string\"}, \"name\": {\"title\": \"Name\", \"type\": \"string\"}, \"rationale\": {\"title\": \"Rationale\", \"type\": \"string\"}, \"keywords\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 5, \"title\": \"Keywords\", \"type\": \"array\"}, \"confidence\": {\"maximum\": 1, \"minimum\": 0, \"title\": \"Confidence\", \"type\": \"number\"}}, \"required\": [\"code\", \"name\", \"rationale\", \"confidence\"], \"title\": \"CompanyHypothesis\", \"type\": \"object\"}, \"Evidence\": {\"additionalProperties\": false, \"properties\": {\"document_id\": {\"title\": \"Document Id\", \"type\": \"string\"}, \"url\": {\"title\": \"Url\", \"type\": \"string\"}, \"quote\": {\"maxLength\": 1200, \"minLength\": 8, \"title\": \"Quote\", \"type\": \"string\"}, \"locator\": {\"default\": \"正文\", \"title\": \"Locator\", \"type\": \"string\"}}, \"required\": [\"document_id\", \"url\", \"quote\"], \"title\": \"Evidence\", \"type\": \"object\"}, \"IndustryImpact\": {\"additionalProperties\": false, \"properties\": {\"segment\": {\"title\": \"Segment\", \"type\": \"string\"}, \"direction\": {\"enum\": [\"positive\", \"negative\", \"mixed\", \"uncertain\"], \"title\": \"Direction\", \"type\": \"string\"}, \"horizon\": {\"enum\": [\"0-6m\", \"6-12m\", \"12-24m\", \"24m+\"], \"title\": \"Horizon\", \"type\": \"string\"}, \"rationale\": {\"title\": \"Rationale\", \"type\": \"string\"}}, \"required\": [\"segment\", \"direction\", \"horizon\", \"rationale\"], \"title\": \"IndustryImpact\", \"type\": \"object\"}}, \"additionalProperties\": false, \"properties\": {\"headline\": {\"title\": \"Headline\", \"type\": \"string\"}, \"key_facts\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 16, \"title\": \"Key Facts\", \"type\": \"array\"}, \"technical_mechanism\": {\"title\": \"Technical Mechanism\", \"type\": \"string\"}, \"novelty\": {\"title\": \"Novelty\", \"type\": \"string\"}, \"maturity\": {\"title\": \"Maturity\", \"type\": \"string\"}, \"outlook_6_24m\": {\"title\": \"Outlook 6 24M\", \"type\": \"string\"}, \"industry_impacts\": {\"items\": {\"$ref\": \"#/$defs/IndustryImpact\"}, \"maxItems\": 16, \"title\": \"Industry Impacts\", \"type\": \"array\"}, \"risks\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 16, \"title\": \"Risks\", \"type\": \"array\"}, \"counterpoints\": {\"items\": {\"type\": \"string\"}, \"maxItems\": 16, \"title\": \"Counterpoints\", \"type\": \"array\"}, \"confidence\": {\"maximum\": 1, \"minimum\": 0, \"title\": \"Confidence\", \"type\": \"number\"}, \"evidence\": {\"items\": {\"$ref\": \"#/$defs/Evidence\"}, \"maxItems\": 24, \"title\": \"Evidence\", \"type\": \"array\"}, \"company_hypotheses\": {\"items\": {\"$ref\": \"#/$defs/CompanyHypothesis\"}, \"maxItems\": 3, \"title\": \"Company Hypotheses\", \"type\": \"array\"}}, \"required\": [\"headline\", \"technical_mechanism\", \"novelty\", \"maturity\", \"outlook_6_24m\", \"confidence\"], \"title\": \"AnalysisDraft\", \"type\": \"object\"}, \"quality_contract\": {\"key_facts\": {\"min\": 3, \"max\": 6}, \"evidence\": {\"min\": 2, \"max\": 6, \"quotes_must_be_exact\": true}, \"risks\": {\"min\": 2, \"max\": 5}, \"counterpoints\": {\"min\": 1, \"max\": 4}, \"industry_impacts_max\": 4, \"section_max_chars\": 900, \"unsupported_claims_force_downgrade\": true}}}",
+  "schema": "AnalysisDraft",
+  "json_schema": {
+    "$defs": {
+      "CompanyHypothesis": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^\\d{6}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "confidence": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Confidence",
+            "type": "number"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "rationale",
+          "confidence"
+        ],
+        "title": "CompanyHypothesis",
+        "type": "object"
+      },
+      "Evidence": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 1200,
+            "minLength": 8,
+            "title": "Quote",
+            "type": "string"
+          },
+          "locator": {
+            "default": "正文",
+            "title": "Locator",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_id",
+          "url",
+          "quote"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "IndustryImpact": {
+        "additionalProperties": false,
+        "properties": {
+          "segment": {
+            "title": "Segment",
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "positive",
+              "negative",
+              "mixed",
+              "uncertain"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "horizon": {
+            "enum": [
+              "0-6m",
+              "6-12m",
+              "12-24m",
+              "24m+"
+            ],
+            "title": "Horizon",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment",
+          "direction",
+          "horizon",
+          "rationale"
+        ],
+        "title": "IndustryImpact",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "headline": {
+        "title": "Headline",
+        "type": "string"
+      },
+      "key_facts": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Key Facts",
+        "type": "array"
+      },
+      "technical_mechanism": {
+        "title": "Technical Mechanism",
+        "type": "string"
+      },
+      "novelty": {
+        "title": "Novelty",
+        "type": "string"
+      },
+      "maturity": {
+        "title": "Maturity",
+        "type": "string"
+      },
+      "outlook_6_24m": {
+        "title": "Outlook 6 24M",
+        "type": "string"
+      },
+      "industry_impacts": {
+        "items": {
+          "$ref": "#/$defs/IndustryImpact"
+        },
+        "maxItems": 16,
+        "title": "Industry Impacts",
+        "type": "array"
+      },
+      "risks": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Risks",
+        "type": "array"
+      },
+      "counterpoints": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Counterpoints",
+        "type": "array"
+      },
+      "confidence": {
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Confidence",
+        "type": "number"
+      },
+      "evidence": {
+        "items": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "maxItems": 24,
+        "title": "Evidence",
+        "type": "array"
+      },
+      "company_hypotheses": {
+        "items": {
+          "$ref": "#/$defs/CompanyHypothesis"
+        },
+        "maxItems": 3,
+        "title": "Company Hypotheses",
+        "type": "array"
+      }
+    },
+    "required": [
+      "headline",
+      "technical_mechanism",
+      "novelty",
+      "maturity",
+      "outlook_6_24m",
+      "confidence"
+    ],
+    "title": "AnalysisDraft",
+    "type": "object"
+  },
+  "response_file": "04_analyst.response.json"
+}

@@ -1,0 +1,617 @@
+Reading Is Not Using:
+Retrieval, Judgment, and the Design of AI Financial
+Research Workflows∗
+Miao Liu† Zhizhe Liu‡
+This draft: August 2026
+Abstract
+Large language models (LLMs) are increasingly deployed as AI analysts to process
+financial disclosures and support AI-assisted investment decisions. Yet such systems
+are usually evaluated by what they can retrieve, not whether retrieved information af-
+fects their judgments. We identify a retrieval–integration gap in long-context financial
+analysis. Holding focal-firm information fixed and varying only unrelated context from
+2,000 to 128,000 tokens, we find that a risk disclosure’s influence on investment judg-
+ments falls to the experimental noise floor even as direct retrieval remains accurate.
+The pattern replicates across model families and judgment tasks and in experiments re-
+moving real disclosures from actual 10-K filings. More capable models postpone but do
+not eliminate the gap. Causal memory interventions show that compressed summaries
+and source-text lookup jointly transmit disclosures into judgments. Workflow architec-
+ture determines whether this transmission succeeds: chunk-and-summarize pipelines
+evict relevant information, whereas a targeted, structured restatement adjacent to the
+decision restores its influence. AI analyst performance is therefore jointly determined
+by model capability and workflow architecture. Retrieval-based evaluations can certify
+systems whose investment judgments ignore information they demonstrably retrieved.
+Keywords:Generative AI; large language models; AI analysts; AI-assisted decision making;
+long-context analysis; AI workflow architecture; retrieval–integration gap.
+∗Very preliminary draft. Comments welcome. All experimental materials and code are available upon
+request from the authors and we expect to release the replication package around the end of September. We
+thank the Columbia Business School Research Grid for providing computational support for this work.
+†Carroll School of Management, Boston College;miao.liu@bc.edu.
+‡Columbia Business School, Columbia University;zhizhe.liu@columbia.edu.
+arXiv:2608.24842v1  [cs.CL]  25 Aug 2026
+1 Introduction
+Large language models (LLMs) are becomingAI analysts: they read financial disclosures, an-
+swer firm-specific questions, and increasingly support investment decisions. Retail investors
+query generative AI tools about firms at scale, and aggregate trading activity is associated
+with the recommendations those tools provide (Ecker et al., 2026). Capital-market inter-
+mediaries use AI to help produce investment research (Bradshaw et al., 2026), while the
+technology is reshaping how information is produced, disseminated, and processed through-
+out capital markets (Cao et al., 2026). Experimental evidence further shows that interacting
+with these tools changes investor judgments, and not always for the better (Croom, 2026).
+By transferring both information acquisition and preliminary analysis to the model, users
+are doing more than adopting a passive tool: they are delegating a consequential task to
+an agentic information system (Baird and Maruping, 2021). As LLMs move from docu-
+ment search into AI-assisted decision making, a basic performance question follows: does
+information that an AI analyst can retrieve actually influence the investment judgment it
+produces?
+Finding information and using it are distinct stages of decision support. The disclosure
+processing cost framework separates the cost of locating information from the cost of inte-
+grating it into a judgment (Blankespoor et al., 2020). Prior evidence similarly shows that
+reducing information-acquisition costs can change firms’ disclosure choices without eliminat-
+ing downstream processing frictions (Blankespoor, 2019). LLMs sharply reduce the retrieval
+cost: when asked a targeted question, a modern model can often recite a covenant threshold
+or settlement amount from a 100,000-token filing. But retrieval accuracy does not establish
+decision usefulness. We call the divergence between what an AI analyst can retrieve and
+what affects its judgment theretrieval–integration gap. We ask whether this gap widens
+as context grows and whether AI analyst performance depends not only on model capabil-
+ity but also on the architecture of the workflow connecting disclosure reading to investment
+judgment. This framing treats performance as an outcome of the complete AI system, rather
+1
+than as an inherent property of the underlying model alone.
+We identify the retrieval–integration gap through controlled experiments that measure
+retrieval and decision influence separately. For each of twelve U.S. registrants, we construct
+a firm-specific, quantitatively verifiable risk disclosure—such as a covenant threshold, set-
+tlement payment, or indemnification cap—that is coherent with the surrounding filing. We
+define the disclosure’smarginal decision influenceas the difference between the model’s in-
+vestment judgment when the disclosure is present and its average judgment when the same
+location contains one of five equal-length neutral replacements. We then expand only the
+economically unrelated, genre-matched surrounding text from 2,000 to 128,000 tokens, leav-
+ing the decision-relevant information about the focal firm unchanged. This design isolates
+the effect of context load from legitimate updating on additional firm information. In sep-
+arate calls scored against frozen answer keys, we test whether the model can still retrieve
+the disclosure’s facts. The resulting measures distinguish what an AI analyst can state from
+what it actually uses. Section 3 provides the complete design, and Table 1 summarizes it.
+Integration does not keep pace with retrieval. For our primary open-weight model, the
+disclosure raises the model’s sell probability by 3.2 percentage points in a 2,000-token filing—
+an economically meaningful response to one paragraph. Between 8,000 and 32,000 tokens,
+however, its influence becomes statistically indistinguishable from the effects of inserting
+neutral text and remains at that empirical noise floor through 128,000 tokens (Figure 1;
+Table 2). A higher-capability production model postpones but does not avoid the decline:
+its response falls by roughly half and is no longer distinguishable from neutral-insertion noise
+at full length. Direct retrieval, by contrast, remains stable. At 128,000 tokens, the primary
+model retrieves the disclosure for all twelve firms and produces no false retrievals on neutral
+filings; retrieval by the higher-capability production model is similarly undiminished (Table 3;
+Figure 3). Nor does context length simply make judgments uniformly less responsive. Across
+a seven-step severity ladder, the model’s response range compresses by a factor of 5.6 while
+its ability to order the risks degrades much less (Figure 2). At full length, the model can
+2
+still rank risks but no longer scales its judgment to their severity. Direct factual accuracy
+and downstream decision influence therefore separate sharply: reading is not using.
+The result is not specific to one model family or to constructed disclosures. The retrieval–
+integration gap replicates across three independently trained model families, although the
+context length at which it becomes binding differs across them. It also appears in an ex-
+ploratory experiment using real disclosures. We identify twenty complete 10-K filings con-
+taining self-contained, quantified disclosures and compare the model’s judgment before and
+after removing the original passage. The real disclosure affects judgment in a short excerpt
+but has essentially no influence in the complete filing, even though the model retrieves it cor-
+rectly in all twenty cases (Table 5). Capability shifts the failure frontier outward. The largest
+open-weight model retains a 3.4-percentage-point effect at 128,000 tokens—approximately
+what the mid-sized model achieves at 2,000 tokens—whereas a lower-capability commercial
+system eventually loses retrieval as well as decision influence (Figure 4; Table 4). Capability
+therefore buys distance from the failure, not evidence of immunity from it: the effective
+decision context of an AI analyst need not equal its advertised context window.
+We next investigate why retrieval and decision influence diverge. Because the processor is
+a model rather than a person, we can inspect its intermediate representations and intervene
+directly on the channels through which previously read information reaches the final judg-
+ment. Representation analyses first show that the disclosure’s risk content remains stably
+encoded where it was read at every context length. The model therefore forms a usable
+representation of the disclosure even in long documents. At the decision position, however,
+standard probes do not recover disclosure-specific content, and the legibility of the pending
+decision deteriorates as context grows (Section 5; Figure 5).
+The architecture provides two potential transmission channels from reading to judg-
+ment: a compressed recurrent state that summarizes preceding content and attention-based
+lookup over the source text. Causal interventions isolate both channels. Transplanting the
+compressed state between matched documents removes roughly two-thirds of the disclo-
+3
+sure’s influence when the disclosure is erased from that state, even though its source text
+remains available for lookup. Conversely, implanting the disclosure into the compressed
+state recreates nearly half of its influence in a document that does not contain it (Table 6).
+Matched attention-blackout experiments identify a disclosure-specific lookup effect of com-
+parable magnitude, and the two estimated channel effects are statistically indistinguishable.
+These interventions locate the failure at integration rather than comprehension: the disclo-
+sure remains encoded and retrievable, but the channels carrying it into the judgment weaken
+as competing context grows.
+The mechanism generates a direct system-design prediction: reorganizing information
+flow should be more effective than merely increasing computation. The workflow experiments
+support that prediction (Section 6; Table 7). Enabling extended reasoning does not restore
+the disclosure’s influence and reduces it at short context lengths. A generic chunk-and-
+summarize workflow performs even worse: it eliminates the disclosure’s influence at every
+length, including 2,000 tokens, because its bounded notes omit the target information before
+the decision stage sees it. Simply repeating the disclosure verbatim near the decision also
+accomplishes little. What works is a targeted, structured restatement of the disclosure’s
+decision-relevant facts placed immediately before the investment judgment while the source
+filing remains available. This workflow raises the disclosure’s influence at 128,000 tokens
+to 8.5 percentage points, with all twelve firms responding in the predicted direction. An
+experimenter-written restatement works as well as the model’s own extraction, and the
+remedy also succeeds in complete filings containing real disclosures (Tables 8 and 9). The
+same model, information, and decision task therefore produce materially different judgments
+solely because the workflow routes information differently. AI analyst performance is jointly
+determined by model capability and workflow architecture; retrieval-based evaluations can
+certify systems whose investment judgments ignore information they demonstrably retrieved.
+This paper makes four contributions. First, it extends IS research on delegation from
+the allocation of work between humans and AI to the execution of work within an agentic
+4
+artifact. Prior research develops theory and evidence on how tasks and decision rights
+should be allocated between humans and AI and when alternative arrangements improve
+performance (Baird and Maruping, 2021; F¨ ugener et al., 2022). We study the next stage:
+what happens after an end-to-end task has been delegated and the artifact must carry
+information across its own processing stages. We identify a distinct post-delegation failure:
+an AI agent can demonstrably retrieve decision-relevant information yet fail to incorporate
+it into the judgment it was delegated to form. The retrieval–integration gap thus shows that
+successful performance on a verifiable intermediate operation need not imply completion of
+the delegated objective—a failure that becomes increasingly consequential as agentic systems
+perform multistage tasks with limited human visibility.
+Second, we contribute a task-aligned approach to the design and evaluation of generative
+AI systems. Technically grounded IS design research calls for rigorous artifact evaluation,
+consequential domain adaptation, and actionable design knowledge (Abbasi et al., 2024).
+Related research identifies a “construct gap” when the observable proxy around which an
+ML system is designed omits important dimensions of the decision-relevant construct (De-
+Arteaga et al., 2025). We identify an analogous gap in AI evaluation: retrieval accuracy
+is a convenient and observable performance proxy, but it does not establish that retrieved
+information affects the decision the system is meant to support. To measure that ultimate
+objective, we introducemarginal decision influence, a continuous counterfactual measure
+of how much a particular input changes an AI system’s judgment while all other decision-
+relevant information is held fixed. The measure reveals that retrieval-based evaluations
+can certify systems whose downstream judgments are effectively invariant to the facts they
+successfully retrieve.
+Third, we move from detecting the retrieval–integration gap to explaining it and deriving
+design knowledge. Internal interventions identify two channels through which a disclosure
+can reach judgment—a compressed running summary and attention-based lookup—and show
+how context load disrupts the transmission of decision-relevant information. The workflow
+5
+experiments yield a decision-proximal representation principle: information critical to a judg-
+ment should be extracted into a targeted, structured representation and placed at the point
+of judgment rather than routed through generic, capacity-constrained summaries. Whereas
+Chen and Chan (2024) show that the consequences of human–LLM collaboration depend on
+collaboration modality and user expertise, we extend this configuration logic to the internal
+workflow of a delegated AI analyst. Generic chunk-and-summarize workflows and additional
+reasoning fail to restore the disclosure’s influence, whereas a targeted, structured restatement
+succeeds. Consistent with calls to manage AI as an organizationally embedded and partly
+inscrutable artifact (Berente et al., 2021), our results show that model capability and work-
+flow architecture play distinct but complementary roles: capability moves the failure frontier,
+whereas workflow architecture determines whether decision-relevant information reaches the
+judgment at all.
+Fourth, we contribute to research on financial disclosure processing and machine reader-
+ship by distinguishingmachine readabilityfrommachine decision usefulness. Generative AI
+does not eliminate disclosure processing costs; it relocates them from finding information to
+integrating it into judgment (Blankespoor et al., 2020). Retrieval becomes inexpensive, but
+integration remains sensitive to document length, model capability, and workflow architec-
+ture. For investors and intermediaries, this distinction means that an AI analyst should be
+validated by whether economically meaningful changes in its information produce appropri-
+ate changes in its judgment, not merely by whether it answers factual questions correctly. For
+disclosure regulators, machine-readable presentation and successful retrieval do not establish
+that a disclosure is decision useful to a machine reader. More broadly, the financial-disclosure
+setting demonstrates how the information artifact, the model, and the surrounding workflow
+jointly determine whether available information is transformed into consequential action.
+Our mechanism claims are deliberately bounded. We study AI processors, not human
+cognition, and therefore do not examine whether users trust, accept, or override the resulting
+recommendations. The connection to the limited-attention literature, in which salience and
+6
+processing load affect market responses even when information is public (Hirshleifer and
+Teoh, 2003; Hirshleifer et al., 2009), is an economic analogy rather than a claim that humans
+and LLMs share a cognitive mechanism. Our analysis instead isolates the reliability of the
+artifact after a user has delegated the analytical task to it.
+Relative to computer-science research on long-context degradation, which shows that ad-
+ditional context can reduce retrieval and reasoning accuracy even when relevant information
+remains accessible (Liu et al., 2024; Levy et al., 2024; Du et al., 2025), our contribution lies in
+measuring an economically consequential downstream judgment, holding the focal informa-
+tion set fixed, causally identifying the channels that transmit a retrieved fact into that judg-
+ment, and testing workflow remedies. Relative to emerging accounting and finance research
+on what LLMs can produce from financial statements and market information (Lopez-Lira
+and Tang, 2026; de Kok, 2025; Cao et al., 2026), we ask whether a particular disclosure
+changes the model’s judgment. That is the stage at which an AI analyst’s output becomes
+economically consequential and a disclosure becomes decision useful.
+The remainder of the paper proceeds as follows. Section 2 develops the framework and
+hypotheses. Section 3 presents the experimental design. Section 4 establishes the retrieval–
+integration gap and its robustness. Section 5 identifies the transmission mechanism, and
+Section 6 evaluates alternative workflow architectures. Section 7 concludes.
+2 Background and Hypotheses
+2.1 Delegation to an Agentic IS Artifact
+When an investor asks a language model to read a filing and recommend an action, the model
+is not being used as a passive tool. The user transfers both the acquisition of information
+and the analytical work that follows, and receives back a judgment rather than a document.
+Information systems research characterizes this arrangement as delegation to an agentic IS
+artifact: the artifact holds decision rights over how a task is carried out, and the user’s
+7
+role shifts from performing the work to specifying it and accepting or rejecting its output
+(Baird and Maruping, 2021). A parallel stream studies how tasks should be allocated between
+humans and machines and shows that delegation improves performance only under particular
+conditions, since people delegate poorly when they cannot observe where the machine is
+strong (F¨ ugener et al., 2022). Both streams take the boundary of delegation as the object of
+theory: which party should do what, and with what visibility into the other’s competence.
+This paper takes up what happens on the far side of that boundary. Once an end-
+to-end analytical task has been delegated, the artifact must execute it internally, carrying
+information across its own processing stages—reading the document, forming an internal
+representation of what it read, and producing a judgment conditioned on that representation.
+Each stage is a transmission step, and none of them is observable to the user, who sees
+only the final recommendation. Delegation therefore creates a distinctive failure mode that
+is invisible at the delegation boundary: the artifact may complete a verifiable intermediate
+operation and still fail to complete the objective it was delegated to achieve. That divergence
+between what an AI analyst can retrieve from a document and what actually affects the
+judgment it produces—theretrieval–integration gap—is what this paper measures.
+The gap is consequential precisely because agentic artifacts are trusted on the strength
+of intermediate evidence. A user who watches a model quote a covenant threshold verbatim
+from a hundred-page filing has direct evidence that the information was found, and reason-
+ably infers that the subsequent recommendation reflects it. That inference is what we test.
+Managing AI as an organizationally embedded and partly inscrutable artifact requires know-
+ing which observable behaviors license which conclusions about unobservable ones (Berente
+et al., 2021), and the retrieval–integration gap is a case in which a highly legible behavior
+licenses much less than it appears to.
+8
+2.2 Why Disclosure Processing Makes the Distinction Consequen-
+tial
+Financial disclosure is a setting in which the difference between finding information and using
+it has long been theorized and has direct economic stakes. A large literature organizes the
+frictions between mandated disclosure and investor behavior around processing costs: before
+a disclosure can move a decision, an investor must become aware that it exists, acquire
+it, and integrate it into a judgment (Blankespoor et al., 2020). The framework’s central
+move—treating acquisition and integration as separate costs that need not fall together—
+is exactly the distinction that the retrieval–integration gap makes operational for machine
+readers. Each stage is costly, and the costs are not small. Annual reports have grown
+longer and less readable over time (Li, 2008; Loughran and McDonald, 2014), with much of
+the growth concentrated in boilerplate-heavy sections that bury firm-specific content (Dyer
+et al., 2017). Market participants respond to these costs the way the framework predicts:
+when a mandate lowered users’ processing costs, firms supplied more detailed disclosure in
+response (Blankespoor, 2019), and when machine readership of filings became widespread,
+firms adjusted how they write to accommodate the machines that now read them first (Cao
+et al., 2023).
+Generative artificial intelligence changes the terms of this bargain more abruptly than
+any prior processing technology. A large language model can take an entire 10-K in a single
+pass and, on direct questioning, locate a footnote, quote an amount, and characterize a risk
+in seconds. Early evidence suggests such capabilities translate into economically meaningful
+analysis: language models extract decision-relevant information from financial disclosures
+(Huang et al., 2023; de Kok, 2025), extract return-relevant signals from news (Lopez-Lira
+and Tang, 2026), predict future earnings changes when fine-tuned on financial statements
+(Dou and Fu, 2026), and machine analysis of corporate disclosures can rival human analysts’
+forecasts (Cao et al., 2024). Adoption on the user side is no longer hypothetical. Retail
+investors interact with AI assistants about specific stocks at scale (Ecker et al., 2026), capital-
+9
+market intermediaries visibly use generative tools in their published research (Bradshaw
+et al., 2026), sell-side analysts adopt them in forecasting (Xue et al., 2025), and the profession
+is beginning to take stock of how AI reshapes information production and processing end to
+end (Cao et al., 2026).
+Read through the delegation lens, the processing-cost framework yields a sharper question
+than whether these tools are useful. AI changes the acquisition stage most visibly: once a
+document is in context, a capable model locates and recites a named item almost without
+error. (Our design measures exactly this conditional retrieval—of an item the question
+names—not awareness, and not the time or money costs of processing.) But the framework
+treats integration as a separate cost, and there is no a priori reason it falls in proportion.
+Indeed, experimental evidence on human users already hints at a wedge between access
+and judgment: interacting with a generative AI assistant raises investors’ confidence in their
+information advantage more than it raises their actual judgment quality (Croom, 2026). This
+paper asks the analogous question about the artifact itself. When a model demonstrably can
+retrieve a disclosure—when directed retrieval of the named item is essentially perfect—does
+the disclosure actually enter the model’s judgment? If retrieval becomes inexpensive while
+integration does not, the binding constraint on disclosure effectiveness moves fromfinding
+the informationtofinding it and not using it. That distinction separates machine readability
+from machine decision usefulness, and it is a failure mode that standard evaluations of AI
+reading comprehension are not designed to detect.
+2.3 Evaluating a Delegated Decision Task
+The evaluation problem is not unique to disclosure. Technically grounded IS design research
+argues that generative systems should be assessed by rigorous artifact evaluation against
+consequential domain outcomes rather than by convenient benchmark performance (Abbasi
+et al., 2024). Research on machine-learning decision support identifies the underlying diffi-
+culty as a “construct gap”: systems are optimized and validated against an observable proxy
+10
+that omits dimensions of the construct the decision actually turns on (De-Arteaga et al.,
+2025). Retrieval accuracy is such a proxy. It is cheap to score, it is unambiguous, and it
+certifies that the artifact completed one processing stage—but it is silent on whether the
+retrieved content reached the judgment the artifact was delegated to form. Closing that
+gap requires an outcome measure defined on the delegated task itself. We use themarginal
+decision influenceof a disclosure: the change in the artifact’s judgment attributable to the
+presence of that disclosure, holding all other decision-relevant information fixed. It is contin-
+uous rather than binary, defined against an explicit counterfactual, and it moves only when
+information changes the decision.
+Computer science has documented that long inputs degrade language-model performance,
+and this literature supplies the proximate reason to expect transmission across processing
+stages to fail. Models answer questions less accurately when relevant material sits in the
+middle of a long context (Liu et al., 2024); reasoning accuracy falls as inputs lengthen even
+when the added text is irrelevant (Levy et al., 2024); and effective context windows measured
+on controlled benchmarks are far shorter than advertised ones (Hsieh et al., 2024a; Yen et al.,
+2025). The result closest to ours is that of Du et al. (2025), who show that input length
+alone reduces downstream task performance even when retrieval of the relevant passage is
+perfect. Mechanistic accounts point to attention: a small set of attention heads carries
+long-context recall (Wu et al., 2025), and positional biases in attention explain much of the
+middle-of-context loss (Hsieh et al., 2024b).
+Three things are missing from this literature for evaluating a delegated decision task.
+First, the dependent variable. Benchmark studies score answers right or wrong, which is
+precisely the proxy whose sufficiency is in question; assessing a delegated judgment requires
+measuring whether retrieved informationchangesthat judgment—a continuous quantity,
+measured against an explicit counterfactual in which the information is absent. Second,
+identification. Comparing a short excerpt with a full filing confounds context length with
+the information the longer document adds; a clean answer requires holding the focal firm’s
+11
+information set fixed while varying only the surrounding load. Third, consequences and de-
+sign knowledge. If long-context degradation afflicts delegated financial analysis, the practical
+question is which processing arrangements restore the lost influence—a question about work-
+flow architecture, and one whose answer is actionable for anyone assembling an AI analyst
+from a model, a document store, and a sequence of intermediate steps.
+A separate lesson from the interpretability literature disciplines our mechanism analysis.
+That information can be decoded from a model’s internal states does not imply the model
+uses it: a probe can recover content that plays no causal role in the output, and even interven-
+tions on plausible-looking internal directions can produce behavioral effects for uninteresting
+reasons (Makelov et al., 2024). We therefore treat “the model read it” and “the model used
+it” as distinct, separately measured claims throughout, and we hold internal-representation
+evidence to explicit control and resolution standards described in Section 5.
+2.4 Hypotheses
+Our first hypothesis states the retrieval–integration gap as a comparative prediction and
+translates it into the fixed-information design of Section 3.
+H1.Holding the focal firm’s information set fixed, the marginal influence of a risk disclosure
+on the model’s investment judgment declines as unrelated context grows.
+The reasoning is about transmission under load. A delegated analytical task requires
+the artifact to carry a specific fact from the point where it was read to the point where
+the judgment is formed, and every additional token of unrelated material competes for the
+finite representational capacity that carries it. The economic analogue is limited attention:
+investors underreact to relevant news when competing stimuli crowd the processing stage
+(Hirshleifer et al., 2009), and disclosure placement and salience matter precisely because
+attention, not access, binds (Hirshleifer and Teoh, 2003). H1 asks whether an artifact with
+no fatigue and every word of the filing simultaneously in view exhibits the same signature.
+We draw the analogy at the level of the prediction, not the mechanism.
+12
+H2.The decline in influence is not retrieval failure: at context lengths where the disclosure’s
+influence on judgment has fallen, the model still retrieves the disclosure accurately under
+direct questioning.
+H2 is what makes the failure a post-delegation failure rather than a reading deficit. If
+retrieval and influence fell together, longer contexts would simply make models worse readers,
+the artifact would be failing at an observable stage, and the remedy would be better retrieval.
+If retrieval survives while influence dies, the artifact completes the stage its evaluator can
+see and fails at the stage its evaluator cannot—the integration stage that the processing-cost
+framework identifies as distinct. H2 is thus the test of whether the retrieval proxy suffers
+the construct gap described above: a system passing it may nonetheless produce judgments
+invariant to the facts it demonstrably retrieved.
+H3.If within-context retention is the operative mechanism, text arriving after the disclosure
+should reduce its influence more than the same text arriving before it.
+H3 localizes where in the artifact’s processing the transmission degrades. Placing filler
+after the target increases the distance the disclosure must travel to the point of decision;
+placing it before does not. Architectural considerations make this comparison informative:
+models with recurrent or compressed sequence processing exhibit measurable limits on car-
+rying early content forward (Jelassi et al., 2024; Arora et al., 2024a). We designate H3 as
+a pre-specified secondary comparison rather than a primary test, because a null behavioral
+difference would not rule out retention failures that internal measurements can still detect.
+H4.Reorganizing the decision process restores the disclosure’s influence at long context;
+adding computation does not.
+H4 is a hypothesis about workflow architecture rather than about the model. If the dis-
+closure is present, retrievable, and nonetheless unused, the deficiency lies in how the system
+routes information between its stages, not in how much capability or computation it applies
+at any one of them. Reorganizing that routing—for example, requiring the artifact to state
+13
+what the filing says about the risk immediately before deciding—should recover influence,
+whereas allowing the model to deliberate longer should not, and a generic summarization
+stage that compresses the document before the decision stage sees it may make matters
+worse. The prediction extends a configuration logic already established for human–AI col-
+laboration, where outcomes depend on how the collaboration is arranged rather than on the
+model alone (Chen and Chan, 2024), to the internal arrangement of a delegated AI analyst.
+H4 turns the mechanism into treatments: each remedy in Section 6 corresponds to a dis-
+tinct hypothesis about where the integration failure sits, their comparative performance is
+itself evidence about mechanism, and the comparison yields design knowledge about where
+decision-relevant information should be represented in an agentic workflow.
+3 Experimental Design
+Table 1 summarizes the design. Its purpose is to measure one quantity cleanly: the marginal
+influence of a single, known risk disclosure on an AI analyst’s investment judgment, as a
+function of how much other text surrounds it. The design measures retrieval and decision
+influence separately, in distinct calls, so that what the AI analyst can state about a disclosure
+and what that disclosure does to its judgment are two independent observations rather than
+one. That separation is what renders the retrieval–integration gap observable.
+3.1 The Measurand
+Marginal decision influenceis a continuous, counterfactual measure of how much one input
+changes an AI system’s judgment while all other decision-relevant information is held fixed.
+It is defined on the delegated decision task itself rather than on a retrieval proxy: the quantity
+of interest is movement in the judgment the AI analyst was asked to produce, not accuracy
+on an intermediate question about the document. We construct it as follows.
+For each firm and context lengthℓ, we construct a family of otherwise identical filings that
+14
+differ only in one paragraph. Thetargetversion (T) contains a firm-specific risk disclosure.
+Fiveneutralversions (N 1, . . . , N5) replace that paragraph with equal-length neutral text.
+The marginal decision influence of the disclosure is
+Use(ℓ) = Decision(T, ℓ)− 1
+5
+5X
+m=1
+Decision(Nm, ℓ),
+the difference between the model’s judgment with the disclosure present and its average
+judgment across the neutral replacements. Averaging over five replacements matters because
+any single replacement text induces its own deterministic shift in a model’s output; the
+average absorbs those idiosyncrasies so that Use(ℓ) isolates the disclosure itself rather than
+the accident of what replaced it. Because Use(ℓ) is a difference in the artifact’s own decision
+output, it is expressed in the units of the delegated task and remains well defined regardless
+of whether the model can articulate the disclosure on request. That is the property a retrieval
+score lacks, and it is why the two measures can diverge.
+The decision readout differs by model class. For open-weight models we read the model’s
+propensity to recommend selling versus buying directly from its output distribution at a fixed
+decision prompt—a deterministic, continuous readout that requires no sampling. Commer-
+cial API models do not expose output distributions, so for them we elicit a unit-bearing
+numeric judgment: the probability the firm defaults within twelve months, in percentage
+points. The two readouts are never mixed; each model’s decline is measured in its own units
+against its own baseline.
+The sell-versus-buy propensity is not the only judgment we elicit. A second task asks, of
+the identical documents, whether a credit-rating downgrade within twelve months is likely,
+read out through the same restricted one-token machinery so that the answer is again a
+deterministic probability. Any conclusion that depended on how the investment question
+happens to be phrased should fail to survive this change of question; Section 4 shows that
+the central result survives it.
+15
+Separately—in a different call, by design—we measureretrieval: we ask the model di-
+rectly what the filing says about the target matter and score its answer against frozen answer
+keys covering the disclosed amounts and status. Keeping the retrieval and decision readouts
+in separate calls is deliberate. It means H2 compares two independent measurements, and no
+instruction to “first find, then use” contaminates the decision task. The resulting pair—one
+reading on the retrieval proxy, one on the delegated decision—is what makes the retrieval–
+integration gap a measured quantity rather than an inference from a single score. Because
+both readouts are deterministic, differences across conditions are not sampling noise; run-to-
+run variation is controlled by pinning hardware and software configuration (Appendix B).
+3.2 Materials
+The experimental environment is built from the annual reports of twelve U.S. registrants. For
+each firm we author a target risk paragraph—a covenant threshold with limited headroom,
+a litigation settlement, an indemnification cap, or a similar locally describable exposure—
+containing verifiable amounts and written to be insertable at a specific location in the notes
+or MD&A. Authoring the paragraph, rather than sampling existing disclosures, is what
+makes the counterfactual exact: we know precisely what information the neutral versions
+remove.
+The threat to validity from authored text is not whether it “sounds real”; it is whether
+the inserted fact is consistent with the rest of the filing. Every candidate therefore passes
+a whole-filing coherence audit against the financial statements, related notes, MD&A, risk
+factors, legal proceedings, and audit report, and against the filing’s timeline. We impose a
+single-edit rule: if making the fact true would require changes at more than one location
+in the filing—restating a covenant table, altering a subtotal—the candidate is discarded
+rather than patched. Multi-point edits would turn one treatment into several. The audit
+protocol, per-firm materials, and a seven-level severity ladder used to calibrate the decision
+readout’s sensitivity (from benign to near-default variants of each disclosure) are described
+16
+in Appendix A.
+3.3 The Length Manipulation
+The identification problem with the natural comparison—a short excerpt versus the full 10-
+K—is that the full filing adds information about the same firm: mitigating detail, related
+exposures, context that could legitimately dilute or amplify the target’s weight. A rational
+readershouldrespond differently. Our main manipulation therefore holds the focal firm’s
+information set fixed. Each firm’s material is condensed into a fixed mini-filing containing
+the target (or neutral) paragraph, its local section context, and the same decision prompt.
+Context is then extended to 2,000, 8,000, 32,000, and 128,000 tokens by adding text that
+is economically unrelated to the firm and the target risk but matched in genre—accounting
+and legal prose of the kind that populates real filings. Nothing about the focal firm changes
+across lengths; only the surrounding load does.
+“Unrelated” is a verified property, not an assumption. Before entering the experiment,
+filler pools are certified by measuring their effect on pure-filler baselines; filler text does
+shift the level of model judgments, and the differenced design absorbs exactly such level
+shifts. Within each length we also manipulatearrangement: the filler appears either entirely
+before the focal mini-filing or entirely after it, holding total length and content fixed. The
+before/after comparison is the pre-specified secondary test of H3.
+A finer version of the same manipulation separates how much text the model has read
+from how far the disclosure sits from the decision. Holding total context fixed at 32,000
+or 128,000 tokens, the filler is split around the focal filing so that the disclosure’s distance
+to the decision question takes values from 1,000 to 64,000 tokens, while the union of filler
+text remains byte-identical across the cells of each row. If proximity to the decision is what
+preserves influence, moving the disclosure adjacent to the question should restore it; if total
+load is what matters, distance should be irrelevant.
+Two extensions connect the controlled design to real reporting environments. A same-
+17
+genresemantic interferencearm replaces unrelated filler with risk disclosures of other firms.
+And anecologicalarm inserts the target paragraph into complete, investor-visible 10-K
+filings—with any conflicting original passages removed through recorded, machine-verified
+edits—accepting that this condition changes the firm’s information set in exchange for realism
+(Appendix E).
+A third extension removes the authored paragraph from the design altogether. For twenty
+additional registrants—every filing dated after the models’ training cutoffs—we identify a
+genuinely self-contained, quantified disclosure already present in the filing: covenant head-
+room, a litigation settlement, an indemnification obligation, a customer concentration. Use
+is then measured by redaction rather than insertion: the verbatim filing is compared with a
+version in which the disclosure is surgically replaced by a length-matched neutral paragraph,
+and every other passage that repeats the disclosure’s distinctive amounts is excised fromboth
+versions, so the contrast isolates the disclosure itself. A placebo edit—the same replacement
+applied to an unrelated, token-matched passage—bounds the effect of editing per se; a win-
+dow of roughly 2,000 tokens around the disclosure provides the short-context endpoint; and
+directed retrieval on the redacted version doubles as a probe for leakage and memorization,
+since a model that answers the retrieval question without the disclosure must be drawing on
+something other than the document. Materials and audits appear in Appendix A.
+3.4 Inference
+The unit of observation is the firm-filing. Our design and primary contrasts were fixed in
+advance of the frozen runs reported here; analyses that go beyond them are labeled ex-
+ploratory where they appear. All formal statements rest on two complementary procedures.
+First, a firm-level bootstrap resamples the twelve firms with replacement to attach confi-
+dence intervals to mean Use(ℓ). Second, and more stringently, we construct anempirical
+null: for every cell we run ten additionalpseudo-targetinsertions (P 1, . . . , P10), which apply
+the identical insertion machinery to paragraphs with no decision-relevant content. These
+18
+pseudo-effects are not zero—insertion itself perturbs a deterministic reader—and they de-
+fine the noise floor of the instrument. Target effects are judged against this distribution by
+randomization inference, drawing one pseudo-insertion per firm and recomputing the pooled
+statistic.
+The empirical null enforces a resolution principle that matters most at the long end: a
+null result at 128,000 tokens is interpretable as a loss of influence only because the same
+instrument, on the same firms, resolves clearly nonzero effects at shorter lengths. Where the
+instrument cannot resolve an effect, we say so, rather than reporting an uninformative zero.
+3.5 Models
+Table 1 lists the model set. The primary family is Qwen3.5: a 9-billion-parameter base
+model serves as the workhorse for all internal-representation analysis, and post-trained 2B,
+9B, and 27B variants form a scale ladder that asks whether capability changes the phe-
+nomenon rather than merely its level. We flag the workhorse choice openly: it is dictated
+by instrumentation, not by behavior—the pretrained sparse autoencoders our mechanism
+analysis requires exist only for base checkpoints—and the base model is not what anyone
+deploys. The behavioral results therefore report both 9B variants side by side (Table 4),
+including a post-training anomaly discussed in Section 4 that the base model does not share.
+Because scale-ladder members must be able to respond to risk at all for their length profiles
+to be interpretable, each model passes a pre-specified capability gate—it must order the
+seven-level severity ladder at short context; one candidate control model (a full-attention
+model from the prior Qwen generation) failed this gate and is excluded from length-decay
+interpretation (Appendix E).
+Two cross-family rows, Llama-3.1-8B and gemma-4-12B, establish that the retrieval–
+integration gap is not specific to one model family, at the cost of minor measurement ac-
+commodations documented in Appendix B. External validity on current commercial systems
+comes from qwen3.8-max, a production API model, with a dated model snapshot retained
+19
+for reproducibility, and from Gemini 3.1 Flash-Lite, a low-cost commercial system measured
+behavior-only as a capability endpoint (Section 4; Appendix Table 22). All open-weight in-
+ference runs on pinned hardware, software, and numerical configuration; the same disclosure,
+at the same length, always meets the same machine.
+4 The Retrieval–Integration Gap Under a Fixed Infor-
+mation Set
+This section establishes the retrieval–integration gap empirically. We first document that
+the marginal decision influence of the target disclosure declines sharply as context grows,
+holding the focal firm’s information set fixed (H1). We then show that the decline is not a
+failure of retrieval: under direct questioning, the same AI analysts recover the disclosure with
+undiminished accuracy at every length we study (H2), and the same retrieval–integration gap
+appears when the disclosures are ones firms actually filed. We close the section with three
+results that discipline interpretation—the effect of model capability, the separation between
+ordinal and cardinal sensitivity to disclosure severity, and a set of pre-specified secondary
+analyses.
+4.1 Declining Decision Influence as Context Grows
+Table 2 and Figure 1 report the main result. For the 9B workhorse model, the disclo-
+sure moves the investment judgment by +0.032 in sell-probability units at 2,000 tokens, an
+economically meaningful revision given that the neutral-control baseline places substantial
+probability on a hold recommendation. As unrelated filler text expands the context—with
+the focal firm’s information set unchanged—the influence falls to +0.005 at 8,000 tokens,
++0.001 at 32,000, and +0.004 at 128,000 tokens. Firm-level bootstrap intervals exclude zero
+at 2,000 tokens in both arrangements (+0.032 with filler before the focal filing, +0.025 with
+filler after) and only sporadically thereafter.
+20
+Because a small mechanical effect of insertinganyparagraph could masquerade as “use,”
+our inference compares the target effect not with zero but with an empirical null distribution:
+the same insertion machinery applied to ten irrelevant pseudo-disclosures per firm (Appendix
+Table 11). Against this null, the 9B model’s use is resolvable at 2,000 tokens (permutation
+p= 0.025 andp= 0.0015 in the two arrangements) and at 8,000 tokens in the after-
+arrangement (p= 0.038); at 32,000 and 128,000 tokens the target effect is statistically
+indistinguishable from an irrelevant insertion (allp >0.5). This structure is what makes
+the long-context null interpretable: the same instrument that resolves non-zero use at short
+lengths finds none at long lengths, so the 128k result reflects a genuine loss of influence rather
+than a loss of measurement resolution.
+Panel B of Table 2 repeats the design on a current production model accessed through
+its commercial interface, using a unit-bearing readout: the model’s stated twelve-month
+default probability. The disclosure raises the stated default probability by 6.06 percentage
+points at 2,000 tokens, and by 3.79, 4.59, and 3.15 percentage points at 8,000, 32,000, and
+128,000 tokens. Two complementary tests apply. Against zero, the effect remains significant
+at every length, including 128k. Against the empirical insertion null, the effect is resolvable
+through 32,000 tokens (p= 0.0005) but falls inside the insertion-noise band at 128,000
+tokens (p= 0.11). The two tests answer different questions, and we report both: at 128k
+the production model’s response to the disclosure is nonzero, yet no larger than its response
+to an economically irrelevant paragraph subjected to the same insertion.
+The pattern replicates across model families (Figure 1, Panel A). In the Llama family,
+use declines monotonically from +0.016 at 2,000 tokens to−0.006 at 128,000; in the Gemma
+family, from +0.047—the largest short-context response among the open-weight models—to
+−0.012 at 32,000 tokens, where only one of twelve firms retains a positive effect. Three
+architectures with different attention designs, training data, and providers produce the same
+qualitative phenomenon: strong use of the disclosure in short contexts, decay toward (and
+occasionally through) zero as unrelated text accumulates. The decay is therefore not an
+21
+idiosyncrasy of one model family, and—because the focal firm’s information is fixed by
+construction—it cannot reflect rational updating on new information. The design’s primary
+contrast can also be tested directly as a within-firm paired difference, Use 2k−Use 128k: the
+decline is +0.026 for the workhorse model with arrangements pooled (exact sign-flipp=
+0.0044), +0.015 for Llama (p= 0.0010), and +0.040 for Gemma (p= 0.0352), while the
+production model’s paired decline (+2.47 percentage points) is not statistically resolved
+(p= 0.199) and its curve should be read as a point-estimate pattern (Appendix Table 19).
+Related work documents that input length degrades task accuracy (Levy et al., 2024; Liu
+et al., 2024), and does so even when retrieval is verified perfect (Du et al., 2025); our
+contribution here is to show the analogous result for the economic weight a model places
+on a financial disclosure, under a design that separates pure context load from information
+content.
+Nor does the decline depend on how the judgment is elicited. Asked instead whether
+a credit-rating downgrade is likely—a different economic question, read out through the
+same one-token machinery—the

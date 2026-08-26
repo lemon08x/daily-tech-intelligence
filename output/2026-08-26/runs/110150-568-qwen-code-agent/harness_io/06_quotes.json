@@ -1,0 +1,12 @@
+[
+  "First, it is a narrative review and synthesis of the methodological practice visible in a corpus of 151 works whose identifiers were all checked against a registry before inclusion, organising that practice into eleven families",
+  "Second, it converts each family into an executable protocol: ordered steps, the instruments and formulas the steps require, the evaluation criteria that make a result defensible, the validity threats that most often invalidate it, and a reporting checklist.",
+  "The reported ranking of intrusion-detection algorithms is inconsistent across studies that are individually careful: one comparison places random forest at 99.9% accuracy above convolutional and recurrent networks at 98%, another places deep feed-forward networks first, and a third places recurrent networks first.",
+  "We argue that the pattern is most parsimoniously explained by evaluation design rather than by the algorithms, because the studies differ in every design dimension known to move the reported number by more than the margins that separate them.",
+  "The evidence supports methodological pluralism disciplined by explicit validity reasoning: match the design to the decision under study, triangulate technical against organisational evidence, state the population a result generalises to, and report the conditions under which the result would not hold.",
+  "Method follows the decision under study, not the re-searcher’s training.",
+  "Enterprise research is access-bound far more than it is technique-bound.",
+  "the corpus median publication year is 2020 and 58 of the 151 works date from 2023 onward",
+  "arXiv:2608.24850v1  [cs.CR]  25 Aug 2026",
+  "a study may need a systematic review, a design-science artifact, an interview study, a controlled detection experiment, an attack-graph model, a testbed deployment, or a randomised field trial, and increasingly several of these at once."
+]

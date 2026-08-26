@@ -1,0 +1,412 @@
+{
+  "market_date": "2026-08-26",
+  "is_trading_day": true,
+  "snapshot_rows": 5547,
+  "eligible_rows": 558,
+  "screening": {
+    "include_beijing_exchange": false,
+    "exclude_name_keywords": [
+      "ST",
+      "退",
+      "N",
+      "C"
+    ],
+    "min_price": 3.0,
+    "max_price": 300.0,
+    "min_daily_change": -5.0,
+    "max_daily_change": 7.0,
+    "min_amount_cny": 100000000,
+    "min_market_cap_cny": 5000000000,
+    "min_turnover_rate": 0.5,
+    "max_turnover_rate": 15.0,
+    "min_pe_ttm": 0.0,
+    "max_pe_ttm": 100.0,
+    "max_pb": 15.0,
+    "min_momentum_60d": -15.0,
+    "max_momentum_60d": 60.0
+  },
+  "factor_weights": {
+    "momentum": 0.3,
+    "value": 0.2,
+    "liquidity": 0.15,
+    "activity": 0.15,
+    "daily_strength": 0.1,
+    "size": 0.1
+  },
+  "sources": [
+    {
+      "name": "stock_snapshot",
+      "source": "AkShare / 腾讯证券",
+      "fetched_at": "2026-08-26T11:01:50+08:00",
+      "stale": false,
+      "error": ""
+    },
+    {
+      "name": "industries",
+      "source": "AkShare / 新浪行业",
+      "fetched_at": "2026-08-26T11:01:50+08:00",
+      "stale": false,
+      "error": ""
+    },
+    {
+      "name": "indices",
+      "source": "AkShare / 新浪指数",
+      "fetched_at": "2026-08-26T11:01:50+08:00",
+      "stale": false,
+      "error": ""
+    },
+    {
+      "name": "news",
+      "source": "AkShare / 同花顺快讯",
+      "fetched_at": "2026-08-26T11:01:50+08:00",
+      "stale": false,
+      "error": ""
+    },
+    {
+      "name": "trading_calendar",
+      "source": "AkShare / 新浪交易日历",
+      "fetched_at": "2026-08-26T11:01:50+08:00",
+      "stale": false,
+      "error": ""
+    }
+  ],
+  "run_id": 4,
+  "generated_at": "2026-08-26T11:01:50+08:00",
+  "offline": false,
+  "experiment_id": "qwen-code-agent",
+  "run_name": "110150-568-qwen-code-agent",
+  "force_analysis": false,
+  "ai": {
+    "status": "enabled",
+    "provider": "qwen-code",
+    "transport": "local-file-bridge",
+    "configured_models": {
+      "scout": "qwen-code-agent",
+      "analyst": "qwen-code-agent",
+      "verifier": "qwen-code-agent"
+    },
+    "usage_reporting": "estimated",
+    "harness_io": "output/2026-08-26/runs/110150-568-qwen-code-agent/harness_io",
+    "models": {
+      "scout": "qwen-code-agent",
+      "analyst": "qwen-code-agent",
+      "verifier": "qwen-code-agent"
+    },
+    "analysis_models": [
+      "qwen-code-agent"
+    ],
+    "prompt_version": "tech-intel-v2",
+    "usage": {
+      "input_tokens": 140307,
+      "output_tokens": 10224,
+      "calls": 9,
+      "estimated": true
+    }
+  },
+  "intelligence": {
+    "collected_documents": 180,
+    "clustered_events": 40,
+    "published_events": 5,
+    "deep_events": 5,
+    "quality": {
+      "policy_version": "evidence-gate-v1",
+      "average_score": 100.0,
+      "passed": 5,
+      "downgraded": 0,
+      "issue_counts": {}
+    },
+    "cache": {
+      "scope": "qwen-code-agent-4667c22ba498",
+      "hits": 1,
+      "misses": 4,
+      "forced": false
+    },
+    "sources": [
+      {
+        "name": "anthropic_official",
+        "source": "Anthropic News & Research",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 15,
+        "error": ""
+      },
+      {
+        "name": "arxiv_ai_software",
+        "source": "arXiv（AI与软件）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 30,
+        "error": ""
+      },
+      {
+        "name": "arxiv_biotech",
+        "source": "arXiv（计算生物）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 8,
+        "error": ""
+      },
+      {
+        "name": "arxiv_compute_systems",
+        "source": "arXiv（芯片、系统与应用物理）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 30,
+        "error": ""
+      },
+      {
+        "name": "autoware_releases",
+        "source": "Autoware Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "biorxiv_ai4science",
+        "source": "bioRxiv（AI4Science过滤）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 14,
+        "error": ""
+      },
+      {
+        "name": "cleantechnica_frontier",
+        "source": "CleanTechnica（能源技术过滤）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 8,
+        "error": ""
+      },
+      {
+        "name": "deepmind_blog",
+        "source": "Google DeepMind",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "flagembedding_releases",
+        "source": "BAAI FlagEmbedding Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "flaggems_releases",
+        "source": "BAAI FlagGems Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 1,
+        "error": ""
+      },
+      {
+        "name": "flagscale_releases",
+        "source": "BAAI FlagScale Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "huggingface_blog",
+        "source": "Hugging Face Blog",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 2,
+        "error": ""
+      },
+      {
+        "name": "huggingface_daily_papers",
+        "source": "arXiv（Hugging Face Daily Papers精选）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 15,
+        "error": ""
+      },
+      {
+        "name": "ieee_spectrum",
+        "source": "IEEE Spectrum",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 2,
+        "error": ""
+      },
+      {
+        "name": "isomorphic_labs_articles",
+        "source": "Isomorphic Labs Articles",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "langgraph_releases",
+        "source": "LangGraph Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "llamacpp_releases",
+        "source": "llama.cpp Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 10,
+        "error": ""
+      },
+      {
+        "name": "lmdeploy_releases",
+        "source": "Shanghai AI Lab LMDeploy Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "meta_newsroom_ai",
+        "source": "Meta Newsroom（AI过滤）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "mistral_news",
+        "source": "Mistral AI News",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 1,
+        "error": ""
+      },
+      {
+        "name": "mit_ai",
+        "source": "MIT News AI",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "mmengine_releases",
+        "source": "Shanghai AI Lab MMEngine Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "ms_research",
+        "source": "Microsoft Research",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "nature_ai",
+        "source": "Nature Machine Intelligence",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "nature_biotech",
+        "source": "Nature Biotechnology",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "nvidia_blog",
+        "source": "NVIDIA Blog",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 1,
+        "error": ""
+      },
+      {
+        "name": "openai_news",
+        "source": "OpenAI News",
+        "fetched_at": "",
+        "stale": true,
+        "count": 0,
+        "error": "SSLError: HTTPSConnectionPool(host='openai.com', port=443): Max retries exceeded with url: /news/rss.xml (Caused by SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol (_ssl.c:1010)')))"
+      },
+      {
+        "name": "pytorch_releases",
+        "source": "PyTorch Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 10,
+        "error": ""
+      },
+      {
+        "name": "qlib_releases",
+        "source": "Qlib Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "rdagent_releases",
+        "source": "RD-Agent Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "toms_hardware_frontier",
+        "source": "Tom's Hardware（前沿硬件过滤）",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 13,
+        "error": ""
+      },
+      {
+        "name": "transformers_releases",
+        "source": "Transformers Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "us_doe",
+        "source": "U.S. Department of Energy",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      },
+      {
+        "name": "vllm_releases",
+        "source": "vLLM Releases",
+        "fetched_at": "2026-08-26T11:01:50+08:00",
+        "stale": false,
+        "count": 0,
+        "error": ""
+      }
+    ],
+    "errors": [
+      "extraction biorxiv_ai4science/b254ca4d341d1964f4ab37a1: HTTPError: 429 Client Error: Too Many Requests for url: https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1"
+    ]
+  },
+  "freshness": {
+    "failed_or_cached_sources": [
+      "openai_news"
+    ],
+    "all_sources_fresh": false
+  },
+  "output": {
+    "run_name": "110150-568-qwen-code-agent",
+    "run_directory": "2026-08-26/runs/110150-568-qwen-code-agent"
+  }
+}

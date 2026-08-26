@@ -1,0 +1,7 @@
+{
+  "supported_evidence_indexes": [0, 1, 2, 3, 4, 5],
+  "unsupported_claims": [],
+  "confidence_adjustment": 0.0,
+  "verdict": "pass",
+  "notes": "6条证据均为摘要原文逐字引用且支持对应结论；关键数字（807,366条源观测、7个主要资源、759,105个唯一精确序列、Core 11,867、Prediction Extension 745,092、Context 2,146、11,259个合格序列、11个PLM嵌入）与摘要一致；三层证据架构、统一富集（InterProScan/PDB/AlphaFold DB）、common representation contract、无通用基准的定位描述准确。本次文档仅含摘要（全文富化未成功），草稿已在maturity与risks中如实标注该局限，所有主张均限于摘要可支撑范围。公司假设属独立待核验机制。单一一手来源（bioRxiv预印本摘要），置信度0.65反映摘要级证据深度。"
+}

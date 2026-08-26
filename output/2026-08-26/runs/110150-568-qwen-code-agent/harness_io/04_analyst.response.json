@@ -1,0 +1,39 @@
+{
+  "headline": "bioRxiv：PhageLysData噬菌体裂解酶AI-ready数据集，80.7万观测整合为75.9万精确序列，含11个蛋白语言模型嵌入",
+  "key_facts": [
+    "bioRxiv预印本（2026-08-24，doi:10.64898/2026.08.24.746620）发布PhageLysData：噬菌体裂解酶与去聚合酶的evidence-aware、AI-ready数据集，通过可复现多源整合、溯源跟踪与精确序列合并构建。",
+    "整合7个主要资源的807,366条源观测为759,105个唯一精确序列实体：11,867个有证据支持的Core、745,092个仅预测的Prediction Extension、2,146个保留溯源的Context。",
+    "Core实体富集了协调的生物注释、理化性质、独立InterProScan功能注释、PDB与AlphaFold DB结构资产、可复用数值表示；11,259个合格Core序列提供11个蛋白语言模型嵌入+one-hot，遵循统一表示契约。",
+    "发布示例覆盖潜空间探索、无监督聚类、有监督分类与证据感知候选检索；未定义通用预测基准，定位为数据基础而非方法。"
+  ],
+  "technical_mechanism": "PhageLysData的核心设计是区分'证据强度'的三层实体架构：Core（11,867）仅含有实验/文献证据支持的序列，Prediction Extension（745,092）为无独立证据的预测工具候选，Context（2,146）为溯源与参考保留。该架构在保持宽序列空间覆盖的同时，明确区分非预测支持与预测衍生支持，避免领域内预测与测量混杂的常见问题。Core实体在统一契约下富集：协调生物注释、理化性质、独立InterProScan功能注释、映射的PDB与AlphaFold DB结构资产、可复用数值表示。对11,259个合格Core序列，提供11个蛋白语言模型嵌入与one-hot编码，使跨模型比较与下游任务构建可直接执行。",
+  "novelty": "已有噬菌体酶数据分散在通用数据库、专门资源、基因组集合与预测数据集中，缺乏统一的evidence-aware资源。PhageLysData的新意：(1) 显式区分证据强度的三层架构（Core/Prediction/Context）并带溯源跟踪；(2) 80.7万条多源观测整合为75.9万精确序列的去重合并；(3) 统一富集（注释+结构+11个PLM嵌入）与common representation contract，直接AI-ready。它不定义通用预测基准，定位为可复用的数据基础。",
+  "maturity": "数据发布阶段：资源可追溯、版本化、计算可访问，发布示例演示了四类用法。局限：本次仅获得摘要（全文未成功富化），具体整合流水线细节与质量控制标准无法核实；Core仅11,867条序列，有证据支持集合的规模有限。",
+  "outlook_6_24m": "未来6-12个月，PhageLysData可作为噬菌体酶机器学习任务（功能预测、结构建模、候选检索）的基础数据集，支持抗菌药物开发与蛋白质工程方向；'证据感知+统一表示契约'的设计可能成为其他专门蛋白数据集的参考范式。12-24个月，若噬菌体疗法产业推进（抗菌耐药危机驱动），此类数据资源将支撑噬菌体酶发现的AI化；11个PLM嵌入也为蛋白语言模型提供了现成的跨模型比较基质。",
+  "industry_impacts": [
+    {"segment": "抗菌药物与噬菌体疗法", "direction": "positive", "horizon": "12-24m", "rationale": "AI-ready噬菌体裂解酶数据基础支持抗菌开发中的候选发现与蛋白工程"},
+    {"segment": "计算生物学数据集", "direction": "positive", "horizon": "6-12m", "rationale": "证据感知三层架构+统一表示契约为专门蛋白数据集构建提供参考范式"},
+    {"segment": "蛋白语言模型", "direction": "positive", "horizon": "6-12m", "rationale": "11,259条Core序列的11个PLM嵌入提供现成的跨模型比较与评估基质"}
+  ],
+  "risks": [
+    "本次仅获得摘要，全文流水线细节与质量控制标准无法核实",
+    "有证据支持的Core仅11,867条序列，高置信集合规模有限",
+    "未定义通用预测基准，下游任务性能依赖使用者自行构建"
+  ],
+  "counterpoints": [
+    "745,092条仅预测候选占总量的98%，若预测工具存在系统偏差，序列空间覆盖可能误导",
+    "作为数据资源而非方法论文，对产业的直接影响是间接的，价值实现依赖下游应用"
+  ],
+  "confidence": 0.65,
+  "evidence": [
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "We present PhageLysData, an evidence-aware and AI-ready resource constructed through reproducible multisource integration, provenance tracking, and exact-sequence consolidation.", "locator": "摘要"},
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "The release integrates 807,366 source observations from seven primary resources into 759,105 unique exact-sequence entities, comprising an evidence-supported Core of 11,867 entities, a Prediction Extension of 745,092 prediction-only candidates, and 2,146 Context entities retained for provenance and reference.", "locator": "摘要"},
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "Core entities are enriched with harmonized biological annotations, physicochemical properties, independent InterProScan-derived functional annotations, mapped PDB and AlphaFold DB structural assets, and reusable numerical representations.", "locator": "摘要"},
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "For 11,259 eligible Core sequences, PhageLysData provides embeddings from 11 protein language models together with one-hot encoding under a common representation contract.", "locator": "摘要"},
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "Release-facing examples demonstrate latent-space exploration, unsupervised clustering, supervised classification, and evidence-aware candidate retrieval without defining a universal predictive benchmark.", "locator": "摘要"},
+    {"document_id": "b254ca4d341d1964f4ab37a1", "url": "https://www.biorxiv.org/content/10.64898/2026.08.24.746620v1?rss=1", "quote": "PhageLysData provides a traceable, versioned, and computationally accessible foundation for protein retrieval, comparative analysis, task-specific dataset construction, and machine-learning applications involving phage lytic enzymes and depolymerases.", "locator": "摘要"}
+  ],
+  "company_hypotheses": [
+    {"code": "300347", "name": "泰格医药", "rationale": "医药研发外包服务商，具备抗感染药物研发管线，噬菌体酶AI数据资源可支撑其抗菌药物发现", "keywords": ["CRO", "抗感染", "药物研发"], "confidence": 0.15}
+  ]
+}

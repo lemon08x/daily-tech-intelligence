@@ -1,0 +1,39 @@
+{
+  "headline": "arXiv企业网络安全研究方法论综述：11方法族转可执行协议，论证IDS算法排名不一致是评估设计问题",
+  "key_facts": [
+    "arXiv:2608.24850（2026-08-25，威斯康星大学Stout分校）为企业网络安全研究方法的叙述性综述：151篇语料全部标识符经registry核验，中位发表年份2020，58篇来自2023年之后。",
+    "将方法实践组织为11个方法族（系统综述、设计科学、访谈、受控检测实验、攻击图、testbed部署、随机现场试验等），每族映射其回答的研究问题类别与所'授权'的声明类别。",
+    "把每个方法族转化为可执行协议：有序步骤、所需测量工具与公式、评估标准、常见效度威胁、报告清单，配统一视觉词汇的协议图（16幅）；给出6步机械选择程序（写声明→分类→剔除更弱授权族→验证数据可及性→取两族三角验证→预指定阴性结果）。",
+    "对语料中最明显矛盾的worked分析：入侵检测算法排名跨研究不一致（一项随机森林99.9%>CNN/RNN 98%，另一项深度前馈第一，第三项RNN第一），作者论证最简约解释是评估设计差异而非算法差异，头条基准准确率不是企业性能的稳定估计。"
+  ],
+  "technical_mechanism": "论文核心是'声明授权'（claim licensing）框架：每个方法族只授权特定形式的陈述（描述性/关联性/因果性/构造性/比较性），研究做出更强形式声明即犯下'再多的技术仔细也无法修复'的错误。选择程序刻意机械化：(1) 用一句话（过去时、带总体与条件）写出要做的声明，写不出则研究未定义；(2) 对声明分类；(3) 读Table II授权列，剔除所有授权形式弱于声明的族；(4) 验证数据可及性——企业研究受访问约束而非技术约束；(5) 若多个族幸存，取两个（一个技术族+一个组织族）做三角验证；(6) 预指定阴性结果——什么观察会让你报告方法无效。每个协议以图呈现（蓝=步骤、琥珀=强制决策、绿=必需产物、红=附着效度威胁），设计为研究设计时直接使用。",
+  "novelty": "已有方法学讨论或分散在各单一社区、或限于单一方法的报告标准（如RAMESES）。本文新意：(1) 跨传统的11族分类法+声明授权映射，'方法跟随被研究的决策而非研究者训练'；(2) 把每族转为可执行协议（步骤+工具+公式+标准+威胁+清单+图），而非描述性指导；(3) 把文献矛盾本身当作证据——用IDS算法排名不一致作worked example，论证评估设计而非算法是方差主源；(4) 151篇标识符全部registry核验、核验程序与失败均报告的语料。",
+  "maturity": "方法学综合阶段：论文本身是叙述性综述（非实证研究），协议是'可跟随'（有序、有门控、每步产物明确）而非软件；作者明确声明叙述性综述对选择视角的易感性。语料中位年份2020、58/151来自2023年后。未报告协议集的独立验证（如评分者间一致性）。",
+  "outlook_6_24m": "未来6-12个月，'声明授权+可执行协议'框架有望被企业安全研究团队与评审用作设计期检查单，尤其阴性结果预指定与双族三角验证要求；IDS基准排名不稳定的结论将进一步削弱'最高准确率'在安全产品评估中的说服力。12-24个月，随着LLM辅助安全研究增多，方法学纪律（效度推理、报告清单）将成为区分高质量研究的分水岭，本文框架可能成为引用锚点。",
+  "industry_impacts": [
+    {"segment": "安全研究与评估", "direction": "positive", "horizon": "6-12m", "rationale": "可执行协议与报告清单为企业安全研究提供设计期工具，降低'回答没人问的问题'的比例"},
+    {"segment": "安全产品基准测试", "direction": "mixed", "horizon": "6-12m", "rationale": "IDS算法排名被论证为评估设计问题，削弱头条准确率的营销说服力，提高基准对比成本"},
+    {"segment": "安全运营成熟度", "direction": "positive", "horizon": "12-24m", "rationale": "技术与组织证据三角验证要求与安全运营向技术+流程+人员综合度量演进一致"}
+  ],
+  "risks": [
+    "叙述性综述形式：作者明确声明对选择视角的易感性，语料非领域全覆盖",
+    "协议非软件，有效性依赖使用者执行，未报告独立验证（如评分者间一致性）",
+    "语料中位发表年份2020，最近2-3年方法实践（如LLM-based安全研究）覆盖可能不足"
+  ],
+  "counterpoints": [
+    "IDS矛盾分析是单一worked example，'评估设计为主因'解释对其他矛盾的可推广性未系统检验",
+    "作为方法学论文不直接推进安全技术本身，对产业的直接影响是间接的"
+  ],
+  "confidence": 0.72,
+  "evidence": [
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "First, it is a narrative review and synthesis of the methodological practice visible in a corpus of 151 works whose identifiers were all checked against a registry before inclusion, organising that practice into eleven families", "locator": "Abstract"},
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "Second, it converts each family into an executable protocol: ordered steps, the instruments and formulas the steps require, the evaluation criteria that make a result defensible, the validity threats that most often invalidate it, and a reporting checklist.", "locator": "Abstract"},
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "The reported ranking of intrusion-detection algorithms is inconsistent across studies that are individually careful: one comparison places random forest at 99.9% accuracy above convolutional and recurrent networks at 98%, another places deep feed-forward networks first, and a third places recurrent networks first.", "locator": "Abstract"},
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "We argue that the pattern is most parsimoniously explained by evaluation design rather than by the algorithms, because the studies differ in every design dimension known to move the reported number by more than the margins that separate them.", "locator": "Abstract"},
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "the corpus median publication year is 2020 and 58 of the 151 works date from 2023 onward", "locator": "I-B. Scope"},
+    {"document_id": "19bbbae571ad22cbeee15d41", "url": "http://arxiv.org/abs/2608.24850v1", "quote": "arXiv:2608.24850v1  [cs.CR]  25 Aug 2026", "locator": "页脚"}
+  ],
+  "company_hypotheses": [
+    {"code": "002439", "name": "任子行", "rationale": "综合安全厂商，安全产品评估与研究方法论规范化与其产品基准测试实践相关", "keywords": ["网络安全", "安全评估"], "confidence": 0.15}
+  ]
+}

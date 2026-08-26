@@ -1,0 +1,7 @@
+{
+  "supported_evidence_indexes": [0, 1, 2, 3, 4, 5],
+  "unsupported_claims": [],
+  "confidence_adjustment": 0.0,
+  "verdict": "pass",
+  "notes": "6条证据均为原文逐字引用且支持对应结论；关键数字（10,145 Tflop/s FP4、5,072 Tflop/s FP8、750W TDP、7TB/s HBM、6144芯片62 exaflop/s、8.6 PiB/s以太网、28×400Gbps ANC、1.4TB/s全双工、99.69% roofline、30% TCO/15%能耗、TSMC 3nm 1400亿晶体管、26×33mm die、存储<20%芯片面积、1:3收敛比）均与原文一致；SDLA架构描述（控制/数据路径分离、DISA信号量、scratchpad取代缓存、TTU+TVP tile结构、ANC纳入数据路径）准确；ATLv2影响Ultra Ethernet标准化有原文支撑。'内部数据'与'非穷尽基准'等厂商自述性质在risks中如实标注。公司假设属独立待核验机制。单一一手来源（微软官方arXiv论文），置信度0.85符合单来源上限。"
+}
