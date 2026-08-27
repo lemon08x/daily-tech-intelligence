@@ -20,7 +20,7 @@ from daily_intel.core.models import (
 
 @dataclass(frozen=True, slots=True)
 class QualityPolicy:
-    version: str = "evidence-gate-v1"
+    version: str = "evidence-gate-v2"
     min_key_facts: int = 3
     max_key_facts: int = 6
     min_supported_evidence: int = 2
@@ -37,6 +37,7 @@ class QualityPolicy:
     lead_confidence_cap: float = .49
     section_max_chars: int = 900
     list_item_max_chars: int = 420
+    plain_takeaway_max_chars: int = 280
 
     @classmethod
     def from_settings(cls, settings: dict[str, Any]) -> "QualityPolicy":
@@ -64,6 +65,9 @@ class QualityPolicy:
             lead_confidence_cap=float(config.get("lead_confidence_cap", defaults.lead_confidence_cap)),
             section_max_chars=int(config.get("section_max_chars", defaults.section_max_chars)),
             list_item_max_chars=int(config.get("list_item_max_chars", defaults.list_item_max_chars)),
+            plain_takeaway_max_chars=int(
+                config.get("plain_takeaway_max_chars", defaults.plain_takeaway_max_chars)
+            ),
         )
 
     def prompt_contract(self) -> dict[str, Any]:
@@ -78,7 +82,12 @@ class QualityPolicy:
             "counterpoints": {"min": self.min_counterpoints, "max": self.max_counterpoints},
             "industry_impacts_max": self.max_industry_impacts,
             "section_max_chars": self.section_max_chars,
+            "plain_takeaway_max_chars": self.plain_takeaway_max_chars,
             "unsupported_claims_force_downgrade": self.downgrade_on_unsupported_claims,
+            "readability": {
+                "plain_takeaway_required": True,
+                "explain_terms_on_first_use": True,
+            },
         }
 
 
@@ -155,6 +164,8 @@ class AnalysisQualityGate:
             issues.append("missing_primary_source")
         if len(normalized_draft.key_facts) < self.policy.min_key_facts:
             issues.append("insufficient_key_facts")
+        if not normalized_draft.plain_takeaway.strip():
+            issues.append("missing_plain_takeaway")
         if any(not getattr(normalized_draft, name).strip() for name in self.REQUIRED_SECTIONS):
             issues.append("missing_required_sections")
         if len(normalized_draft.risks) < self.policy.min_risks:
@@ -194,7 +205,8 @@ class AnalysisQualityGate:
         if decision.deep:
             return Analysis(
                 event_id=event_id, status=AnalysisStatus.DEEP,
-                headline=draft.headline, key_facts=draft.key_facts,
+                headline=draft.headline, plain_takeaway=draft.plain_takeaway,
+                key_facts=draft.key_facts,
                 technical_mechanism=draft.technical_mechanism,
                 novelty=draft.novelty, maturity=draft.maturity,
                 outlook_6_24m=draft.outlook_6_24m,
@@ -206,7 +218,8 @@ class AnalysisQualityGate:
             )
         return Analysis(
             event_id=event_id, status=AnalysisStatus.LEAD,
-            headline=draft.headline, key_facts=draft.key_facts,
+            headline=draft.headline, plain_takeaway=draft.plain_takeaway,
+            key_facts=draft.key_facts,
             risks=["质量门降级：" + "、".join(decision.quality.issues)],
             confidence=decision.confidence, evidence=decision.evidence,
             quality=decision.quality, model=model,
@@ -236,6 +249,7 @@ class AnalysisQualityGate:
                 break
         return draft.model_copy(update={
             "headline": _compact(draft.headline, 220),
+            "plain_takeaway": _compact(draft.plain_takeaway, self.policy.plain_takeaway_max_chars),
             "key_facts": _normalize_list(
                 draft.key_facts, self.policy.max_key_facts, item_limit
             ),
@@ -287,7 +301,10 @@ class AnalysisQualityGate:
         score += 25 * min(1.0, evidence_count / max(1, self.policy.min_supported_evidence))
         score += 15 if primary_sources >= self.policy.min_primary_sources else 0
         score += 10 * min(1.0, fact_count / max(1, self.policy.min_key_facts))
-        score += 10 if all(getattr(draft, name).strip() for name in self.REQUIRED_SECTIONS) else 0
+        sections_complete = all(
+            getattr(draft, name).strip() for name in self.REQUIRED_SECTIONS
+        ) and bool(draft.plain_takeaway.strip())
+        score += 10 if sections_complete else 0
         score += 5 if not {"insufficient_risks", "insufficient_counterpoints"}.intersection(issues) else 0
         return int(round(max(0.0, min(100.0, score))))
 

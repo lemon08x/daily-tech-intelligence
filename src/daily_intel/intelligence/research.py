@@ -94,6 +94,7 @@ class EventResearcher:
             event_id=event.id,
             status=AnalysisStatus.LEAD,
             headline=event.title,
+            plain_takeaway=reason,
             key_facts=[reason] + [document.summary[:300] for document in documents[:2] if document.summary],
             risks=["尚未完成强模型深研与独立证据校验"],
             confidence=.3,

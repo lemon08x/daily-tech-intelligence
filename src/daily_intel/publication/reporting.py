@@ -11,6 +11,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from daily_intel.core.models import Analysis, Digest
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.market.normalize import clean_text
+from daily_intel.publication.plain_digest import build_plain_digest
 
 
 QUALITY_ISSUE_LABELS = {
@@ -19,6 +20,7 @@ QUALITY_ISSUE_LABELS = {
     "insufficient_evidence": "可定位证据不足",
     "missing_primary_source": "缺少一手来源",
     "insufficient_key_facts": "有效事实不足",
+    "missing_plain_takeaway": "缺少大白话要点",
     "missing_required_sections": "必填分析段缺失",
     "insufficient_risks": "风险项不足",
     "insufficient_counterpoints": "反面观点不足",
@@ -53,15 +55,52 @@ def _markdown_text(value: str) -> str:
     return clean_text(value, 1000).replace("|", "\\|").replace("\n", " ")
 
 
+def _render_plain_digest_markdown(digest: dict[str, Any]) -> list[str]:
+    if not digest.get("has_content"):
+        return []
+    lines = [
+        "## 今日速读", "",
+        "用大白话先看当天主线。术语会在第一次出现时解释；下面的精选和行情表可用来核对原文。", "",
+        "### 1. 前沿科技", "",
+    ]
+    tech_items = digest.get("tech_items") or []
+    if not tech_items:
+        lines.extend(["今日没有可发布的科技事件。", ""])
+    for index, item in enumerate(tech_items, 1):
+        takeaway = _markdown_text(item.get("takeaway", ""))
+        url = item.get("url") or ""
+        if url:
+            takeaway = f"[{takeaway}]({url})"
+        lines.append(f"{index}. {takeaway}")
+    lines.extend(["", "### 2. A股行情", "", f"**盘面：** {_markdown_text(digest.get('market_line', ''))}", ""])
+    hot = [name for name in digest.get("hot_industries") or [] if name]
+    if hot:
+        lines.append(f"**相对强势：** {'、'.join(hot)}")
+        lines.append("")
+    threads = digest.get("news_threads") or []
+    if threads:
+        lines.extend(["**今日线索：**", ""])
+        for item in threads:
+            line = _markdown_text(item.get("line") or item.get("title") or "")
+            url = item.get("url") or ""
+            if url:
+                line = f"[{line}]({url})"
+            lines.append(f"- {line}")
+        lines.append("")
+    return lines
+
+
 def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
     breadth = context["breadth"]
+    digest = context.get("plain_digest") or {}
     lines = [
         f"# {context['title']} · {context['report_date']}", "",
         f"> 行情交易日：**{context['market_date']}**；AI状态：**{context['ai_status_label']}**；"
         f"实验：**{context.get('experiment_id', 'default')}**；"
         f"运行：**{context.get('run_name', 'default')}**。", "",
-        "## 新闻精选", "",
     ]
+    lines.extend(_render_plain_digest_markdown(digest))
+    lines.extend(["## 新闻精选", ""])
     if not analyses:
         lines.extend(["今日没有可发布的科技事件。请查看数据源状态或在联网后重试。", ""])
     for index, analysis in enumerate(analyses, 1):
@@ -78,6 +117,8 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
             f"### {index}. {headline}", "",
             f"**状态：{label} · 置信度 {analysis.confidence:.0%} · {audit}**", "",
         ])
+        if analysis.plain_takeaway:
+            lines.extend([f"**一句话：** {_markdown_text(analysis.plain_takeaway)}", ""])
         if quality.issues:
             reasons = "、".join(quality_issue_label(item) for item in quality.issues)
             lines.extend([f"> 质量门降级原因：{reasons}", ""])
@@ -213,7 +254,9 @@ def publish(
         "model_runtime": {},
         "quality_summary": {},
         **context,
+        "plain_digest": build_plain_digest(analyses, context),
     }
+    context = {**context, "plain_digest": render_context["plain_digest"]}
     html_path.write_text(
         env.get_template("report.html.j2").render(**render_context), encoding="utf-8"
     )

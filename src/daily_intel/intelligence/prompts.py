@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 
-from daily_intel.core.models import AnalysisDraft, Document, Event
+from daily_intel.core.models import (
+    AnalysisDraft, Document, Event, ScoutBatch, VerificationResult,
+)
 
 
 SCOUT_SYSTEM = """你是科技产业情报编辑。只依据用户提供的事件摘要评分，不使用未提供的事实。
@@ -11,7 +13,14 @@ SCOUT_SYSTEM = """你是科技产业情报编辑。只依据用户提供的事�
 
 
 ANALYST_SYSTEM = """你是审慎的科技产业研究员。只可使用输入文档中的事实，不得用记忆补全。
-写出技术机制、新颖性、成熟度、未来6至24个月影响、风险及反面观点。
+读者是关心科技与A股的非专业人士：先把事情讲明白，再保留必要术语。
+
+字段要求：
+- headline：一句人能看懂的标题，写清谁做了什么。不要写成论文题目、发行说明标题或缩写堆砌。
+- plain_takeaway：2到3句大白话。先说发生了什么、为什么值得看；专业名词第一次出现必须立刻用人话解释，例如“稀疏注意力（QSA，只精读最相关的几段，而不是整篇硬读）”。
+- key_facts：每条先写结论，再跟必要数字或专名。数字要带单位和对照。禁止把论文摘要、变更列表或内部指标名原样搬进来。
+- technical_mechanism、novelty、maturity、outlook_6_24m：给愿意展开的读者看，仍须在首次出现时解释术语。
+解释只能转述文档已给出的机制，不得借解释引入文档没有的数字、排名、国别、产品能力或因果判断。
 evidence.quote必须逐字复制输入文档中的连续文本，并填写对应document_id和URL。
 公司关联只是待核验假设，每个事件最多3个；不能确定六位A股代码和名称时不要输出。
 严格遵守requirements.quality_contract的数量和长度边界；不要为了填满字段重复事实或堆砌引用。
@@ -21,6 +30,7 @@ evidence.quote必须逐字复制输入文档中的连续文本，并填写对应
 VERIFIER_SYSTEM = """你是独立证据审计员。检查草稿是否被给定文档支持。
 supported_evidence_indexes只能列出引用确实存在且能支持相关结论的零基索引。
 发现过度推断、营销表述当事实或公司映射缺乏依据时写入unsupported_claims。
+术语解释和类比只要不引入新的数量、排名、国别、产品能力或因果判断，不算新事实；若解释把文档未写的效果说成已验证事实，必须写入unsupported_claims。
 只要存在实质性unsupported_claims，verdict就不得为pass；证据不足时必须downgrade或reject。
 不要因文字完整、引用数量多或模型自报置信度高而放宽标准。输出严格JSON。"""
 
@@ -40,7 +50,8 @@ def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -
         )
     return json.dumps(
         {"allowed_topics": [{"id": t["id"], "name": t["name"]} for t in topics], "events": payload,
-         "output": {"items": "ScoutItem[]，每个输入event_id恰好一项"}},
+         "output": "JSON object matching this schema: "
+                   + json.dumps(ScoutBatch.model_json_schema(), ensure_ascii=False)},
         ensure_ascii=False,
     )
 
@@ -76,6 +87,8 @@ def verifier_user(event: Event, documents: list[Document], draft: AnalysisDraft)
                 for doc in documents
             ],
             "draft": draft.model_dump(mode="json"),
+            "output": "JSON object matching this schema: "
+                      + json.dumps(VerificationResult.model_json_schema(), ensure_ascii=False),
         },
         ensure_ascii=False,
     )

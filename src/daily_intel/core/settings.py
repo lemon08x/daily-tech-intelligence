@@ -8,7 +8,7 @@ import yaml
 
 WEIGHT_KEYS = {"momentum", "value", "liquidity", "activity", "daily_strength", "size"}
 QUALITY_DEFAULTS = {
-    "policy_version": "evidence-gate-v1",
+    "policy_version": "evidence-gate-v2",
     "min_key_facts": 3,
     "max_key_facts": 6,
     "min_supported_evidence": 2,
@@ -25,6 +25,7 @@ QUALITY_DEFAULTS = {
     "lead_confidence_cap": .49,
     "section_max_chars": 900,
     "list_item_max_chars": 420,
+    "plain_takeaway_max_chars": 280,
 }
 INTELLIGENCE_DEFAULTS = {
     "selection_deterministic_weight": .65,

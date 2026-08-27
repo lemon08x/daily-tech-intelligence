@@ -1,0 +1,19 @@
+生成今日科技产业情报与A股观察日报（无头定时任务，无人交互，请自主完成全部步骤）。
+
+工作目录：C:\Users\94202\Desktop\daily\daily-tech-intelligence
+
+步骤：
+1. 先读 AGENTS.md，遵守其中的 harness 契约。
+2. 后台启动流水线（输出重定向到 logs\harness_scheduled.log）：
+   .venv\Scripts\python.exe scripts\harness\run.py --harness-name "qwen-code" --model-name "qwen-code-agent" --experiment-id "qwen-code-agent"
+3. 运行目录为 output\<今日日期>\runs\<run-name>\。harness 把每个模型请求写入 harness_io\NN_<stage>.request.json 并阻塞，等待你把响应写入请求中指定的 response_file。
+4. 逐个处理请求（通常 1 个 scout + 每事件 1 个 analyst + 1 个 verifier，最多 5 事件）：
+   - 每个 analyst/verifier 请求先核实请求 JSON 中的 event_id 与文档内容，不要假设事件顺序。
+   - 通读请求中的文档全文（可用 python 把 content 提取到 .txt 再分段阅读）。
+   - analyst：按请求中 quality_contract 的边界写 AnalysisDraft（key_facts 3-6 条、evidence 2-6 条、risks 2-5、counterpoints 1-4、industry_impacts ≤4、各节 ≤900 字、列表项 ≤420 字）。evidence 的 quote 必须是文档的逐字子串——写完后用 .venv\Scripts\python.exe scripts\harness\check_quotes.py <request.json> <quotes.json> 逐条验证，FAIL 的用 scripts\harness\find_text.py 定位精确字符修正（注意 PDF 提取的连字符断行、弯引号、页码插入单词、丢空格）。
+   - verifier：独立审计，只有无实质性 unsupported_claims 才给 pass（unsupported_claims 非空会被质量门强制降级为线索）。
+   - 响应文件内容为 schema 原始 JSON（ScoutBatch/AnalysisDraft/VerificationResult），不要包额外字段。
+5. 流水线完成后检查 run_meta.json：确认 deep_events、quality、errors。extraction 类错误（如 429 限流）可接受，在总结中提及即可。
+6. 最后用不超过 200 字的中文总结：深研事件清单（标题+置信度）、质量分、错误数。
+
+约束：不要提交或推送代码；不要修改源码、配置或历史运行目录；邮件发送由外层脚本负责，你不需要发邮件。

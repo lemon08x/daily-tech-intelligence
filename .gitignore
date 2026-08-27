@@ -7,5 +7,5 @@ data/cache/
 logs/
 *.egg-info/
 .env
-data/intelligence.db*
+data/*.db*
 data/raw/

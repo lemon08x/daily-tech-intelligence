@@ -69,7 +69,9 @@ class FakeLLM(LLMClient):
             if self.fail_analyst:
                 raise ValueError("invalid model JSON")
             value = AnalysisDraft(
-                headline="加速器基准更新", key_facts=[
+                headline="加速器基准更新",
+                plain_takeaway="新加速器公布了可核对的基准结果，实际效果还要等独立复现。",
+                key_facts=[
                     "已发布新的基准结果",
                     "来源披露了技术实现路径",
                     "结果仍需要独立复现",

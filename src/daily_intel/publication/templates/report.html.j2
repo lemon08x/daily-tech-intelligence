@@ -33,6 +33,13 @@
     .section,.story,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
     .section { padding:24px; margin-top:16px; overflow:hidden; }
     .section-intro { max-width:760px; margin-top:-10px; }
+    .digest { border-left:4px solid var(--brand); }
+    .digest-block { margin-top:14px; }
+    .digest-block:first-of-type { margin-top:0; }
+    .digest-block h3 { font-size:17px; }
+    .digest-list { margin:8px 0 0; padding-left:22px; }
+    .digest-list li { margin:6px 0; }
+    .takeaway { margin:8px 0 10px; font-size:16px; line-height:1.7; }
     .story { padding:26px 28px; margin:14px 0; }
     .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
     .story-title a { color:var(--ink); }
@@ -113,8 +120,30 @@
   <header>
     <h1>{{ title }}</h1>
     <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">先阅读科技新闻，再按需查看A股行情。科技事件与公司关联为研究假设，不参与规则股票综合分。</p>
+    <p class="muted">先读今日速读，再按需查看精选原文和A股行情。科技事件与公司关联为研究假设，不参与规则股票综合分。</p>
   </header>
+
+  {% if plain_digest and plain_digest.has_content %}
+  <section class="section digest">
+    <h2>今日速读</h2>
+    <p class="muted section-intro">用大白话先看当天主线。术语会在第一次出现时解释；下面的精选和行情表可用来核对原文。</p>
+    <div class="digest-block">
+      <h3>1. 前沿科技</h3>
+      {% if plain_digest.tech_items %}
+      <ol class="digest-list">{% for item in plain_digest.tech_items %}<li>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.takeaway }}</a>{% else %}{{ item.takeaway }}{% endif %}</li>{% endfor %}</ol>
+      {% else %}<p class="muted">今日没有可发布的科技事件。</p>{% endif %}
+    </div>
+    <div class="digest-block">
+      <h3>2. A股行情</h3>
+      <p>{{ plain_digest.market_line }}</p>
+      {% if plain_digest.hot_industries %}<p><strong>相对强势：</strong>{{ plain_digest.hot_industries|join('、') }}</p>{% endif %}
+      {% if plain_digest.news_threads %}
+      <p><strong>今日线索：</strong></p>
+      <ul class="digest-list">{% for item in plain_digest.news_threads %}<li>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}{% if item.summary %} · {{ item.summary }}{% endif %}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
 
   <nav class="report-tabs" role="tablist" aria-label="日报内容">
     <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">新闻精选</button>
@@ -124,7 +153,7 @@
   <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
     <section class="section">
       <h2>今日科技精选 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
-      <p class="muted section-intro">每条先给出两点摘要；技术机制、产业影响、风险、证据及A股关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
+      <p class="muted section-intro">每条先给出大白话要点和两点摘要；技术机制、产业影响、风险、证据及A股关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
     </section>
 
     {% for analysis in analyses %}
@@ -135,6 +164,7 @@
       </div>
       <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
       <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
+      {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% endif %}
 
       {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
 

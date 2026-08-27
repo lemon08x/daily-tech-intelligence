@@ -24,6 +24,8 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
     assert resolve_path(settings, "cache_dir") == (root / "data" / "cache").resolve()
     assert configured_source_count(settings["sources"]) >= 30
     assert len(settings["sources"]["arxiv_sources"]) == 3
+    assert settings["llm"]["prompt_version"] == "tech-intel-v3"
+    assert settings["quality"]["policy_version"] == "evidence-gate-v2"
 
 
 def test_settings_rejects_obsolete_root_shape(tmp_path) -> None:
@@ -61,6 +63,7 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     now = datetime(2026, 8, 24, 10, tzinfo=timezone.utc)
     analysis = Analysis(
         event_id="event-1", status=AnalysisStatus.DEEP, headline="技术深研",
+        plain_takeaway="实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。",
         key_facts=["第一条核心事实", "第二条核心事实", "第三条补充事实"],
         technical_mechanism="这里解释技术机制。", novelty="这里说明新颖性。",
         maturity="原型验证阶段。", outlook_6_24m="未来影响仍取决于工程验证。",
@@ -93,8 +96,13 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "analyses": [analysis], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
         "prompt_version": "test-v1", "pipeline_errors": [], "breadth": breadth,
-        "eligible_count": 0, "candidate_records": [], "hot_industry_records": [],
-        "weak_industry_records": [], "index_records": [], "news_records": [{
+        "eligible_count": 0, "candidate_records": [],
+        "hot_industry_records": [{"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"}],
+        "weak_industry_records": [],
+        "index_records": [
+            {"code": "sh000001", "name": "上证指数", "price": 3912.15, "pct_change": 0.59},
+        ],
+        "news_records": [{
             "title": "市场简讯", "summary": "用于验证新闻页的短摘要。",
             "url": "https://example.com/brief", "published_at": "2026-08-24 09:00",
             "tags": "AI",
@@ -120,9 +128,14 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert '<details class="deep-dive">' in html
     assert 'href="https://example.com/source"' in html
     assert "阅读原文" in html and "市场简讯" in html
+    assert "今日速读" in html and "今日速读" in markdown
+    assert "实验室公布了一项可核对的工程改进" in html
+    assert "上证指数" in html and "涨跌参半" in html
+    assert "相对强势" in markdown and "金融行业" in markdown
     collapsed, expanded = html.split('<details class="deep-dive">', 1)
     assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
     assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
+    assert "一句话" in markdown
     assert "[技术深研](https://example.com/source)" in markdown
     payload = json.loads(outputs["intelligence"].read_text(encoding="utf-8"))
     assert payload["analyses"][0]["status"] == "deep"
@@ -241,3 +254,35 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
     assert publisher.metadata["ai"]["provider"] == "qwen-code-agent"
     assert publisher.metadata["ai"]["usage_reporting"] == "estimated"
     assert publisher.metadata["intelligence"]["quality"]["policy_version"] == "evidence-gate-v1"
+
+
+def test_plain_digest_explains_market_and_falls_back_without_takeaway() -> None:
+    from daily_intel.publication.plain_digest import build_plain_digest
+
+    analysis = Analysis(
+        event_id="event-1", status=AnalysisStatus.LEAD, headline="技术深研",
+        key_facts=["这项改进让长文推理更省计算。", "仍需独立复现。"],
+        confidence=.4,
+        quality=AnalysisQuality(policy_version="evidence-gate-v2", passed=False, score=40),
+        model="fixture-model", prompt_version="tech-intel-v3",
+        created_at=datetime(2026, 8, 24, 10, tzinfo=timezone.utc),
+    )
+    digest = build_plain_digest(
+        [analysis],
+        {
+            "breadth": {
+                "mood": "回暖", "advancing": 2946, "declining": 2448, "amount_cny": 1.82e12,
+            },
+            "index_records": [
+                {"code": "sh000001", "name": "上证指数", "price": 3912.15, "pct_change": 0.59},
+            ],
+            "hot_industry_records": [{"name": "金融行业"}],
+            "news_records": [{"title": "券商中报增长", "summary": "中信半年净利润超230亿元。", "url": "https://example.com/broker"}],
+        },
+    )
+    assert digest["has_content"]
+    assert digest["tech_items"][0]["takeaway"] == "这项改进让长文推理更省计算。"
+    assert "上证指数" in digest["market_line"]
+    assert "赚钱效应不错" in digest["market_line"]
+    assert digest["hot_industries"] == ["金融行业"]
+    assert digest["news_threads"][0]["title"] == "券商中报增长"

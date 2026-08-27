@@ -80,7 +80,7 @@ class CompanyMapping(StrictModel):
 class AnalysisQuality(StrictModel):
     """Deterministic audit result applied after all model stages."""
 
-    policy_version: str = "evidence-gate-v1"
+    policy_version: str = "evidence-gate-v2"
     passed: bool = False
     score: int = Field(default=0, ge=0, le=100)
     supported_evidence: int = Field(default=0, ge=0)
@@ -94,6 +94,7 @@ class Analysis(StrictModel):
     event_id: str
     status: AnalysisStatus
     headline: str
+    plain_takeaway: str = ""
     key_facts: list[str] = Field(default_factory=list, max_length=8)
     technical_mechanism: str = ""
     novelty: str = ""
@@ -152,11 +153,23 @@ class CompanyHypothesis(StrictModel):
 
 
 class AnalysisDraft(StrictModel):
-    headline: str
+    headline: str = Field(
+        description="给非专业读者的标题：写清谁做了什么、结果是什么，不要写成论文题目或发行说明标题。",
+    )
     # Draft limits are deliberately wider than published limits. The deterministic
     # quality gate normalizes verbose model responses before building Analysis.
-    key_facts: list[str] = Field(default_factory=list, max_length=16)
-    technical_mechanism: str
+    plain_takeaway: str = Field(
+        min_length=8,
+        description="2到3句大白话。先说发生了什么和为什么重要；缩写、算法名、指标名第一次出现必须用人话解释。解释不得引入文档没有的数字、排名或公司属性。",
+    )
+    key_facts: list[str] = Field(
+        default_factory=list,
+        max_length=16,
+        description="每条先写人能看懂的结论，再跟必要数字或专名。不要把论文摘要或变更列表原样搬进来。",
+    )
+    technical_mechanism: str = Field(
+        description="先用人话讲清机制，再保留必要术语；缩写首次出现必须解释。",
+    )
     novelty: str
     maturity: str
     outlook_6_24m: str
