@@ -67,25 +67,9 @@ def _render_plain_digest_markdown(digest: dict[str, Any]) -> list[str]:
             url = item.get("url") or ""
             if url:
                 scan = f"[{scan}]({url})"
-            lines.append(f"- {scan}")
-        lines.append("")
-    bars = digest.get("industry_bars") or []
-    if bars:
-        lines.append("**产业风向**")
-        for item in bars:
-            extra = f"：{item['why']}" if item.get("why") else ""
-            lines.append(
-                f"- {item.get('name', '')} {item.get('label', '')} `{item.get('spark', '')}`{extra}"
-            )
-        lines.append("")
-    board = digest.get("board") or []
-    if board:
-        lines.append("**全球市场**")
-        for item in board:
-            extra = f"：{item['why']}" if item.get("why") else ""
-            lines.append(
-                f"- {item.get('region', '')} {item.get('label', '')} {item.get('label_change', '')}{extra}"
-            )
+            kicker = _markdown_text(item.get("kicker") or "")
+            prefix = f"**{kicker}** " if kicker else ""
+            lines.append(f"- {prefix}{scan}")
         lines.append("")
     return lines
 
@@ -159,7 +143,7 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
 
     lines.extend([
         "## 市场情报", "",
-        "只保留能解释交易原因的事件：政策、监管、供给冲击、合作与禁令。不展示资金流向和常规涨跌名单。", "",
+        "只保留能解释交易原因的事件：政策、监管、供给冲击、合作与禁令。产业和全球市场列出当日涨跌前三后三，或幅度够大的条目。", "",
     ])
     bars = digest.get("industry_bars") or []
     if bars:

@@ -31,6 +31,18 @@ COMMODITY_BOARD = (
     ("铜", "商品", "铜"),
 )
 
+TOPIC_KICKERS = (
+    ("机器人", ("robot", "robotics", "embodied", "humanoid", "具身", "机械臂", "机器人", "vla")),
+    ("生物", ("protein", "phage", "molecule", "molecular", "smiles", "crispr", "alphafold", "基因组", "蛋白质", "药物", "生物", "分子")),
+    ("航天", ("nasa", "rocket", "spacecraft", "mars", "火箭", "航天", "火星", "核热")),
+    ("能源", ("battery", "nuclear", "solar", "fusion", "储能", "光伏", "氢能", "核电", "电网")),
+    ("安全", ("security", "cyber", "vulnerability", "malware", "安全", "漏洞", "入侵")),
+    ("汽车", ("autonomous", "self-driving", "lidar", "adas", "自动驾驶", "智能汽车")),
+    ("芯片", ("gpu", "hbm", "semiconductor", "cuda", "nvfp4", "芯片", "算力", "光刻", "晶圆")),
+    ("软件", ("compiler", "framework", "transformers", "pytorch", "github", "runtime", "开源库")),
+    ("模型", ("language model", "llm", "moe", "attention", "agent", "qwen", "大模型", "智能体", "注意力")),
+)
+
 
 def _takeaway(analysis: Analysis) -> str:
     if analysis.plain_takeaway.strip():
@@ -52,6 +64,16 @@ def _one_sentence(value: str) -> str:
 
 def _scan_line(analysis: Analysis) -> str:
     return _one_sentence(_takeaway(analysis)) or clean_text(analysis.headline, 80)
+
+
+def _topic_kicker(analysis: Analysis) -> str:
+    haystack = " ".join(
+        [analysis.headline, analysis.plain_takeaway, *analysis.key_facts]
+    ).lower()
+    for label, keywords in TOPIC_KICKERS:
+        if any(keyword.lower() in haystack for keyword in keywords):
+            return label
+    return "科技"
 
 
 def _signed_percent(value: Any) -> str:
@@ -89,26 +111,34 @@ def _news_why(aliases: tuple[str, ...], news_records: list[dict[str, Any]]) -> s
     return ""
 
 
+def _ranked_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    valid = [row for row in rows if row.get("pct_change") is not None]
+    return sorted(valid, key=lambda row: float(row["pct_change"]), reverse=True)
+
+
 def _industry_bars(
-    rows: list[dict[str, Any]], news_records: list[dict[str, Any]], limit: int = 4,
+    rows: list[dict[str, Any]], news_records: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    ranked = _ranked_rows(rows)
+    total = len(ranked)
     picked: list[dict[str, Any]] = []
-    for row in rows:
+    seen: set[str] = set()
+    for index, row in enumerate(ranked):
         name = str(row.get("name") or "").strip()
-        if not name or row.get("pct_change") is None:
+        if not name or name in seen:
             continue
         change = float(row["pct_change"])
         why = _news_why((name,), news_records)
-        if abs(change) < INDUSTRY_MOVE_PCT and not why:
+        rank_ok = index < 3 or index >= total - 3
+        if not rank_ok and abs(change) < INDUSTRY_MOVE_PCT and not why:
             continue
+        seen.add(name)
         picked.append({
             "name": name,
             "pct_change": change,
             "leader": str(row.get("leader") or "").strip(),
             "why": why,
         })
-        if len(picked) >= limit:
-            break
     peak = max((abs(item["pct_change"]) for item in picked), default=1.0) or 1.0
     for item in picked:
         item["width"] = round(min(100.0, abs(item["pct_change"]) / peak * 100), 1)
@@ -134,38 +164,36 @@ def _board_item(region: str, label: str, row: dict[str, Any]) -> dict[str, Any]:
 def build_market_board(context: dict[str, Any]) -> list[dict[str, Any]]:
     quotes = list(context.get("index_records") or []) + list(context.get("global_index_records") or [])
     news_records = list(context.get("news_records") or [])
-    board: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
     for codes, region, label, hints in INDEX_BOARD:
         row = _match_quote(quotes, codes, hints)
-        if row is None or label in seen:
-            continue
-        change = row.get("pct_change")
-        why = _news_why((label, *hints), news_records)
-        if change is None:
-            continue
-        if abs(float(change)) < INDEX_MOVE_PCT and not why:
+        if row is None or label in seen or row.get("pct_change") is None:
             continue
         seen.add(label)
         item = _board_item(region, label, row)
-        item["why"] = why
-        board.append(item)
+        item["why"] = _news_why((label, *hints), news_records)
+        item["threshold"] = INDEX_MOVE_PCT
+        candidates.append(item)
     commodities = list(context.get("commodity_records") or [])
     for hint, region, label in COMMODITY_BOARD:
         row = _match_quote(commodities, (), (hint,))
-        if row is None or label in seen:
-            continue
-        change = row.get("pct_change")
-        why = _news_why((label, hint), news_records)
-        if change is None:
-            continue
-        if abs(float(change)) < COMMODITY_MOVE_PCT and not why:
+        if row is None or label in seen or row.get("pct_change") is None:
             continue
         seen.add(label)
         item = _board_item(region, label, row)
-        item["why"] = why
-        board.append(item)
-    return board
+        item["why"] = _news_why((label, hint), news_records)
+        item["threshold"] = COMMODITY_MOVE_PCT
+        candidates.append(item)
+    ranked = sorted(candidates, key=lambda item: float(item["pct_change"]), reverse=True)
+    total = len(ranked)
+    picked: list[dict[str, Any]] = []
+    for index, item in enumerate(ranked):
+        rank_ok = index < 3 or index >= total - 3
+        mag_ok = abs(float(item["pct_change"])) >= float(item["threshold"])
+        if rank_ok or mag_ok or item.get("why"):
+            picked.append(item)
+    return picked
 
 
 def build_plain_digest(
@@ -177,19 +205,23 @@ def build_plain_digest(
         url = analysis.evidence[0].url if analysis.evidence else ""
         tech_items.append({
             "headline": analysis.headline,
+            "kicker": _topic_kicker(analysis),
             "scan": _scan_line(analysis),
             "takeaway": _takeaway(analysis),
             "url": url,
             "status": analysis.status.value,
         })
     news_records = list(context.get("news_records") or [])
-    hot = list(context.get("hot_industry_records") or [])
-    weak = list(reversed(list(context.get("weak_industry_records") or [])))
-    industry_bars = _industry_bars(hot + weak, news_records)
+    industries = list(context.get("industry_records") or [])
+    if not industries:
+        industries = list(context.get("hot_industry_records") or []) + list(
+            context.get("weak_industry_records") or []
+        )
+    industry_bars = _industry_bars(industries, news_records)
     board = build_market_board(context)
     return {
         "tech_items": tech_items,
         "industry_bars": industry_bars,
         "board": board,
-        "has_content": bool(tech_items or industry_bars or board),
+        "has_content": bool(tech_items),
     }

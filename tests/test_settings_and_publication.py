@@ -138,10 +138,17 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "今日速读" in html and "今日速读" in markdown
     assert "市场情报" in html and "产业风向" in html
     assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in html.split("新闻精选", 1)[0]
+    assert "scan-kicker" in html.split("新闻精选", 1)[0]
     assert "技术深研" in html
     assert "纳斯达克" in html and "黄金" in html
     assert "赚钱效应" not in html
     digest_html = html.split('id="news-panel"', 1)[0]
+    digest_md = markdown.split("## 新闻精选", 1)[0]
+    market_html = html.split('id="market-panel"', 1)[1]
+    assert "产业风向" not in digest_html and "全球市场" not in digest_html
+    assert "金融行业" not in digest_html and "纳斯达克" not in digest_html
+    assert "**产业风向**" not in digest_md and "**全球市场**" not in digest_md
+    assert "产业风向" in market_html and "金融行业" in market_html
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" in html
     assert "金融行业" in markdown and "可归因事件" in markdown
@@ -286,28 +293,55 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
         {
             "index_records": [
                 {"code": "sh000001", "name": "上证指数", "price": 3912.15, "pct_change": 0.59},
+                {"code": "sz399001", "name": "深证成指", "price": 12000, "pct_change": 0.40},
+                {"code": "sz399006", "name": "创业板指", "price": 2100, "pct_change": 1.71},
+                {"code": "sh000300", "name": "沪深300", "price": 4000, "pct_change": 0.20},
             ],
             "global_index_records": [
                 {"code": "ndx", "name": "纳斯达克", "price": 18000, "pct_change": 1.15},
+                {"code": "spx", "name": "标普500", "price": 5600, "pct_change": 0.10},
+                {"code": "djia", "name": "道琼斯", "price": 39000, "pct_change": 0.08},
+                {"code": "hsi", "name": "恒生指数", "price": 18000, "pct_change": -0.20},
+                {"code": "n225", "name": "日经225", "price": 38000, "pct_change": -0.40},
+                {"code": "ks11", "name": "韩国综指", "price": 2600, "pct_change": -0.60},
             ],
             "commodity_records": [
                 {"code": "gc", "name": "COMEX黄金", "price": 4600, "pct_change": 0.80},
+                {"code": "cl", "name": "WTI原油", "price": 70, "pct_change": -0.69},
+                {"code": "hg", "name": "COMEX铜", "price": 4.5, "pct_change": -0.04},
             ],
-            "hot_industry_records": [
+            "industry_records": [
+                {"name": "半导体", "pct_change": 3.20, "leader": "某芯片"},
+                {"name": "有色金属", "pct_change": 2.80, "leader": "某有色"},
+                {"name": "化纤行业", "pct_change": 2.50, "leader": "某化纤"},
                 {"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"},
                 {"name": "农业", "pct_change": 0.40, "leader": "某农业"},
+                {"name": "食品", "pct_change": 0.20, "leader": "某食品"},
+                {"name": "传媒娱乐", "pct_change": -0.31, "leader": "某传媒"},
+                {"name": "公路桥梁", "pct_change": -0.63, "leader": "某公路"},
+                {"name": "酿酒行业", "pct_change": -0.75, "leader": "某酿酒"},
+                {"name": "电器行业", "pct_change": -1.09, "leader": "某电器"},
+                {"name": "发电设备", "pct_change": -1.63, "leader": "某电力"},
             ],
             "news_records": [{"title": "商务部宣布对半导体设备实施出口管制", "summary": "政策落地。", "url": "https://example.com/policy"}],
         },
     )
     assert digest["has_content"]
+    assert digest["tech_items"][0]["kicker"] == "科技"
     assert digest["tech_items"][0]["scan"] == "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。"
     assert "…" not in digest["tech_items"][0]["scan"]
     assert "news_threads" not in digest
     names = [item["name"] for item in digest["industry_bars"]]
-    assert "金融行业" in names
-    assert "农业" not in names
+    assert "半导体" in names and "金融行业" in names and "发电设备" in names
+    assert "农业" not in names and "食品" not in names and "传媒娱乐" not in names
     labels = [item["label"] for item in digest["board"]]
-    assert "上证" not in labels
-    assert "纳斯达克" in labels
-    assert "黄金" not in labels
+    assert "创业板" in labels and "纳斯达克" in labels and "黄金" in labels
+    assert "原油" in labels
+    assert "上证" not in labels and "铜" not in labels
+
+    robot = analysis.model_copy(update={
+        "headline": "多臂机器人协作",
+        "plain_takeaway": "新方法让多个机械臂在没见过的任务里也能分工。",
+    })
+    robot_digest = build_plain_digest([robot], {})
+    assert robot_digest["tech_items"][0]["kicker"] == "机器人"

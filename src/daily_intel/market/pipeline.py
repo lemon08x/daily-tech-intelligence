@@ -54,12 +54,16 @@ CAUSE_NEWS_TERMS = (
     "获批", "批准", "否决", "立案", "调查", "处罚", "召回", "事故", "停产",
     "投产", "量产", "突破", "加息", "降息", "美联储", "欧央行", "战争", "停火",
     "许可", "认证", "禁售", "限制", "中止", "投建", "开工", "落地",
+    "设立", "成立", "发布", "采购", "短缺", "扩产", "并购", "收购", "中标",
+    "投资", "建设", "实验室", "封锁", "扣押", "合同", "签订",
 )
 FLOW_NEWS_TERMS = (
     "北向", "南向", "成交额", "成交活跃", "融资余额", "两融", "主力资金",
     "净流入", "净流出", "涨停", "跌停", "高开", "低开", "翻红", "翻绿",
-    "净利润", "营收", "中报", "年报", "分红", "回购", "增持", "减持",
-    "业绩", "利润", "估值", "换手", "量能", "资金面", "赚钱效应",
+    "换手", "量能", "资金面", "赚钱效应",
+)
+EARNINGS_NEWS_TERMS = (
+    "净利润", "营收", "中报", "年报", "分红", "业绩",
 )
 
 
@@ -67,11 +71,15 @@ def _term_hits(text: str, terms: tuple[str, ...]) -> int:
     return sum(term.lower() in text for term in terms if term)
 
 
+def is_earnings_news(text: str) -> bool:
+    return _term_hits(text.lower(), EARNINGS_NEWS_TERMS) > 0
+
+
 def is_event_cause_news(text: str) -> bool:
     lowered = text.lower()
-    if _term_hits(lowered, CAUSE_NEWS_TERMS) > 0:
-        return True
-    return False
+    if is_earnings_news(lowered):
+        return False
+    return _term_hits(lowered, CAUSE_NEWS_TERMS) > 0
 
 
 def is_flow_news(text: str) -> bool:
@@ -80,17 +88,17 @@ def is_flow_news(text: str) -> bool:
 
 
 def rank_market_news(
-    news: pd.DataFrame, extra_keywords: list[str], limit: int,
+    news: pd.DataFrame, extra_keywords: list[str], limit: int, min_fill: int = 5,
 ) -> pd.DataFrame:
-    """Keep news that can explain why people traded; drop fund-flow and earnings noise."""
+    """Prefer event-cause news; if too few, fill with other important non-noise items."""
     if news.empty:
         return news
     frame = news.copy()
     searchable = (frame["title"].fillna("") + " " + frame["summary"].fillna("")).str.lower()
     extras = [keyword.lower() for keyword in extra_keywords if keyword]
 
-    def score(text: str) -> int:
-        if is_flow_news(text) or not is_event_cause_news(text):
+    def event_score(text: str) -> int:
+        if is_flow_news(text) or is_earnings_news(text) or not is_event_cause_news(text):
             return 0
         return (
             _term_hits(text, CAUSE_NEWS_TERMS) * 3
@@ -100,7 +108,21 @@ def rank_market_news(
             + sum(term in text for term in extras)
         )
 
-    frame["relevance"] = searchable.map(score)
+    def fill_score(text: str) -> int:
+        if (
+            is_flow_news(text) or is_earnings_news(text)
+            or is_event_cause_news(text) or not text.strip()
+        ):
+            return 0
+        return (
+            _term_hits(text, THEME_NEWS_TERMS) * 2
+            + _term_hits(text, A_SHARE_NEWS_TERMS) * 2
+            + _term_hits(text, GLOBAL_NEWS_TERMS)
+            + sum(term in text for term in extras)
+        )
+
+    frame["relevance"] = searchable.map(event_score)
+    frame["fill_score"] = searchable.map(fill_score)
     frame["tags"] = searchable.map(
         lambda text: "、".join(
             term for term in list(CAUSE_NEWS_TERMS) + extras
@@ -110,6 +132,12 @@ def rank_market_news(
     frame["summary"] = frame["summary"].map(lambda value: clean_text(value, 180))
     frame = frame.drop_duplicates(subset=["title"], keep="first")
     ranked = frame[frame["relevance"].gt(0)].sort_values("relevance", ascending=False)
+    need = max(0, min(limit, min_fill) - len(ranked))
+    if need:
+        fillers = frame.loc[
+            ~frame.index.isin(ranked.index) & frame["fill_score"].gt(0)
+        ].sort_values("fill_score", ascending=False).head(need)
+        ranked = pd.concat([ranked, fillers], ignore_index=True)
     return ranked.head(limit).reset_index(drop=True)
 
 
@@ -201,6 +229,7 @@ class MarketPipeline:
             "breadth": breadth,
             "eligible_count": int(universe["eligible"].sum()),
             "candidate_records": _records(top_candidates),
+            "industry_records": _records(industries),
             "hot_industry_records": _records(hot),
             "weak_industry_records": _records(weak),
             "index_records": _records(indices),

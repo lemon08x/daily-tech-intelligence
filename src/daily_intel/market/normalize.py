@@ -72,9 +72,23 @@ def normalize_global_quotes(raw: pd.DataFrame) -> pd.DataFrame:
     return out.drop_duplicates(subset=["name"]).reset_index(drop=True)
 
 
+def combine_news_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    parts = [normalize_news(frame) for frame in frames if frame is not None and not frame.empty]
+    if not parts:
+        return pd.DataFrame(columns=["title", "summary", "published_at", "url"])
+    return pd.concat(parts, ignore_index=True).drop_duplicates(subset=["title"], keep="first")
+
+
 def normalize_news(raw: pd.DataFrame) -> pd.DataFrame:
     columns=["title","summary","published_at","url"]
     if raw.empty: return pd.DataFrame(columns=columns)
+    if "title" in raw.columns:
+        return pd.DataFrame({
+            "title": raw["title"].astype(str),
+            "summary": raw["summary"].astype(str) if "summary" in raw.columns else "",
+            "published_at": raw["published_at"].astype(str) if "published_at" in raw.columns else "",
+            "url": raw["url"].astype(str) if "url" in raw.columns else "",
+        })
     if "标题" in raw:
         return pd.DataFrame({"title":raw["标题"].astype(str),"summary":raw.get("内容",pd.Series("",index=raw.index)).astype(str),"published_at":raw.get("发布时间",pd.Series("",index=raw.index)).astype(str),"url":raw.get("链接",pd.Series("",index=raw.index)).astype(str)})
     if "内容" in raw and "时间" in raw:

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from daily_intel.market.normalize import normalize_global_quotes, normalize_snapshot
+from daily_intel.market.normalize import combine_news_frames, normalize_global_quotes, normalize_news, normalize_snapshot
 from daily_intel.market.pipeline import rank_market_news
 
 
@@ -73,3 +73,79 @@ def test_rank_market_news_keeps_event_causes_and_drops_fund_news() -> None:
     assert titles[0].startswith("商务部")
     assert "美联储" in titles[1]
     assert all("北向" not in title and "中报" not in title and "文旅" not in title for title in titles)
+
+
+def test_rank_market_news_fills_when_event_causes_are_few() -> None:
+    news = pd.DataFrame([
+        {"title": "北向资金净流入超百亿", "summary": "成交额放大", "published_at": "2026-08-27", "url": "https://example.com/flow"},
+        {"title": "美联储宣布维持利率不变", "summary": "声明偏鹰", "published_at": "2026-08-27", "url": "https://example.com/fed"},
+        {"title": "英伟达称算力短缺将持续到2028年", "summary": "GPU供给仍然紧张", "published_at": "2026-08-27", "url": "https://example.com/nvda"},
+        {"title": "某地文旅节开幕", "summary": "与市场无关", "published_at": "2026-08-27", "url": "https://example.com/tour"},
+        {"title": "运机集团：2026年上半年净利润3771.6万元，同比下降48.60%", "summary": "中报披露", "published_at": "2026-08-27", "url": "https://example.com/earn"},
+        {"title": "沪指盘中回踩后有色金属走强", "summary": "有色金属板块活跃", "published_at": "2026-08-27", "url": "https://example.com/metal"},
+    ])
+    ranked = rank_market_news(news, ["有色金属"], 5, min_fill=3)
+    titles = ranked["title"].tolist()
+    assert any("美联储" in title for title in titles)
+    assert any("英伟达" in title for title in titles)
+    assert any("沪指" in title for title in titles)
+    assert all(
+        "北向" not in title and "文旅" not in title and "净利润" not in title
+        for title in titles
+    )
+    assert len(titles) >= 3
+
+
+def test_rank_market_news_does_not_go_empty_on_earnings_heavy_feed() -> None:
+    news = pd.DataFrame([
+        {"title": "运机集团：2026年上半年净利润3771.6万元，同比下降48.60%", "summary": "中报", "published_at": "2026-08-27", "url": "https://example.com/a"},
+        {"title": "尼泊尔北部山洪遇难人数升至289人", "summary": "救援", "published_at": "2026-08-27", "url": "https://example.com/b"},
+        {"title": "美国司法部拟重启捕获法庭以便扣押伊朗油轮", "summary": "加强对伊朗的海上封锁", "published_at": "2026-08-27", "url": "https://example.com/c"},
+        {"title": "众诚科技全资子公司签订2.92亿元合同", "summary": "信息化建设采购", "published_at": "2026-08-27", "url": "https://example.com/d"},
+    ])
+    ranked = rank_market_news(news, [], 5, min_fill=3)
+    titles = ranked["title"].tolist()
+    assert any("扣押" in title for title in titles)
+    assert any("合同" in title for title in titles)
+    assert all("净利润" not in title and "山洪" not in title for title in titles)
+
+
+def test_news_provider_merges_both_feeds(tmp_path, monkeypatch) -> None:
+    from datetime import datetime, timezone
+
+    from daily_intel.market.cache import CsvCache
+    from daily_intel.market.providers import AkShareProvider
+
+    ths = pd.DataFrame([
+        {"标题": "运机集团：2026年上半年净利润下降", "内容": "中报", "发布时间": "2026-08-27 18:00", "链接": "https://example.com/earn"},
+    ])
+    sina = pd.DataFrame([
+        {"时间": "2026-08-27 10:00", "内容": "【美联储宣布维持利率不变】声明偏鹰"},
+    ])
+    monkeypatch.setattr("daily_intel.market.providers.ak.stock_info_global_ths", lambda: ths)
+    monkeypatch.setattr("daily_intel.market.providers.ak.stock_info_global_sina", lambda: sina)
+    provider = AkShareProvider(CsvCache(tmp_path), datetime(2026, 8, 27, tzinfo=timezone.utc))
+    dataset = provider.news()
+    titles = dataset.frame["title"].tolist()
+    assert "运机集团：2026年上半年净利润下降" in titles
+    assert "美联储宣布维持利率不变" in titles
+    assert "同花顺" in dataset.source and "新浪" in dataset.source
+
+
+def test_combine_news_frames_merges_ths_and_sina_schemas() -> None:
+    ths = pd.DataFrame([
+        {"标题": "商务部对半导体设备实施出口管制", "内容": "政策落地", "发布时间": "2026-08-27 09:00", "链接": "https://example.com/ths"},
+        {"标题": "运机集团：2026年上半年净利润下降", "内容": "中报", "发布时间": "2026-08-27 18:00", "链接": "https://example.com/earn"},
+    ])
+    sina = pd.DataFrame([
+        {"时间": "2026-08-27 10:00", "内容": "【美联储宣布维持利率不变】声明偏鹰"},
+        {"时间": "2026-08-27 11:00", "内容": "【商务部对半导体设备实施出口管制】重复"},
+    ])
+    combined = combine_news_frames([ths, sina])
+    titles = combined["title"].tolist()
+    assert "商务部对半导体设备实施出口管制" in titles
+    assert "美联储宣布维持利率不变" in titles
+    assert titles.count("商务部对半导体设备实施出口管制") == 1
+    assert list(combined.columns) == ["title", "summary", "published_at", "url"]
+    roundtrip = normalize_news(combined)
+    assert list(roundtrip["title"]) == titles
