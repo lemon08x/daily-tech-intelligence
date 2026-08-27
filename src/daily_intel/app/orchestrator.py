@@ -14,6 +14,7 @@ from daily_intel.core.ports import (
 )
 from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
+from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.infrastructure.llm.openai_compatible import OpenAICompatibleLLM
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.pipeline import IntelligencePipeline
@@ -42,6 +43,7 @@ def run_application(
 ) -> dict[str, Path]:
     timezone = ZoneInfo(settings["app"]["timezone"])
     current = now.astimezone(timezone) if now else datetime.now(timezone)
+    install_proxy_fallback()
     repository = repository or SQLiteIntelligenceRepository(
         resolve_path(settings, "intelligence_db")
     )

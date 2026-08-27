@@ -8,12 +8,51 @@ from datetime import datetime
 import akshare as ak
 import pandas as pd
 
+from daily_intel.infrastructure.http import http_get, install_proxy_fallback
 from daily_intel.market.cache import CsvCache, Dataset
+
+SINA_GLOBAL_INDEX_SYMBOLS = (
+    "int_dji", "int_nasdaq", "int_sp500", "int_nikkei", "int_hangseng", "int_ftse",
+)
+
+
+def fetch_sina_global_indices() -> pd.DataFrame:
+    url = "https://hq.sinajs.cn/list=" + ",".join(SINA_GLOBAL_INDEX_SYMBOLS)
+    response = http_get(
+        url,
+        timeout=20,
+        headers={
+            "User-Agent": "DailyIntel/0.3 (+local research digest)",
+            "Referer": "https://finance.sina.com.cn",
+        },
+    )
+    response.raise_for_status()
+    response.encoding = "gb18030"
+    rows: list[dict[str, str]] = []
+    for line in response.text.splitlines():
+        if "=\"" not in line:
+            continue
+        left, _, right = line.partition("=")
+        code = left.rsplit("_", 1)[-1].strip()
+        payload = right.strip().rstrip(";").strip('"')
+        parts = payload.split(",")
+        if len(parts) < 4 or not parts[0].strip():
+            continue
+        rows.append({
+            "代码": code,
+            "名称": parts[0].strip(),
+            "最新价": parts[1].strip(),
+            "涨跌幅": parts[3].strip(),
+        })
+    if not rows:
+        raise ValueError("新浪全球指数返回空数据")
+    return pd.DataFrame(rows)
 
 
 class AkShareProvider:
     def __init__(self, cache: CsvCache, now: datetime, offline: bool = False) -> None:
         self.cache, self.now, self.offline = cache, now, offline
+        install_proxy_fallback()
 
     def _fetch(self, key: str, providers: Sequence[tuple[str, Callable[[], pd.DataFrame]]], optional: bool = False) -> Dataset:
         if self.offline:
@@ -61,3 +100,20 @@ class AkShareProvider:
 
     def trading_calendar(self) -> Dataset:
         return self._fetch("trading_calendar", [("AkShare / 新浪交易日历", ak.tool_trade_date_hist_sina)], True)
+
+    def global_indices(self) -> Dataset:
+        return self._fetch(
+            "global_indices",
+            [
+                ("Sina / 全球指数", fetch_sina_global_indices),
+                ("AkShare / 东方财富全球指数", ak.index_global_spot_em),
+            ],
+            True,
+        )
+
+    def global_futures(self) -> Dataset:
+        return self._fetch(
+            "global_futures",
+            [("AkShare / 东方财富国际期货", ak.futures_global_spot_em)],
+            True,
+        )

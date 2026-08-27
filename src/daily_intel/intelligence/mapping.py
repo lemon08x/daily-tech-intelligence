@@ -9,12 +9,14 @@ import akshare as ak
 import pandas as pd
 
 from daily_intel.core.models import CompanyHypothesis, CompanyMapping, Evidence, MappingStatus
+from daily_intel.infrastructure.http import install_proxy_fallback
 
 
 class CompanyMapper:
     def __init__(self, snapshot: pd.DataFrame, now: datetime, offline: bool = False) -> None:
         self.now = now
         self.offline = offline
+        install_proxy_fallback()
         self.company_by_code = {
             str(row["code"]): str(row["name"])
             for _, row in snapshot[["code", "name"]].dropna().drop_duplicates("code").iterrows()

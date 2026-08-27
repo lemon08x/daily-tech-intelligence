@@ -234,7 +234,7 @@ def test_full_text_failure_keeps_summary_and_marks_error(monkeypatch: pytest.Mon
         update={"metadata": {"source_name": "Primary", "fetch_full_text": True}}
     )
     monkeypatch.setattr(
-        "daily_intel.intelligence.extraction.requests.get",
+        "daily_intel.intelligence.extraction.http_get",
         lambda *a, **k: (_ for _ in ()).throw(TimeoutError("timeout")),
     )
     result = enrich_document(doc, 1, 1000)

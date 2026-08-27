@@ -36,9 +36,19 @@
     .digest { border-left:4px solid var(--brand); }
     .digest-block { margin-top:14px; }
     .digest-block:first-of-type { margin-top:0; }
-    .digest-block h3 { font-size:17px; }
-    .digest-list { margin:8px 0 0; padding-left:22px; }
-    .digest-list li { margin:6px 0; }
+    .digest-block h3 { font-size:16px; margin-bottom:8px; }
+    .scan-list { display:flex; flex-direction:column; gap:6px; }
+    .scan-item { display:block; padding:4px 0; line-height:1.5; }
+    .scan-item a { color:var(--ink); font-weight:650; }
+    .trend { display:grid; grid-template-columns:92px 1fr 64px; gap:8px; align-items:center; padding:5px 0; }
+    .trend-track { height:10px; border-radius:8px; background:#edf1f5; overflow:hidden; }
+    .trend-fill { display:block; height:100%; border-radius:8px; }
+    .trend-fill.up { background:var(--up); }
+    .trend-fill.down { background:var(--down); }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; }
+    .chip { min-width:108px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#f7f9fc; }
+    .chip small { display:block; color:var(--muted); font-size:11px; }
+    .chip strong { display:block; font-size:13px; }
     .takeaway { margin:8px 0 10px; font-size:16px; line-height:1.7; }
     .story { padding:26px 28px; margin:14px 0; }
     .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
@@ -100,6 +110,8 @@
       header,.section,.story { padding:18px; }
       h1 { font-size:25px; }
       .metrics,.two,.analysis-grid { grid-template-columns:1fr; }
+      .trend { grid-template-columns:1fr 64px; }
+      .trend-track { grid-column:1 / -1; }
       .report-tabs { position:sticky; top:0; z-index:5; }
       .story-kicker { align-items:flex-start; }
     }
@@ -120,40 +132,42 @@
   <header>
     <h1>{{ title }}</h1>
     <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">先读今日速读，再按需查看精选原文和A股行情。科技事件与公司关联为研究假设，不参与规则股票综合分。</p>
+    <p class="muted">先扫今日速读，再按需查看精选原文和市场情报。市场部分只保留能解释交易原因的事件，不是看盘名单。</p>
   </header>
 
   {% if plain_digest and plain_digest.has_content %}
   <section class="section digest">
     <h2>今日速读</h2>
-    <p class="muted section-intro">用大白话先看当天主线。术语会在第一次出现时解释；下面的精选和行情表可用来核对原文。</p>
+    {% if plain_digest.tech_items %}
     <div class="digest-block">
-      <h3>1. 前沿科技</h3>
-      {% if plain_digest.tech_items %}
-      <ol class="digest-list">{% for item in plain_digest.tech_items %}<li>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.takeaway }}</a>{% else %}{{ item.takeaway }}{% endif %}</li>{% endfor %}</ol>
-      {% else %}<p class="muted">今日没有可发布的科技事件。</p>{% endif %}
+      <h3>科技</h3>
+      <div class="scan-list">{% for item in plain_digest.tech_items %}<div class="scan-item">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
     </div>
+    {% endif %}
+    {% if plain_digest.industry_bars %}
     <div class="digest-block">
-      <h3>2. A股行情</h3>
-      <p>{{ plain_digest.market_line }}</p>
-      {% if plain_digest.hot_industries %}<p><strong>相对强势：</strong>{{ plain_digest.hot_industries|join('、') }}</p>{% endif %}
-      {% if plain_digest.news_threads %}
-      <p><strong>今日线索：</strong></p>
-      <ul class="digest-list">{% for item in plain_digest.news_threads %}<li>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}{% if item.summary %} · {{ item.summary }}{% endif %}</li>{% endfor %}</ul>
-      {% endif %}
+      <h3>产业风向</h3>
+      {% for item in plain_digest.industry_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill {{ item.direction }}" style="width:{{ item.width }}%"></span></span><span class="{{ item.direction }}">{{ item.label }}</span></div>{% if item.why %}<p class="muted" style="margin:0 0 8px 0">因 {{ item.why }}</p>{% endif %}{% endfor %}
     </div>
+    {% endif %}
+    {% if plain_digest.board %}
+    <div class="digest-block">
+      <h3>全球市场</h3>
+      <div class="chips">{% for item in plain_digest.board %}<div class="chip"><small>{{ item.region }}</small><strong>{{ item.label }}</strong><span class="{{ item.direction }}">{{ item.label_change }}</span>{% if item.why %}<small>{{ item.why }}</small>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
   </section>
   {% endif %}
 
   <nav class="report-tabs" role="tablist" aria-label="日报内容">
     <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">新闻精选</button>
-    <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">A股行情</button>
+    <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">市场情报</button>
   </nav>
 
   <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
     <section class="section">
       <h2>今日科技精选 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
-      <p class="muted section-intro">每条先给出大白话要点和两点摘要；技术机制、产业影响、风险、证据及A股关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
+      <p class="muted section-intro">每条给出大白话要点；技术机制、产业影响、风险、证据及公司关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
     </section>
 
     {% for analysis in analyses %}
@@ -195,7 +209,7 @@
     <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
     {% endfor %}
 
-    {% if news_records %}<section class="section"><h2>简讯 <span class="muted" style="font-size:13px;font-weight:400">低权重市场雷达，不单独支撑深度结论</span></h2>{% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}</section>{% endif %}
+
 
     <details class="section runtime">
       <summary>运行、模型与来源状态</summary>
@@ -208,19 +222,39 @@
   </section>
 
   <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
-    <div class="metrics">
-      <div class="card"><div class="muted">市场温度</div><div class="metric">{{ breadth.mood }}</div></div>
-      <div class="card"><div class="muted">上涨 / 下跌</div><div class="metric"><span class="up">{{ breadth.advancing }}</span> / <span class="down">{{ breadth.declining }}</span></div><div class="bar"><span class="a" style="width:{{ breadth.advance_ratio * 100 }}%"></span><span class="d" style="width:{{ (1-breadth.advance_ratio) * 100 }}%"></span></div></div>
-      <div class="card"><div class="muted">中位涨跌幅</div><div class="metric {{ 'up' if breadth.median_change >= 0 else 'down' }}">{{ breadth.median_change|num }}%</div></div>
-      <div class="card"><div class="muted">全市场成交额</div><div class="metric">{{ breadth.amount_cny|money }}</div><div class="muted">涨停近似 {{ breadth.limit_up_like }} / 跌停近似 {{ breadth.limit_down_like }}</div></div>
-    </div>
-
-    {% if index_records %}<section class="section"><h2>主要指数</h2><div class="metrics" style="margin:0">{% for row in index_records %}<div><strong>{{ row.name }}</strong><div>{{ row.price|num }} <span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div></div>{% endfor %}</div></section>{% endif %}
-    <section class="section"><h2>规则观察候选 <span class="muted" style="font-size:13px;font-weight:400">基础过滤后 {{ eligible_count }} 只，展示前 {{ candidate_records|length }} 只</span></h2><div class="table-wrap"><table><thead><tr><th>#</th><th>代码 / 名称</th><th>综合分</th><th>现价</th><th>今日</th><th>20日</th><th>60日</th><th>PE / PB</th><th>成交额</th><th>入选原因</th></tr></thead><tbody>
-      {% for row in candidate_records %}<tr><td>{{ loop.index }}</td><td><strong>{{ row.code }}</strong> {{ row.name }}</td><td><span class="score">{{ row.score|num(1) }}</span></td><td>{{ row.price|num }}</td><td class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</td><td>{{ row.momentum_20d|num }}%</td><td>{{ row.momentum_60d|num }}%</td><td>{{ row.pe_ttm|num(1) }} / {{ row.pb|num(1) }}</td><td>{{ row.amount_cny|money }}</td><td class="reason">{{ row.reasons }}</td></tr>{% else %}<tr><td colspan="10">当前过滤条件下没有候选。</td></tr>{% endfor %}
-    </tbody></table></div></section>
-    <div class="two"><section class="section"><h2>相对强势行业</h2>{% for row in hot_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section><section class="section"><h2>弱势行业</h2>{% for row in weak_industry_records %}<div class="industry"><span><strong>{{ row.name }}</strong><br><small class="muted">领涨 {{ row.leader or '—' }}</small></span><span class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</span></div>{% else %}<p class="muted">行业接口暂无数据。</p>{% endfor %}</section></div>
-    <section class="section"><p class="muted">综合分仅由趋势、估值、流动性、活跃度、当日强弱和市值六类规则因子计算；新闻与AI分析不会进入评分。</p></section>
+    <section class="section">
+      <h2>市场情报</h2>
+      <p class="muted section-intro">只保留能解释“为什么会成交”的事件：政策、监管、供给冲击、合作与禁令。不展示资金流向和常规涨跌名单。</p>
+    </section>
+    {% if plain_digest and plain_digest.industry_bars %}
+    <section class="section">
+      <h2>产业风向</h2>
+      <p class="muted">只列出当日幅度够大，或能对上事件原因的行业。</p>
+      {% for item in plain_digest.industry_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill {{ item.direction }}" style="width:{{ item.width }}%"></span></span><span class="{{ item.direction }}">{{ item.label }}</span></div>{% if item.why %}<p class="muted" style="margin:0 0 8px 0">因 {{ item.why }}</p>{% endif %}{% endfor %}
+    </section>
+    {% endif %}
+    {% if plain_digest and plain_digest.board %}
+    <section class="section">
+      <h2>全球市场对照</h2>
+      <div class="chips">{% for item in plain_digest.board %}<div class="chip"><small>{{ item.region }}</small><strong>{{ item.label }}</strong><span class="{{ item.direction }}">{{ item.label_change }}</span>{% if item.why %}<small>{{ item.why }}</small>{% endif %}</div>{% endfor %}</div>
+    </section>
+    {% endif %}
+    {% if news_records %}
+    <section class="section">
+      <h2>可归因事件</h2>
+      <p class="muted">下面是可能导致交易的事件，不是资金进出或财报数字。</p>
+      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
+    </section>
+    {% endif %}
+    {% if candidate_records %}
+    <details class="section">
+      <summary>个股扫描（产业线索，非荐股）</summary>
+      <p class="muted">备查名单，不作为买卖建议。</p>
+      <div class="table-wrap"><table><thead><tr><th>代码 / 名称</th><th>观察分</th><th>今日</th><th>60日</th><th>线索</th></tr></thead><tbody>
+        {% for row in candidate_records %}<tr><td><strong>{{ row.code }}</strong> {{ row.name }}</td><td><span class="score">{{ row.score|num(1) }}</span></td><td class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</td><td>{{ row.momentum_60d|num }}%</td><td class="reason">{{ row.reasons }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    </details>
+    {% endif %}
   </section>
 
   <footer>免责声明：本报告仅做公开信息整理、策略研究和后续回测候选，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>

@@ -2,27 +2,28 @@ from __future__ import annotations
 
 from io import BytesIO
 
-import requests
 import trafilatura
 from pypdf import PdfReader
 
 from daily_intel.core.models import Document
+from daily_intel.infrastructure.http import http_get, install_proxy_fallback
 from daily_intel.intelligence.sources.common import USER_AGENT
 
 
 def enrich_document(document: Document, timeout: int, max_chars: int) -> Document:
     if document.extraction_quality == "full" or not document.metadata.get("fetch_full_text"):
         return document
+    install_proxy_fallback()
     try:
         if document.content_type == "paper" and document.metadata.get("pdf_url"):
-            response = requests.get(
+            response = http_get(
                 document.metadata["pdf_url"], timeout=timeout, headers={"User-Agent": USER_AGENT}
             )
             response.raise_for_status()
             reader = PdfReader(BytesIO(response.content))
             text = "\n".join((page.extract_text() or "") for page in reader.pages)
         else:
-            response = requests.get(document.url, timeout=timeout, headers={"User-Agent": USER_AGENT})
+            response = http_get(document.url, timeout=timeout, headers={"User-Agent": USER_AGENT})
             response.raise_for_status()
             text = trafilatura.extract(
                 response.text, include_links=False, include_images=False, include_comments=False

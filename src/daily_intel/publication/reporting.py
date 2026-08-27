@@ -58,40 +58,39 @@ def _markdown_text(value: str) -> str:
 def _render_plain_digest_markdown(digest: dict[str, Any]) -> list[str]:
     if not digest.get("has_content"):
         return []
-    lines = [
-        "## 今日速读", "",
-        "用大白话先看当天主线。术语会在第一次出现时解释；下面的精选和行情表可用来核对原文。", "",
-        "### 1. 前沿科技", "",
-    ]
+    lines = ["## 今日速读", ""]
     tech_items = digest.get("tech_items") or []
-    if not tech_items:
-        lines.extend(["今日没有可发布的科技事件。", ""])
-    for index, item in enumerate(tech_items, 1):
-        takeaway = _markdown_text(item.get("takeaway", ""))
-        url = item.get("url") or ""
-        if url:
-            takeaway = f"[{takeaway}]({url})"
-        lines.append(f"{index}. {takeaway}")
-    lines.extend(["", "### 2. A股行情", "", f"**盘面：** {_markdown_text(digest.get('market_line', ''))}", ""])
-    hot = [name for name in digest.get("hot_industries") or [] if name]
-    if hot:
-        lines.append(f"**相对强势：** {'、'.join(hot)}")
-        lines.append("")
-    threads = digest.get("news_threads") or []
-    if threads:
-        lines.extend(["**今日线索：**", ""])
-        for item in threads:
-            line = _markdown_text(item.get("line") or item.get("title") or "")
+    if tech_items:
+        lines.append("**科技**")
+        for item in tech_items:
+            scan = _markdown_text(item.get("scan") or item.get("headline") or "")
             url = item.get("url") or ""
             if url:
-                line = f"[{line}]({url})"
-            lines.append(f"- {line}")
+                scan = f"[{scan}]({url})"
+            lines.append(f"- {scan}")
+        lines.append("")
+    bars = digest.get("industry_bars") or []
+    if bars:
+        lines.append("**产业风向**")
+        for item in bars:
+            extra = f"：{item['why']}" if item.get("why") else ""
+            lines.append(
+                f"- {item.get('name', '')} {item.get('label', '')} `{item.get('spark', '')}`{extra}"
+            )
+        lines.append("")
+    board = digest.get("board") or []
+    if board:
+        lines.append("**全球市场**")
+        for item in board:
+            extra = f"：{item['why']}" if item.get("why") else ""
+            lines.append(
+                f"- {item.get('region', '')} {item.get('label', '')} {item.get('label_change', '')}{extra}"
+            )
         lines.append("")
     return lines
 
 
 def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
-    breadth = context["breadth"]
     digest = context.get("plain_digest") or {}
     lines = [
         f"# {context['title']} · {context['report_date']}", "",
@@ -158,32 +157,47 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
                 lines.append(f"- [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
         lines.append("")
 
+    lines.extend([
+        "## 市场情报", "",
+        "只保留能解释交易原因的事件：政策、监管、供给冲击、合作与禁令。不展示资金流向和常规涨跌名单。", "",
+    ])
+    bars = digest.get("industry_bars") or []
+    if bars:
+        lines.extend(["### 产业风向", ""])
+        for item in bars:
+            extra = f"：{item['why']}" if item.get("why") else ""
+            lines.append(f"- {item.get('name', '')} {item.get('label', '')}{extra}")
+        lines.append("")
+    board = digest.get("board") or []
+    if board:
+        lines.extend(["### 全球市场", ""])
+        for item in board:
+            extra = f"：{item['why']}" if item.get("why") else ""
+            lines.append(
+                f"- {item.get('region', '')} {item.get('label', '')}：{item.get('label_change', '')}{extra}"
+            )
+        lines.append("")
     if context.get("news_records"):
-        lines.extend(["## 简讯", "", "以下为低权重市场雷达，不单独支撑深度结论。", ""])
+        lines.extend(["### 可归因事件", ""])
         for item in context["news_records"]:
             title = _markdown_text(item.get("title", ""))
             if item.get("url"):
                 title = f"[{title}]({item['url']})"
-            lines.extend([
-                f"### {title}", "",
-                _markdown_text(item.get("summary", "")), "",
-            ])
-
-    lines.extend([
-        "## A股市场观察", "",
-        f"市场温度：**{breadth['mood']}**；上涨 {breadth['advancing']} 家，下跌 {breadth['declining']} 家，中位涨跌幅 {breadth['median_change']:.2f}%。", "",
-        "### 规则候选", "",
-        "| 排名 | 代码 | 名称 | 综合分 | 涨跌幅 | 60日 | 入选原因 |",
-        "|---:|---|---|---:|---:|---:|---|",
-    ])
-    for index, row in enumerate(context["candidate_records"], 1):
-        lines.append(
-            f"| {index} | {row['code']} | {_markdown_text(row['name'])} | {row['score']:.1f} | "
-            f"{format_number(row.get('pct_change'))}% | {format_number(row.get('momentum_60d'))}% | {_markdown_text(row['reasons'])} |"
-        )
-    lines.extend(["", "### 相对强势行业", ""])
-    for row in context["hot_industry_records"]:
-        lines.append(f"- {row['name']}：{format_number(row.get('pct_change'))}%（领涨：{row.get('leader') or '—'}）")
+            summary = _markdown_text(item.get("summary", ""))
+            lines.append(f"- {title}" + (f"：{summary}" if summary else ""))
+        lines.append("")
+    if context.get("candidate_records"):
+        lines.extend([
+            "### 个股扫描（产业线索，非荐股）", "",
+            "| 代码 | 名称 | 行业观察分 | 今日 | 60日 |",
+            "|---|---|---:|---:|---:|",
+        ])
+        for row in context["candidate_records"][:8]:
+            lines.append(
+                f"| {row['code']} | {_markdown_text(row['name'])} | {row['score']:.1f} | "
+                f"{format_number(row.get('pct_change'))}% | {format_number(row.get('momentum_60d'))}% |"
+            )
+        lines.append("")
     runtime = context.get("model_runtime", {})
     usage = context.get("usage", {})
     models = runtime.get("models", {})

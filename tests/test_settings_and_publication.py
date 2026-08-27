@@ -102,10 +102,17 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "index_records": [
             {"code": "sh000001", "name": "上证指数", "price": 3912.15, "pct_change": 0.59},
         ],
+        "global_index_records": [
+            {"code": "ndx", "name": "纳斯达克", "price": 18000, "pct_change": 1.15},
+        ],
+        "commodity_records": [
+            {"code": "gc", "name": "COMEX黄金", "price": 4600, "pct_change": 1.80},
+        ],
         "news_records": [{
-            "title": "市场简讯", "summary": "用于验证新闻页的短摘要。",
+            "title": "商务部宣布对半导体设备实施出口管制",
+            "summary": "该政策可能改变相关产业链交易预期。",
             "url": "https://example.com/brief", "published_at": "2026-08-24 09:00",
-            "tags": "AI",
+            "tags": "制裁",
         }],
         "market_source_status": [], "intelligence_source_status": [],
         "weights": {"momentum": .3, "value": .2, "liquidity": .15, "activity": .15, "daily_strength": .1, "size": .1},
@@ -127,11 +134,17 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert 'id="market-panel"' in html and 'aria-labelledby="market-tab" hidden' in html
     assert '<details class="deep-dive">' in html
     assert 'href="https://example.com/source"' in html
-    assert "阅读原文" in html and "市场简讯" in html
+    assert "阅读原文" in html and "出口管制" in html
     assert "今日速读" in html and "今日速读" in markdown
-    assert "实验室公布了一项可核对的工程改进" in html
-    assert "上证指数" in html and "涨跌参半" in html
-    assert "相对强势" in markdown and "金融行业" in markdown
+    assert "市场情报" in html and "产业风向" in html
+    assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in html.split("新闻精选", 1)[0]
+    assert "技术深研" in html
+    assert "纳斯达克" in html and "黄金" in html
+    assert "赚钱效应" not in html
+    digest_html = html.split('id="news-panel"', 1)[0]
+    assert "深</span>" not in digest_html and ">线索<" not in digest_html
+    assert "出口管制" in html
+    assert "金融行业" in markdown and "可归因事件" in markdown
     collapsed, expanded = html.split('<details class="deep-dive">', 1)
     assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
     assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
@@ -256,11 +269,12 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
     assert publisher.metadata["intelligence"]["quality"]["policy_version"] == "evidence-gate-v1"
 
 
-def test_plain_digest_explains_market_and_falls_back_without_takeaway() -> None:
+def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
     from daily_intel.publication.plain_digest import build_plain_digest
 
     analysis = Analysis(
         event_id="event-1", status=AnalysisStatus.LEAD, headline="技术深研",
+        plain_takeaway="实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。",
         key_facts=["这项改进让长文推理更省计算。", "仍需独立复现。"],
         confidence=.4,
         quality=AnalysisQuality(policy_version="evidence-gate-v2", passed=False, score=40),
@@ -270,19 +284,30 @@ def test_plain_digest_explains_market_and_falls_back_without_takeaway() -> None:
     digest = build_plain_digest(
         [analysis],
         {
-            "breadth": {
-                "mood": "回暖", "advancing": 2946, "declining": 2448, "amount_cny": 1.82e12,
-            },
             "index_records": [
                 {"code": "sh000001", "name": "上证指数", "price": 3912.15, "pct_change": 0.59},
             ],
-            "hot_industry_records": [{"name": "金融行业"}],
-            "news_records": [{"title": "券商中报增长", "summary": "中信半年净利润超230亿元。", "url": "https://example.com/broker"}],
+            "global_index_records": [
+                {"code": "ndx", "name": "纳斯达克", "price": 18000, "pct_change": 1.15},
+            ],
+            "commodity_records": [
+                {"code": "gc", "name": "COMEX黄金", "price": 4600, "pct_change": 0.80},
+            ],
+            "hot_industry_records": [
+                {"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"},
+                {"name": "农业", "pct_change": 0.40, "leader": "某农业"},
+            ],
+            "news_records": [{"title": "商务部宣布对半导体设备实施出口管制", "summary": "政策落地。", "url": "https://example.com/policy"}],
         },
     )
     assert digest["has_content"]
-    assert digest["tech_items"][0]["takeaway"] == "这项改进让长文推理更省计算。"
-    assert "上证指数" in digest["market_line"]
-    assert "赚钱效应不错" in digest["market_line"]
-    assert digest["hot_industries"] == ["金融行业"]
-    assert digest["news_threads"][0]["title"] == "券商中报增长"
+    assert digest["tech_items"][0]["scan"] == "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。"
+    assert "…" not in digest["tech_items"][0]["scan"]
+    assert "news_threads" not in digest
+    names = [item["name"] for item in digest["industry_bars"]]
+    assert "金融行业" in names
+    assert "农业" not in names
+    labels = [item["label"] for item in digest["board"]]
+    assert "上证" not in labels
+    assert "纳斯达克" in labels
+    assert "黄金" not in labels

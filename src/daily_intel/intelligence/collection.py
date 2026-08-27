@@ -7,6 +7,7 @@ from typing import Any, Callable
 import pandas as pd
 
 from daily_intel.core.models import Document
+from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.core.ports import IntelligenceRepository, SourceAdapter
 from daily_intel.intelligence.sources.common import (
     canonicalize_url,
@@ -30,6 +31,7 @@ class DocumentCollector:
         self.config = settings["intelligence"]
         self.repository = repository
         self.source_factory = source_factory
+        install_proxy_fallback()
 
     def collection_since(self, now: datetime, source_id: str) -> datetime:
         state = self.repository.get_state(f"source_cursor:{source_id}")
