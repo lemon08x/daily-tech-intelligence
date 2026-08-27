@@ -1,0 +1,17 @@
+{
+ "supported_evidence_indexes": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5
+ ],
+ "unsupported_claims": [
+  "outlook_6_24m 称 Transformers 为“事实标准框架”，文档未作此定性，属记忆性过度推断。",
+  "outlook_6_24m 称 Step-3.7-Flash 为“国产”MoE VLM，文档仅署名 StepFun，未说明其国别，属未支持的公司属性映射。"
+ ],
+ "confidence_adjustment": -0.1,
+ "verdict": "downgrade",
+ "notes": "六条引文均为文档逐字子串且能支持相应结论，技术机制、新颖性、成熟度与行业影响各节有充分文档支撑。但展望节两处表述超出文档：将 Transformers 定性为“事实标准框架”、将 StepFun 标注为“国产”，二者均依赖模型记忆而非给定文档，构成实质性未支持结论，故降级为线索。"
+}

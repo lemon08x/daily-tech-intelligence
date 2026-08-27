@@ -1,0 +1,404 @@
+{
+ "items": [
+  {
+   "event_id": "b14f464064f59e3dfe6ef84d",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 55,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 35,
+   "reason": "行人异常行为搜索的多模态重排框架，方法增量式，应用场景较窄，产业影响有限。"
+  },
+  {
+   "event_id": "ed3731a9fb0773927b8b5e9f",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 80,
+   "novelty": 65,
+   "technical_depth": 60,
+   "industry_impact": 75,
+   "reason": "vLLM v5.16.0 新增 Qwen4-Exp（GR/QSA/PLE，首个混合线性+稀疏注意力架构）；主流推理引擎更新，直接影响大模型推理成本格局。"
+  },
+  {
+   "event_id": "6df9f1c790d9d22361625f2d",
+   "relevant": true,
+   "topic_id": "energy_tech",
+   "relevance": 65,
+   "novelty": 70,
+   "technical_depth": 65,
+   "industry_impact": 50,
+   "reason": "NASA 提出 S-BNR 同步双模核火箭概念，可将火星转移时间降至 335 天以内；工程概念新颖，但 6-24 个月产业落地影响有限。"
+  },
+  {
+   "event_id": "a18cc687846e39113fecd0c4",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 70,
+   "novelty": 70,
+   "technical_depth": 75,
+   "industry_impact": 55,
+   "reason": "OraRL 将标注作为 oracle rollout 用于视频 MLLM 的 RL 后训练，步时仅为 SFT 的 2.2 倍；为视频多模态模型高效后训练提供新路径。"
+  },
+  {
+   "event_id": "331160e1c9adfd1db1164471",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 55,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 35,
+   "reason": "LLM 知识图谱问答的三值约束验证框架，问题设定较窄，产业影响有限。"
+  },
+  {
+   "event_id": "28f605d8bb75720160cfe815",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 80,
+   "novelty": 75,
+   "technical_depth": 75,
+   "industry_impact": 70,
+   "reason": "实证揭示长上下文金融分析的检索-整合缺口：已检索到的风险披露不影响投资判断，工作流架构决定信息传递成败；对 AI 分析师产品设计有直接启示。"
+  },
+  {
+   "event_id": "bad803051300c86cb99ad2f7",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 75,
+   "novelty": 75,
+   "technical_depth": 75,
+   "industry_impact": 60,
+   "reason": "SRPO 将自反思内化为稠密 token 级训练信号，仅用 8% SFT FLOPs 在数学推理与 agent 基准达到 SOTA；对后训练降本有参考价值。"
+  },
+  {
+   "event_id": "1b071eb0bb9198430a9ea54b",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 70,
+   "novelty": 65,
+   "technical_depth": 75,
+   "industry_impact": 55,
+   "reason": "OPDVR 无额外超参地结合在线蒸馏与可验证奖励，后训练方法学的扎实改进。"
+  },
+  {
+   "event_id": "ce08dbfee3822d0e979fc90e",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 60,
+   "novelty": 60,
+   "technical_depth": 70,
+   "industry_impact": 40,
+   "reason": "相干 D-MIMO 定位的贝叶斯状态空间滤波器族与 PCRLB 推导；属 6G 无线理论论文，产业化时间线较长。"
+  },
+  {
+   "event_id": "22858e02c4d3e96df206b19f",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 60,
+   "novelty": 60,
+   "technical_depth": 70,
+   "industry_impact": 45,
+   "reason": "严格因果流式视频异常检测，O(1) 状态更新，M3 Pro 实测 1300 FPS；精度落后现有方法，贡献在时延与边缘部署。"
+  },
+  {
+   "event_id": "f0b01b2c8e1bdef2f02277fa",
+   "relevant": true,
+   "topic_id": "biotech",
+   "relevance": 55,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 40,
+   "reason": "PhageLysData 整合 80 万条噬菌体裂解酶序列为 AI-ready 数据集并提供 11 个 PLM 嵌入；数据资源论文，产业影响间接。"
+  },
+  {
+   "event_id": "334a73815615adef70dab959",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 50,
+   "novelty": 40,
+   "technical_depth": 55,
+   "industry_impact": 30,
+   "reason": "IBM 冷战时期为 NSA 建造的 Harvest 密码机回顾；历史价值为主，对当前产业无直接影响。"
+  },
+  {
+   "event_id": "85aa7c2cf8e5baf6e99d6e39",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 65,
+   "novelty": 65,
+   "technical_depth": 65,
+   "industry_impact": 55,
+   "reason": "LongWoF-Bench 评估已验证执行经验（EvoMap Gene）在长工作流中的复用，较 Skill 高 8.7-15.5 分；为 agent 经验外置化提供新视角。"
+  },
+  {
+   "event_id": "c1007433958f87644bcab8e8",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 60,
+   "novelty": 65,
+   "technical_depth": 75,
+   "industry_impact": 50,
+   "reason": "DiffusionOPSD 将图像级奖励转为显式蒸馏目标，20 组设定中 19 组最优并降低 40-63% GPU 时；扩散模型高效后训练。"
+  },
+  {
+   "event_id": "0ad92e870d6304b3e10b08cc",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 75,
+   "novelty": 75,
+   "technical_depth": 75,
+   "industry_impact": 60,
+   "reason": "BrowserForge 用并行浏览器沙箱生成 20.3 万条 web agent 轨迹且每条来自不同网站；解决 web agent 训练数据规模瓶颈。"
+  },
+  {
+   "event_id": "abbbc62adb061587aa98c636",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 55,
+   "novelty": 60,
+   "technical_depth": 70,
+   "industry_impact": 35,
+   "reason": "IMNO 利用耗散 PDE 低维结构求解时变偏微分方程；科学计算论文，产业影响有限。"
+  },
+  {
+   "event_id": "e6de773fe8cb1827be8efb35",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 70,
+   "novelty": 65,
+   "technical_depth": 75,
+   "industry_impact": 55,
+   "reason": "BPCO 稳定 critic 训练，单样本每 prompt 即可匹配或超过 GRPO；对 RL 训练降本有实用价值。"
+  },
+  {
+   "event_id": "35a846c336e2a036a29dda17",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 45,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 30,
+   "reason": "TorchMorph 提供 22 个 GPU 形态学算子，吞吐最高达 scipy 的 1100 倍；工具库性质，影响面窄。"
+  },
+  {
+   "event_id": "fe131e053eddfee6b123a55d",
+   "relevant": true,
+   "topic_id": "biotech",
+   "relevance": 55,
+   "novelty": 60,
+   "technical_depth": 70,
+   "industry_impact": 40,
+   "reason": "细胞类型分辨转录组学定义羊/人心脏浦肯野纤维稳定表面标志物；心脏电生理生物学进展，临床转化路径较长。"
+  },
+  {
+   "event_id": "6e9e59793f733e95ac08859d",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 70,
+   "novelty": 65,
+   "technical_depth": 75,
+   "industry_impact": 55,
+   "reason": "与第 17 条为同一 BPCO 论文（重复收录），按相同标准评分。"
+  },
+  {
+   "event_id": "a10f3f4694cb9227350de9b6",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 60,
+   "novelty": 65,
+   "technical_depth": 70,
+   "industry_impact": 50,
+   "reason": "FixAnything 用视频生成先验统一修复 4 种 3D 表示的渲染伪影；3D 内容生成方向的通用化工具。"
+  },
+  {
+   "event_id": "f8e81e4e6c30f331837029c9",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 80,
+   "novelty": 70,
+   "technical_depth": 70,
+   "industry_impact": 75,
+   "reason": "腾讯 WeMM-Embedding（2B/4B/9B）在 MMEB-v2 达 SOTA，已在微信搜索推荐大规模部署并开源权重；多模态嵌入模型重要开源发布。"
+  },
+  {
+   "event_id": "c8cb1fb452f3a872e2edac4d",
+   "relevant": true,
+   "topic_id": "cybersecurity",
+   "relevance": 50,
+   "novelty": 45,
+   "technical_depth": 60,
+   "industry_impact": 35,
+   "reason": "企业网络安全研究方法论的叙述性综述与可执行协议；方法学综合，直接产业影响有限。"
+  },
+  {
+   "event_id": "ebfecd05864fba1a8e94baa9",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 60,
+   "novelty": 65,
+   "technical_depth": 70,
+   "industry_impact": 50,
+   "reason": "局部蒸馏：黑盒教师引导局部线性学生，精度接近教师且可解释；对高风险决策场景有价值。"
+  },
+  {
+   "event_id": "69d1a5618ad0519d9d568fbd",
+   "relevant": false,
+   "topic_id": "foundation_models",
+   "relevance": 45,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 30,
+   "reason": "大规模测评题目附带内容相似性的 LLM 分析框架；应用场景窄，与科技产业情报相关性低。"
+  },
+  {
+   "event_id": "62e0991a5ad0d20d0943a3b7",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 80,
+   "novelty": 65,
+   "technical_depth": 55,
+   "industry_impact": 75,
+   "reason": "Intel 在 Hot Chips 2026 详解 Crescent Island AI 加速器（Xe3P、液冷、HBM4，面向推理）；AI 芯片竞争重要节点，但摘要技术细节有限。"
+  },
+  {
+   "event_id": "f1254a5fe64a52ff1826cda3",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 80,
+   "novelty": 75,
+   "technical_depth": 72,
+   "industry_impact": 80,
+   "reason": "微软 Maia 200 AI 加速器公布：145 Tflop/s FP4、5072 Tflop/s FP8、750W、7TB/s HBM，提出 SDLA 数据流架构；AI 推理芯片格局重大事件。"
+  },
+  {
+   "event_id": "17e95edaad2125c2956b6376",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 75,
+   "novelty": 75,
+   "technical_depth": 80,
+   "industry_impact": 65,
+   "reason": "晶圆级光互连在 MoE 训练中的热调谐开销跨层分析，铁电电光调谐消除停顿获 2.7-3.8 倍加速；AI 基础设施前瞻方向。"
+  },
+  {
+   "event_id": "0e7bb40ca84a081cadcd24d3",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 80,
+   "novelty": 70,
+   "technical_depth": 60,
+   "industry_impact": 75,
+   "reason": "vLLM v5.16.1 新增智谱 GLM-5.3-Flash（320B/18B 激活、原生多模态、混合稀疏+线性注意力、mHC）；国产大模型重要开源发布。"
+  },
+  {
+   "event_id": "c4afca7db3dd55693eece1a2",
+   "relevant": true,
+   "topic_id": "biotech",
+   "relevance": 50,
+   "novelty": 45,
+   "technical_depth": 60,
+   "industry_impact": 35,
+   "reason": "多组学癌症亚型 GNN 基准测试，结论为 GNN 未超越结构无关 MLP 基线；方法学基准论文。"
+  },
+  {
+   "event_id": "d9958911e1a7f97606e5a349",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 65,
+   "novelty": 70,
+   "technical_depth": 75,
+   "industry_impact": 55,
+   "reason": "Safety-Direction Penalty 缓解推理诱导失配，恢复安全性同时保持推理能力；为 LLM 安全提供训练期解法。"
+  },
+  {
+   "event_id": "ec389bff3010fc129c8b4f0f",
+   "relevant": true,
+   "topic_id": "compute_chips",
+   "relevance": 55,
+   "novelty": 65,
+   "technical_depth": 70,
+   "industry_impact": 45,
+   "reason": "RIBOSPAN 为 1.61B 长上下文（10K nt）RNA 基础模型；RNA 领域进展，产业影响限于 RNA 药物方向。"
+  },
+  {
+   "event_id": "fe3f4a7e850b2d5d3a27dfef",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 75,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 65,
+   "reason": "首个将智能眼镜作为第一人称智能平台的系统性综述，提出 L0-L5 框架；具身智能硬件赛道的参考性文献。"
+  },
+  {
+   "event_id": "d7a62e8dade600e6bdb70554",
+   "relevant": false,
+   "topic_id": "foundation_models",
+   "relevance": 45,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 30,
+   "reason": "BioKERN 用生物核正则化改善组织学-转录组学邻域检索；空间生物学窄领域方法。"
+  },
+  {
+   "event_id": "90a5cefcbc8bf659c7a2b321",
+   "relevant": true,
+   "topic_id": "biotech",
+   "relevance": 60,
+   "novelty": 65,
+   "technical_depth": 70,
+   "industry_impact": 55,
+   "reason": "深度学习耦合大规模并行筛选优化 mRNA IVT 产量（Pearson 0.94）并可部署生产；针对 mRNA 制造成本瓶颈。"
+  },
+  {
+   "event_id": "22f2a042bdeffc4caf571e5b",
+   "relevant": false,
+   "topic_id": "compute_chips",
+   "relevance": 40,
+   "novelty": 30,
+   "technical_depth": 40,
+   "industry_impact": 30,
+   "reason": "Emerson 赞助的测试测量与 chiplet 验证软文；营销内容，技术新颖性低。"
+  },
+  {
+   "event_id": "78bb0beae19feb55b614623f",
+   "relevant": true,
+   "topic_id": "energy_tech",
+   "relevance": 70,
+   "novelty": 50,
+   "technical_depth": 45,
+   "industry_impact": 60,
+   "reason": "CleanTechnica 钠离子电池行业文章；与 A 股钠电产业链相关，但属趋势评论，技术深度有限。"
+  },
+  {
+   "event_id": "5d71eedfc7e1d3a83e445503",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 55,
+   "novelty": 55,
+   "technical_depth": 60,
+   "industry_impact": 40,
+   "reason": "实证显示结构化提示重分布而非减少 LLM 生成 Python 代码的安全弱点；对 AI 辅助开发有参考意义。"
+  },
+  {
+   "event_id": "cb0b9b27f189fec5548a24f2",
+   "relevant": true,
+   "topic_id": "biotech",
+   "relevance": 55,
+   "novelty": 65,
+   "technical_depth": 70,
+   "industry_impact": 40,
+   "reason": "GSK-3β 经翻译后机制调控朊蛋白水平，抑制剂降低 PrPSc；朊病毒病研究新机制，临床靶点较罕见。"
+  },
+  {
+   "event_id": "d2506c3f7ab21527f9ea8eaf",
+   "relevant": true,
+   "topic_id": "foundation_models",
+   "relevance": 75,
+   "novelty": 75,
+   "technical_depth": 75,
+   "industry_impact": 65,
+   "reason": "AutoSaddler 从 agent 执行轨迹自动优化 harness，GAIA2/SWE-Bench Pro/Terminal-Bench 2.0 提升 9-10 分；与 agent 系统可靠性直接相关。"
+  }
+ ]
+}
