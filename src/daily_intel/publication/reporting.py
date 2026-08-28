@@ -141,6 +141,50 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
                 lines.append(f"- [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
         lines.append("")
 
+    projects = context.get("github_projects") or []
+    if projects:
+        chart = context.get("github_chart") or {}
+        lines.extend(["## Git 热门项目", "", "今日最热或本周增长最快的开源项目，用一句话说清它在做什么，并附使用场景模拟。", ""])
+        if chart:
+            lines.append(
+                f"共 {chart.get('count', len(projects))} 个仓库；语言 {chart.get('language_count', 0)} 种；"
+                f"今日最高 +{chart.get('max_stars_today', 0)}；本周最高 +{chart.get('max_stars_week', 0)}。"
+            )
+            lines.append("")
+        languages = chart.get("language_bars") or []
+        if languages:
+            lines.extend(["### 语言分布", ""])
+            for item in languages:
+                lines.append(
+                    f"- {item.get('name', '')} {item.get('label', '')} `{item.get('spark', '')}`"
+                )
+            lines.append("")
+        for item in projects:
+            name = _markdown_text(item.get("full_name") or "")
+            url = item.get("url") or ""
+            title = f"[{name}]({url})" if url else name
+            kicker = _markdown_text(item.get("kicker") or "开源")
+            reason = _markdown_text(item.get("reason") or "")
+            lines.extend([f"### {item.get('rank', '')}. **{kicker}** {title}", ""])
+            if item.get("plain"):
+                lines.extend([f"**一句话：** {_markdown_text(item['plain'])}", ""])
+            meta = []
+            if item.get("language"):
+                meta.append(str(item["language"]))
+            if reason:
+                meta.append(reason)
+            if item.get("stars_today"):
+                meta.append(f"今日 +{item['stars_today']} `{item.get('today_spark', '')}`")
+            if item.get("stars_week"):
+                meta.append(f"本周 +{item['stars_week']} `{item.get('week_spark', '')}`")
+            if meta:
+                lines.append("- " + " · ".join(meta))
+                lines.append("")
+            scene = _markdown_text(item.get("scenario") or "")
+            if scene:
+                heading = _markdown_text(item.get("scenario_title") or "使用场景模拟")
+                lines.extend([f"**{heading}：** {scene}", ""])
+
     lines.extend([
         "## 市场情报", "",
         "只保留能解释交易原因的事件：政策、监管、供给冲击、合作与禁令。产业和全球市场列出当日涨跌前三后三，或幅度够大的条目。", "",
@@ -169,18 +213,6 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
                 title = f"[{title}]({item['url']})"
             summary = _markdown_text(item.get("summary", ""))
             lines.append(f"- {title}" + (f"：{summary}" if summary else ""))
-        lines.append("")
-    if context.get("candidate_records"):
-        lines.extend([
-            "### 个股扫描（产业线索，非荐股）", "",
-            "| 代码 | 名称 | 行业观察分 | 今日 | 60日 |",
-            "|---|---|---:|---:|---:|",
-        ])
-        for row in context["candidate_records"][:8]:
-            lines.append(
-                f"| {row['code']} | {_markdown_text(row['name'])} | {row['score']:.1f} | "
-                f"{format_number(row.get('pct_change'))}% | {format_number(row.get('momentum_60d'))}% |"
-            )
         lines.append("")
     runtime = context.get("model_runtime", {})
     usage = context.get("usage", {})
@@ -251,6 +283,8 @@ def publish(
     render_context = {
         "model_runtime": {},
         "quality_summary": {},
+        "github_projects": [],
+        "github_chart": {},
         **context,
         "plain_digest": build_plain_digest(analyses, context),
     }

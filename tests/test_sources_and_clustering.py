@@ -229,6 +229,14 @@ def test_cluster_excludes_obvious_nightly_release_noise() -> None:
     assert cluster_documents([noisy], topics, 72, 80) == []
 
 
+def test_pypdf_parser_noise_is_silenced() -> None:
+    import logging
+
+    import daily_intel.intelligence.extraction as extraction_mod  # noqa: F401
+
+    assert logging.getLogger("pypdf").level == logging.ERROR
+
+
 def test_full_text_failure_keeps_summary_and_marks_error(monkeypatch: pytest.MonkeyPatch) -> None:
     doc = _document("c", "Robot model", datetime.now(timezone.utc)).model_copy(
         update={"metadata": {"source_name": "Primary", "fetch_full_text": True}}

@@ -96,7 +96,10 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "analyses": [analysis], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
         "prompt_version": "test-v1", "pipeline_errors": [], "breadth": breadth,
-        "eligible_count": 0, "candidate_records": [],
+        "eligible_count": 0, "candidate_records": [{
+            "code": "000783", "name": "长江证券", "score": 86.3,
+            "pct_change": 2.64, "momentum_60d": 23.12, "reasons": "动量",
+        }],
         "hot_industry_records": [{"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"}],
         "weak_industry_records": [],
         "index_records": [
@@ -116,6 +119,28 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         }],
         "market_source_status": [], "intelligence_source_status": [],
         "weights": {"momentum": .3, "value": .2, "liquidity": .15, "activity": .15, "daily_strength": .1, "size": .1},
+        "github_projects": [{
+            "full_name": "huggingface/transformers",
+            "url": "https://github.com/huggingface/transformers",
+            "kicker": "软件",
+            "plain": "这是一个开源机器学习库，用来加载和运行各种大模型。",
+            "language": "Python",
+            "reason": "今日最热",
+            "stars_today": 1200,
+            "stars_week": 5000,
+            "rank": 1,
+            "today_width": 100,
+            "week_width": 100,
+            "today_spark": "████████",
+            "week_spark": "████████",
+            "scenario_title": "使用场景模拟",
+            "scenario": "假设一名工程师要加载开源大模型，打开 transformers 文档跑通最小示例。这是场景推演，不是实测记录。",
+        }],
+        "github_chart": {
+            "count": 1, "language_count": 1, "max_stars_today": 1200, "max_stars_week": 5000,
+            "hottest_name": "huggingface/transformers", "fastest_name": "huggingface/transformers",
+            "language_bars": [{"name": "Python", "count": 1, "width": 100, "label": "1 个", "spark": "████████"}],
+        },
     }
     metadata = {
         "run_name": "100000-test",
@@ -152,6 +177,15 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" in html
     assert "金融行业" in markdown and "可归因事件" in markdown
+    assert "个股扫描" not in html and "个股扫描" not in markdown
+    assert "长江证券" not in html and "长江证券" not in markdown
+    assert 'id="git-panel"' in html and 'data-tab="git"' in html
+    assert "huggingface/transformers" in html and "Git 热门项目" in markdown
+    git_html = html.split('id="git-panel"', 1)[1].split('id="market-panel"', 1)[0]
+    assert 'class="story"' in git_html
+    assert "语言与热度" in git_html and "使用场景模拟" in git_html
+    assert "打开仓库" in git_html and "trend-fill" in git_html
+    assert "使用场景模拟" in markdown and "Python" in markdown.split("Git 热门项目", 1)[1]
     collapsed, expanded = html.split('<details class="deep-dive">', 1)
     assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
     assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
@@ -261,6 +295,11 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
             self.metadata = metadata
             return {"custom": tmp_path / "custom-output"}
 
+    class GitWorkflow:
+        def run(self, *args, **kwargs):
+            from daily_intel.github.pipeline import GitRunResult
+            return GitRunResult(projects=[], source_status=[], errors=[])
+
     publisher = CapturingPublisher()
     outputs = run_application(
         settings,
@@ -268,6 +307,7 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
         repository=SQLiteIntelligenceRepository(tmp_path / "intelligence.db"),
         market_workflow=MarketWorkflow(),
         intelligence_workflow=IntelligenceWorkflow(),
+        github_workflow=GitWorkflow(),
         publisher=publisher,
     )
     assert outputs == {"custom": tmp_path / "custom-output"}
@@ -345,3 +385,14 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
     })
     robot_digest = build_plain_digest([robot], {})
     assert robot_digest["tech_items"][0]["kicker"] == "机器人"
+
+    transformers = analysis.model_copy(update={
+        "headline": "Hugging Face Transformers v5.16.0发布：新增Qwen4-Exp等模型",
+        "plain_takeaway": "开源机器学习库Transformers发布了新版本，新增了多个大模型，其中最受关注的是Qwen4-Exp，它把两种不同的注意力机制结合起来，让长文本处理更快更省内存。",
+        "key_facts": [
+            "ESMFold2采用迭代扩散方法进行蛋白质折叠预测，生物计算精度提升明显。",
+        ],
+    })
+    transformers_digest = build_plain_digest([transformers], {})
+    assert transformers_digest["tech_items"][0]["kicker"] in {"软件", "模型"}
+    assert transformers_digest["tech_items"][0]["kicker"] != "生物"

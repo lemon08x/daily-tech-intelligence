@@ -65,6 +65,10 @@ FLOW_NEWS_TERMS = (
 EARNINGS_NEWS_TERMS = (
     "净利润", "营收", "中报", "年报", "分红", "业绩",
 )
+TICKER_ADMIN_NEWS_TERMS = (
+    "风险警示", "股票简称", "证券简称", "简称变更", "简称变更为",
+    "证券代码不变", "摘帽", "戴帽", "变更证券简称",
+)
 
 
 def _term_hits(text: str, terms: tuple[str, ...]) -> int:
@@ -75,9 +79,17 @@ def is_earnings_news(text: str) -> bool:
     return _term_hits(text.lower(), EARNINGS_NEWS_TERMS) > 0
 
 
+def is_ticker_admin_news(text: str) -> bool:
+    return _term_hits(text.lower(), TICKER_ADMIN_NEWS_TERMS) > 0
+
+
+def is_noise_news(text: str) -> bool:
+    return is_flow_news(text) or is_earnings_news(text) or is_ticker_admin_news(text)
+
+
 def is_event_cause_news(text: str) -> bool:
     lowered = text.lower()
-    if is_earnings_news(lowered):
+    if is_earnings_news(lowered) or is_ticker_admin_news(lowered):
         return False
     return _term_hits(lowered, CAUSE_NEWS_TERMS) > 0
 
@@ -98,7 +110,7 @@ def rank_market_news(
     extras = [keyword.lower() for keyword in extra_keywords if keyword]
 
     def event_score(text: str) -> int:
-        if is_flow_news(text) or is_earnings_news(text) or not is_event_cause_news(text):
+        if is_noise_news(text) or not is_event_cause_news(text):
             return 0
         return (
             _term_hits(text, CAUSE_NEWS_TERMS) * 3
@@ -109,10 +121,7 @@ def rank_market_news(
         )
 
     def fill_score(text: str) -> int:
-        if (
-            is_flow_news(text) or is_earnings_news(text)
-            or is_event_cause_news(text) or not text.strip()
-        ):
+        if is_noise_news(text) or is_event_cause_news(text) or not text.strip():
             return 0
         return (
             _term_hits(text, THEME_NEWS_TERMS) * 2

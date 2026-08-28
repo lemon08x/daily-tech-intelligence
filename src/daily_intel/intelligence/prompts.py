@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from daily_intel.core.models import (
-    AnalysisDraft, Document, Event, ScoutBatch, VerificationResult,
+    AnalysisDraft, Document, Event, GitBriefingBatch, ScoutBatch, VerificationResult,
 )
 
 
@@ -33,6 +33,30 @@ supported_evidence_indexes只能列出引用确实存在且能支持相关结论
 术语解释和类比只要不引入新的数量、排名、国别、产品能力或因果判断，不算新事实；若解释把文档未写的效果说成已验证事实，必须写入unsupported_claims。
 只要存在实质性unsupported_claims，verdict就不得为pass；证据不足时必须downgrade或reject。
 不要因文字完整、引用数量多或模型自报置信度高而放宽标准。输出严格JSON。"""
+
+
+GIT_BRIEF_SYSTEM = """你是开源项目讲解员。只依据用户提供的GitHub热门榜信息写大白话，不使用未提供的事实。
+每个项目写：
+- plain：一句中文说清它是做什么的、怎么工作，或这次为什么上榜。
+- scenario_title：四个字到十个字的场景标题。
+- scenario：一段具体使用场景模拟。写清谁、在什么任务里、怎么用这个仓库、期望看到什么结果。
+场景只能根据简介做合理推演，并写明这是模拟不是实测。不要编造星标数字、版本号、公司关系或文档里没有的能力。输出严格JSON。"""
+
+
+def git_brief_user(projects: list[dict]) -> str:
+    return json.dumps(
+        {
+            "projects": projects,
+            "requirements": {
+                "language": "简体中文",
+                "plain": "一句完整的话，专业名词首次出现必须立刻用人话解释。",
+                "kicker": "2到4个汉字主题词，例如软件、模型、安全、机器人、工具。",
+                "scenario": "一段具体使用场景模拟，必须标明这是推演。",
+                "schema": GitBriefingBatch.model_json_schema(),
+            },
+        },
+        ensure_ascii=False,
+    )
 
 
 def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -> str:

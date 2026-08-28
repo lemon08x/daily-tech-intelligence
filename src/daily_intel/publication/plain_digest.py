@@ -66,14 +66,21 @@ def _scan_line(analysis: Analysis) -> str:
     return _one_sentence(_takeaway(analysis)) or clean_text(analysis.headline, 80)
 
 
-def _topic_kicker(analysis: Analysis) -> str:
-    haystack = " ".join(
-        [analysis.headline, analysis.plain_takeaway, *analysis.key_facts]
-    ).lower()
+def _match_kicker(text: str) -> str:
+    haystack = text.lower()
     for label, keywords in TOPIC_KICKERS:
         if any(keyword.lower() in haystack for keyword in keywords):
             return label
-    return "科技"
+    return ""
+
+
+def _topic_kicker(analysis: Analysis) -> str:
+    # Match the scan line first. Key facts can mention side topics (e.g. a
+    # Transformers release that also ships a protein model) and must not win.
+    primary = _match_kicker(f"{analysis.headline} {_scan_line(analysis)}")
+    if primary:
+        return primary
+    return _match_kicker(" ".join(analysis.key_facts)) or "科技"
 
 
 def _signed_percent(value: Any) -> str:

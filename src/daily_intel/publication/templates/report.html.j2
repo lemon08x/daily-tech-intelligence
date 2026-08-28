@@ -80,6 +80,12 @@
     .brief:last-child { border-bottom:0; }
     .brief h3 { font-size:17px; }
     .brief-meta { font-size:13px; }
+    .git-item { padding:16px 0; }
+    .git-item h3 { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .git-board { margin-top:14px; }
+    .git-bars { margin-top:8px; }
+    .scenario { margin:12px 0 0; padding:12px 14px; border-left:4px solid #9bb5ef; border-radius:0 9px 9px 0; background:#f7f9fd; }
+    .scenario strong { display:block; margin-bottom:4px; }
     .runtime summary { cursor:pointer; font-size:18px; font-weight:800; }
     .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0; }
     .card { padding:16px; }
@@ -150,6 +156,7 @@
 
   <nav class="report-tabs" role="tablist" aria-label="日报内容">
     <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">新闻精选</button>
+    <button id="git-tab" type="button" role="tab" aria-selected="false" aria-controls="git-panel" data-tab="git" tabindex="-1">Git</button>
     <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">市场情报</button>
   </nav>
 
@@ -210,6 +217,51 @@
     </details>
   </section>
 
+  <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
+    <section class="section">
+      <h2>Git 热门项目 <span class="muted" style="font-size:13px;font-weight:400">{{ github_projects|default([])|length }} 项</span></h2>
+      <p class="muted section-intro">整理 GitHub 今日最热和本周增长最快的开源项目。每条给出大白话简介，并用主题分析模拟一个具体使用场景。</p>
+      {% if github_chart and github_chart.count %}
+      <div class="metrics">
+        <div class="card"><div class="muted">上榜仓库</div><div class="metric">{{ github_chart.count }}</div></div>
+        <div class="card"><div class="muted">语言种类</div><div class="metric">{{ github_chart.language_count }}</div></div>
+        <div class="card"><div class="muted">今日最高星</div><div class="metric up">+{{ github_chart.max_stars_today }}</div></div>
+        <div class="card"><div class="muted">本周最高星</div><div class="metric up">+{{ github_chart.max_stars_week }}</div></div>
+      </div>
+      {% endif %}
+    </section>
+    {% if github_chart and github_chart.language_bars %}
+    <section class="section git-board">
+      <h2>语言与热度</h2>
+      <p class="muted">条形长度按本次上榜仓库比较，不是全站总星标。</p>
+      {% for item in github_chart.language_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.width }}%"></span></span><span>{{ item.label }}</span></div>{% endfor %}
+    </section>
+    {% endif %}
+    {% if github_projects|default([]) %}
+      {% for item in github_projects %}
+      <article class="story">
+        <div class="story-kicker">
+          <span>Git 热门 {{ '%02d'|format(item.rank|default(loop.index)) }}</span>
+          <span class="badge">{{ item.reason or '热门' }}</span>
+        </div>
+        <h3 class="story-title">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.full_name }}</a>{% else %}{{ item.full_name }}{% endif %}</h3>
+        <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.language %}{{ item.language }} · {% endif %}{% if item.stars_today %}今日 +{{ item.stars_today }}{% endif %}{% if item.stars_today and item.stars_week %} · {% endif %}{% if item.stars_week %}本周 +{{ item.stars_week }}{% endif %}</p>
+        {% if item.plain %}<p class="takeaway">{{ item.plain }}</p>{% endif %}
+        <div class="git-bars">
+          {% if item.stars_today %}<div class="trend"><strong>今日星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.today_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_today }}</span></div>{% endif %}
+          {% if item.stars_week %}<div class="trend"><strong>本周星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.week_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_week }}</span></div>{% endif %}
+        </div>
+        {% if item.scenario %}<div class="scenario"><strong>{{ item.scenario_title or '使用场景模拟' }}</strong>{{ item.scenario }}</div>{% endif %}
+        <div class="story-actions">
+          {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开仓库 ↗</a><span class="muted">GitHub 热门榜 · 场景为推演</span>{% else %}<span class="muted">本条暂无仓库链接</span>{% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    {% else %}
+    <section class="section"><p class="muted">今日没有解析到 GitHub 热门项目。请检查来源状态，或联网后重试。</p></section>
+    {% endif %}
+  </section>
+
   <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
     <section class="section">
       <h2>市场情报</h2>
@@ -236,15 +288,6 @@
       {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
     </section>
     {% endif %}
-    {% if candidate_records %}
-    <details class="section">
-      <summary>个股扫描（产业线索，非荐股）</summary>
-      <p class="muted">备查名单，不作为买卖建议。</p>
-      <div class="table-wrap"><table><thead><tr><th>代码 / 名称</th><th>观察分</th><th>今日</th><th>60日</th><th>线索</th></tr></thead><tbody>
-        {% for row in candidate_records %}<tr><td><strong>{{ row.code }}</strong> {{ row.name }}</td><td><span class="score">{{ row.score|num(1) }}</span></td><td class="{{ 'up' if row.pct_change >= 0 else 'down' }}">{{ row.pct_change|num }}%</td><td>{{ row.momentum_60d|num }}%</td><td class="reason">{{ row.reasons }}</td></tr>{% endfor %}
-      </tbody></table></div>
-    </details>
-    {% endif %}
   </section>
 
   <footer>免责声明：本报告仅做公开信息整理、策略研究和后续回测候选，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
@@ -252,7 +295,7 @@
 <script>
   (() => {
     const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
-    const panels = {news: document.getElementById('news-panel'), market: document.getElementById('market-panel')};
+    const panels = {news: document.getElementById('news-panel'), git: document.getElementById('git-panel'), market: document.getElementById('market-panel')};
     const activate = (name, updateHistory = false) => {
       if (!panels[name]) name = 'news';
       tabs.forEach((tab) => {

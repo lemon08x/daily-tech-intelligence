@@ -51,6 +51,14 @@ intelligence:
   selection_deterministic_weight: 0.65
   selection_model_weight: 0.35
   selection_model_reject_floor: 55
+  selection_repeat_penalty: 0.4
+  selection_repeat_hours: 36
+
+github:
+  enabled: true
+  daily_limit: 8
+  weekly_limit: 8
+  publish_limit: 10
 
 quality:
   policy_version: "evidence-gate-v2"

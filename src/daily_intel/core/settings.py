@@ -31,6 +31,14 @@ INTELLIGENCE_DEFAULTS = {
     "selection_deterministic_weight": .65,
     "selection_model_weight": .35,
     "selection_model_reject_floor": 55,
+    "selection_repeat_penalty": .4,
+    "selection_repeat_hours": 36,
+}
+GITHUB_DEFAULTS = {
+    "enabled": True,
+    "daily_limit": 8,
+    "weekly_limit": 8,
+    "publish_limit": 10,
 }
 
 
@@ -53,6 +61,9 @@ def load_settings(path: Path) -> dict[str, Any]:
         )
     for key, value in INTELLIGENCE_DEFAULTS.items():
         raw["intelligence"].setdefault(key, value)
+    github = raw.setdefault("github", {})
+    for key, value in GITHUB_DEFAULTS.items():
+        github.setdefault(key, value)
     quality = raw.setdefault("quality", {})
     for key, value in QUALITY_DEFAULTS.items():
         quality.setdefault(key, value)

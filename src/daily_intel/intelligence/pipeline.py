@@ -92,11 +92,11 @@ class IntelligencePipeline:
 
         errors: list[str] = []
         if ai_enabled and event_docs:
-            selected, scout_error = self.selector.select(event_docs, cache_scope)
+            selected, scout_error = self.selector.select(event_docs, cache_scope, now)
             if scout_error:
                 errors.append(scout_error)
         else:
-            selected = self.selector.balance(event_docs)
+            selected = self.selector.order_with_repeat(event_docs, now)
 
         analyses: list[Analysis] = []
         cache_hits = 0

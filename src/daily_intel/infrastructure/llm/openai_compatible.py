@@ -72,8 +72,8 @@ class OpenAICompatibleLLM(LLMClient):
             "base_url": self.config.get("base_url", ""),
             "api_key_env": self.config.get("api_key_env", ""),
             "configured_models": {
-                stage: self.config.get(stage, {}).get("model", "")
-                for stage in ("scout", "analyst", "verifier")
+                stage: self.config.get(stage, self.config.get("scout", {})).get("model", "")
+                for stage in ("scout", "analyst", "verifier", "git_brief")
             },
             "usage_reporting": "reported",
         }
@@ -81,7 +81,7 @@ class OpenAICompatibleLLM(LLMClient):
     def generate(self, stage: str, system: str, user: str, schema: type[T]) -> LLMResult[T]:
         if self._client is None:
             raise RuntimeError(f"缺少环境变量 {self.config['api_key_env']}")
-        stage_config = self.config[stage]
+        stage_config = self.config.get(stage) or self.config["scout"]
         extra_body = dict(stage_config.get("extra_body", {}))
         # 把 schema 描述补进 system,弥补端点不强制执行 response_format 的不足
         schema_hint = (

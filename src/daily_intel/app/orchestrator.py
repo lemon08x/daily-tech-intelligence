@@ -14,6 +14,7 @@ from daily_intel.core.ports import (
 )
 from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
+from daily_intel.github.pipeline import GitHubTrendingPipeline
 from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.infrastructure.llm.openai_compatible import OpenAICompatibleLLM
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -37,6 +38,7 @@ def run_application(
     market_workflow: MarketWorkflow | None = None,
     intelligence_workflow: IntelligenceWorkflow | None = None,
     publisher: DigestPublisher | None = None,
+    github_workflow: Any | None = None,
     experiment_id: str = "default",
     force_analysis: bool = False,
     run_name: str | None = None,
@@ -73,15 +75,24 @@ def run_application(
     )
     run_metadata: dict[str, Any] = {"run_id": run_id}
     try:
-        print("[1/5] 运行A股市场数据与规则评分…", flush=True)
+        print("[1/6] 运行A股市场数据与规则评分…", flush=True)
         market = market_runner.run()
-        print("[2/5] 采集、去重并聚类权威科技来源…", flush=True)
+        print("[2/6] 采集、去重并聚类权威科技来源…", flush=True)
         intelligence = intelligence_runner.run(
             current, market.snapshot, market.radar_news,
             offline=offline, no_ai=no_ai, require_ai=require_ai,
             experiment_id=experiment_id, force_analysis=force_analysis,
         )
-        print("[3/5] 整理AI深研、证据校验与产业映射…", flush=True)
+        print("[3/6] 采集GitHub热门与增长最快项目…", flush=True)
+        github_runner = github_workflow or GitHubTrendingPipeline(
+            settings, resolve_path(settings, "cache_dir"),
+        )
+        github = github_runner.run(
+            current,
+            stages=getattr(intelligence_runner, "stages", None),
+            ai_enabled=intelligence.ai_status == "enabled",
+        )
+        print("[4/6] 整理AI深研、证据校验与产业映射…", flush=True)
 
         ai_label = AI_STATUS_LABELS.get(intelligence.ai_status, intelligence.ai_status)
         context = {
@@ -99,11 +110,16 @@ def run_application(
             "quality_summary": intelligence.quality_summary,
             "model_runtime": intelligence.model_runtime,
             "prompt_version": settings["llm"]["prompt_version"],
-            "pipeline_errors": intelligence.errors,
+            "pipeline_errors": [*intelligence.errors, *github.errors],
+            "github_projects": github.projects,
+            "github_chart": getattr(github, "chart", {}) or {},
+            "github_source_status": github.source_status,
         }
         failed_sources = [
             item["name"] for item in market.context["market_source_status"] if item["stale"]
-        ] + [item["name"] for item in intelligence.source_status if item["stale"]]
+        ] + [item["name"] for item in intelligence.source_status if item["stale"]] + [
+            item["name"] for item in github.source_status if item["stale"]
+        ]
         run_metadata = {
             **market.metadata,
             "run_id": run_id,
@@ -138,12 +154,12 @@ def run_application(
                 "all_sources_fresh": not failed_sources,
             },
         }
-        print("[4/5] 生成统一HTML、Markdown和可追溯数据文件…", flush=True)
+        print("[5/6] 生成统一HTML、Markdown和可追溯数据文件…", flush=True)
         outputs = digest_publisher.publish(
             context, intelligence.analyses, market.snapshot, market.candidates,
             run_metadata, resolve_path(settings, "output_dir"), current,
         )
-        print("[5/5] 保存流水线状态…", flush=True)
+        print("[6/6] 保存流水线状态…", flush=True)
         repository.finish_run(run_id, "success", run_metadata)
         return outputs
     except Exception as exc:

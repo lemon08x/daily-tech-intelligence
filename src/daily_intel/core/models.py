@@ -144,6 +144,18 @@ class ScoutBatch(StrictModel):
     items: list[ScoutItem]
 
 
+class GitProjectBrief(StrictModel):
+    full_name: str
+    kicker: str = "开源"
+    plain: str = Field(min_length=8, max_length=280)
+    scenario_title: str = Field(default="使用场景模拟", max_length=40)
+    scenario: str = Field(default="", max_length=420)
+
+
+class GitBriefingBatch(StrictModel):
+    items: list[GitProjectBrief] = Field(default_factory=list, max_length=16)
+
+
 class CompanyHypothesis(StrictModel):
     code: str = Field(pattern=r"^\d{6}$")
     name: str

@@ -102,12 +102,17 @@ def test_rank_market_news_does_not_go_empty_on_earnings_heavy_feed() -> None:
         {"title": "尼泊尔北部山洪遇难人数升至289人", "summary": "救援", "published_at": "2026-08-27", "url": "https://example.com/b"},
         {"title": "美国司法部拟重启捕获法庭以便扣押伊朗油轮", "summary": "加强对伊朗的海上封锁", "published_at": "2026-08-27", "url": "https://example.com/c"},
         {"title": "众诚科技全资子公司签订2.92亿元合同", "summary": "信息化建设采购", "published_at": "2026-08-27", "url": "https://example.com/d"},
+        {
+            "title": "ST围海：8月31日起撤销其他风险警示 股票简称变更为围海股份",
+            "summary": "证券简称由ST围海变更为围海股份，证券代码不变，日涨跌幅限制为10%。",
+            "published_at": "2026-08-27", "url": "https://example.com/st",
+        },
     ])
     ranked = rank_market_news(news, [], 5, min_fill=3)
     titles = ranked["title"].tolist()
     assert any("扣押" in title for title in titles)
     assert any("合同" in title for title in titles)
-    assert all("净利润" not in title and "山洪" not in title for title in titles)
+    assert all("净利润" not in title and "山洪" not in title and "围海" not in title for title in titles)
 
 
 def test_news_provider_merges_both_feeds(tmp_path, monkeypatch) -> None:

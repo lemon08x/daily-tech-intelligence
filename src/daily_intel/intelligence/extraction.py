@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from io import BytesIO
 
 import trafilatura
@@ -8,6 +9,9 @@ from pypdf import PdfReader
 from daily_intel.core.models import Document
 from daily_intel.infrastructure.http import http_get, install_proxy_fallback
 from daily_intel.intelligence.sources.common import USER_AGENT
+
+logging.getLogger("pypdf").setLevel(logging.ERROR)
+logging.getLogger("pypdf._reader").setLevel(logging.ERROR)
 
 
 def enrich_document(document: Document, timeout: int, max_chars: int) -> Document:

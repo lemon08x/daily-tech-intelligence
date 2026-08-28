@@ -58,5 +58,26 @@ if ($RequireAI) { $Arguments += "--require-ai" }
 if ($ExperimentId) { $Arguments += @("--experiment-id", $ExperimentId) }
 if ($ForceAnalysis) { $Arguments += "--force-analysis" }
 
-& $Python @Arguments *>&1 | Tee-Object -FilePath (Join-Path $LogDir "latest.log")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+# Native Python stderr (for example pypdf warnings) must not abort the run.
+if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
+$logPath = Join-Path $LogDir "latest.log"
+$savedEa = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$code = 1
+$utf8 = New-Object System.Text.UTF8Encoding $false
+$writer = New-Object System.IO.StreamWriter $logPath, $false, $utf8
+try {
+    & $Python @Arguments 2>&1 | ForEach-Object {
+        $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
+        $writer.WriteLine($line)
+        Write-Host $line
+    }
+    if ($null -ne $LASTEXITCODE) { $code = $LASTEXITCODE } else { $code = 0 }
+} finally {
+    $writer.Flush()
+    $writer.Dispose()
+    $ErrorActionPreference = $savedEa
+}
+if ($code -ne 0) { exit $code }
