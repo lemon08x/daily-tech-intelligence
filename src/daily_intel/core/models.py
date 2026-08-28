@@ -157,6 +157,19 @@ class GitBriefingBatch(StrictModel):
     items: list[GitProjectBrief] = Field(default_factory=list, max_length=16)
 
 
+class MarketNewsAnalysis(StrictModel):
+    title: str
+    impact: str = Field(min_length=8, max_length=400)
+    consequences: str = Field(min_length=8, max_length=400)
+    reasoning: str = Field(min_length=8, max_length=600)
+    quotes: list[str] = Field(default_factory=list, max_length=4)
+
+
+class DigestBrief(StrictModel):
+    scan_paragraph: str = Field(min_length=20, max_length=900)
+    market_news: list[MarketNewsAnalysis] = Field(default_factory=list, max_length=12)
+
+
 class CompanyHypothesis(StrictModel):
     code: str = Field(pattern=r"^\d{6}$")
     name: str

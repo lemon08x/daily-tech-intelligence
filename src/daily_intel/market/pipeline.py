@@ -222,6 +222,18 @@ class MarketPipeline:
             *hot["name"].astype(str).tolist(),
         ]
         selected_news = rank_market_news(news, extra_keywords, int(config["app"]["top_news"]))
+        selected_titles = set(selected_news["title"].astype(str)) if not selected_news.empty else set()
+        dropped_news: list[dict[str, Any]] = []
+        if not news.empty:
+            for _, row in news.iterrows():
+                title = str(row.get("title") or "")
+                if not title or title in selected_titles:
+                    continue
+                blob = f"{title} {row.get('summary') or ''}".lower()
+                dropped_news.append({
+                    "title": title,
+                    "reason": "噪音过滤" if is_noise_news(blob) else "未进入前排",
+                })
         breadth = market_breadth(snapshot)
         market_date, is_trading_day = _market_date(calendar_data.frame, self.now)
         source_status = [
@@ -256,5 +268,13 @@ class MarketPipeline:
             "screening": screening,
             "factor_weights": market_config["factor_weights"],
             "sources": source_status,
+            "process": {
+                "snapshot_rows": int(len(snapshot)),
+                "eligible_rows": int(len(candidates)),
+                "news_in": int(len(news)),
+                "news_selected": _records(selected_news) if not selected_news.empty else [],
+                "news_dropped": dropped_news[:50],
+                "news_dropped_count": len(dropped_news),
+            },
         }
         return MarketRunResult(snapshot, candidates, news, context, metadata)

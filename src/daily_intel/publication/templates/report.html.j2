@@ -139,43 +139,26 @@
   <header>
     <h1>{{ title }}</h1>
     <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">先扫今日速读，再按需查看精选原文和市场情报。市场部分只保留能解释交易原因的事件，不是看盘名单。</p>
+    <p class="muted">先读今日速读，再按需打开科技、Git 和市场情报。科技页分泛读和硬核；市场指标只列涨跌前三后三。</p>
   </header>
 
-  {% if plain_digest and plain_digest.has_content %}
+  {% if plain_digest and plain_digest.scan_paragraph %}
   <section class="section digest">
     <h2>今日速读</h2>
-    {% if plain_digest.general_items %}
-    <div class="digest-block">
-      <h3>泛读</h3>
-      <div class="scan-list">{% for item in plain_digest.general_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
-    </div>
-    {% endif %}
-    {% if plain_digest.hardcore_items %}
-    <div class="digest-block">
-      <h3>硬核</h3>
-      <div class="scan-list">{% for item in plain_digest.hardcore_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
-    </div>
-    {% endif %}
-    {% if not plain_digest.general_items and not plain_digest.hardcore_items and plain_digest.tech_items %}
-    <div class="digest-block">
-      <h3>科技</h3>
-      <div class="scan-list">{% for item in plain_digest.tech_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
-    </div>
-    {% endif %}
+    <p class="takeaway">{{ plain_digest.scan_paragraph }}</p>
   </section>
   {% endif %}
 
   <nav class="report-tabs" role="tablist" aria-label="日报内容">
-    <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">新闻精选</button>
+    <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">科技</button>
     <button id="git-tab" type="button" role="tab" aria-selected="false" aria-controls="git-panel" data-tab="git" tabindex="-1">Git</button>
     <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">市场情报</button>
   </nav>
 
   <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
     <section class="section">
-      <h2>今日科技精选 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
-      <p class="muted section-intro">分成泛读和硬核两栏。泛读来自周刊、投稿池和行业精选；硬核来自论文、官方发布和基础设施 Release。周刊源默认是线索，缺少一手来源时不会升成深度结论。</p>
+      <h2>科技 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
+      <p class="muted section-intro">分成泛读和硬核。泛读覆盖周刊、IT 热点和社区精选；硬核来自论文、官方发布和基础设施 Release。周刊和热点源默认是线索，缺少一手来源时不会升成深度结论。</p>
     </section>
 
     {% set general_news = analyses | selectattr('lane', 'equalto', 'general') | list %}
@@ -186,7 +169,7 @@
     {% if general_news %}
     <section class="section">
       <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
-      <p class="muted">适合快速扫一眼的工具、周刊和社区精选。</p>
+      <p class="muted">适合快速扫一眼的工具、周刊、IT 热点和社区精选。</p>
     </section>
     {% for analysis in general_news %}
     <article class="story">
@@ -277,77 +260,64 @@
   <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
     <section class="section">
       <h2>Git 热门项目 <span class="muted" style="font-size:13px;font-weight:400">{{ github_projects|default([])|length }} 项</span></h2>
-      <p class="muted section-intro">整理 GitHub 今日最热和本周增长最快的开源项目。每条给出大白话简介，并用主题分析模拟一个具体使用场景。</p>
-      {% if github_chart and github_chart.count %}
-      <div class="metrics">
-        <div class="card"><div class="muted">上榜仓库</div><div class="metric">{{ github_chart.count }}</div></div>
-        <div class="card"><div class="muted">语言种类</div><div class="metric">{{ github_chart.language_count }}</div></div>
-        <div class="card"><div class="muted">今日最高星</div><div class="metric up">+{{ github_chart.max_stars_today }}</div></div>
-        <div class="card"><div class="muted">本周最高星</div><div class="metric up">+{{ github_chart.max_stars_week }}</div></div>
-      </div>
-      {% endif %}
+      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库，并补充 Hugging Face 热门模型和 GitLab 高星项目。每条给出大白话简介，并用主题分析模拟一个具体使用场景。</p>
     </section>
-    {% if github_chart and github_chart.language_bars %}
-    <section class="section git-board">
-      <h2>语言与热度</h2>
-      <p class="muted">条形长度按本次上榜仓库比较，不是全站总星标。</p>
-      {% for item in github_chart.language_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.width }}%"></span></span><span>{{ item.label }}</span></div>{% endfor %}
-    </section>
-    {% endif %}
     {% if github_projects|default([]) %}
       {% for item in github_projects %}
       <article class="story">
         <div class="story-kicker">
-          <span>Git 热门 {{ '%02d'|format(item.rank|default(loop.index)) }}</span>
+          <span>{{ item.origin_label or 'Git' }} {{ '%02d'|format(item.rank|default(loop.index)) }}</span>
           <span class="badge">{{ item.reason or '热门' }}</span>
         </div>
         <h3 class="story-title">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.full_name }}</a>{% else %}{{ item.full_name }}{% endif %}</h3>
-        <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.language %}{{ item.language }} · {% endif %}{% if item.stars_today %}今日 +{{ item.stars_today }}{% endif %}{% if item.stars_today and item.stars_week %} · {% endif %}{% if item.stars_week %}本周 +{{ item.stars_week }}{% endif %}</p>
+        <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.language %}{{ item.language }} · {% endif %}{% if item.stars_today %}今日 +{{ item.stars_today }}{% endif %}{% if item.stars_today and item.stars_week %} · {% endif %}{% if item.origin == 'huggingface' and item.stars_week %}likes {{ item.stars_week }}{% elif item.origin == 'gitlab' and item.stars_week %}星标 {{ item.stars_week }}{% elif item.stars_week %}本周 +{{ item.stars_week }}{% endif %}</p>
         {% if item.plain %}<p class="takeaway">{{ item.plain }}</p>{% endif %}
+        {% if (item.origin or 'github') == 'github' %}
         <div class="git-bars">
           {% if item.stars_today %}<div class="trend"><strong>今日星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.today_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_today }}</span></div>{% endif %}
           {% if item.stars_week %}<div class="trend"><strong>本周星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.week_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_week }}</span></div>{% endif %}
         </div>
+        {% endif %}
         {% if item.scenario %}<div class="scenario"><strong>{{ item.scenario_title or '使用场景模拟' }}</strong>{{ item.scenario }}</div>{% endif %}
         <div class="story-actions">
-          {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开仓库 ↗</a><span class="muted">GitHub 热门榜 · 场景为推演</span>{% else %}<span class="muted">本条暂无仓库链接</span>{% endif %}
+          {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开{{ item.origin_label or '项目' }} ↗</a><span class="muted">{{ item.origin_label or 'GitHub' }} · 场景为推演</span>{% else %}<span class="muted">本条暂无链接</span>{% endif %}
         </div>
       </article>
       {% endfor %}
     {% else %}
-    <section class="section"><p class="muted">今日没有解析到 GitHub 热门项目。请检查来源状态，或联网后重试。</p></section>
+    <section class="section"><p class="muted">今日没有解析到开源热门项目。请检查来源状态，或联网后重试。</p></section>
     {% endif %}
   </section>
 
   <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
     <section class="section">
       <h2>市场情报</h2>
-      <p class="muted section-intro">只保留能解释“为什么会成交”的事件：政策、监管、供给冲击、合作与禁令。产业和全球市场列出当日涨跌前三后三，或幅度够大的条目。</p>
+      <p class="muted section-intro">指标只保留当日涨幅前三和跌幅后三。市场新闻给出相关影响、可能后果，以及证据和推理过程。</p>
     </section>
     {% if plain_digest and plain_digest.industry_bars %}
     <section class="section">
       <h2>产业风向</h2>
-      <p class="muted">列出当日涨幅前三、跌幅后三，以及幅度够大或能对上事件原因的行业。</p>
-      {% for item in plain_digest.industry_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill {{ item.direction }}" style="width:{{ item.width }}%"></span></span><span class="{{ item.direction }}">{{ item.label }}</span></div>{% if item.why %}<p class="muted" style="margin:0 0 8px 0">因 {{ item.why }}</p>{% endif %}{% endfor %}
+      <p class="muted">当日涨幅前三、跌幅后三，不附原因。</p>
+      {% for item in plain_digest.industry_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill {{ item.direction }}" style="width:{{ item.width }}%"></span></span><span class="{{ item.direction }}">{{ item.label }}</span></div>{% endfor %}
     </section>
     {% endif %}
     {% if plain_digest and plain_digest.board %}
     <section class="section">
       <h2>全球市场对照</h2>
-      <p class="muted">列出当日涨幅前三、跌幅后三，以及幅度够大或能对上事件原因的市场。</p>
-      <div class="chips">{% for item in plain_digest.board %}<div class="chip"><small>{{ item.region }}</small><strong>{{ item.label }}</strong><span class="{{ item.direction }}">{{ item.label_change }}</span>{% if item.why %}<small>{{ item.why }}</small>{% endif %}</div>{% endfor %}</div>
+      <p class="muted">当日涨幅前三、跌幅后三，不附原因。</p>
+      <div class="chips">{% for item in plain_digest.board %}<div class="chip"><small>{{ item.region }}</small><strong>{{ item.label }}</strong><span class="{{ item.direction }}">{{ item.label_change }}</span></div>{% endfor %}</div>
     </section>
     {% endif %}
     {% if news_records %}
     <section class="section">
       <h2>可归因事件</h2>
-      <p class="muted">下面是可能导致交易的事件，不是资金进出或财报数字。</p>
-      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p><p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
+      <p class="muted">下面是可能导致交易的事件。影响和后果只根据这条新闻能核对的内容推理，不是价格预测。</p>
+      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p>{% if item.impact %}<p><strong>可能影响：</strong>{{ item.impact }}</p>{% endif %}{% if item.consequences %}<p><strong>可能后果：</strong>{{ item.consequences }}</p>{% endif %}{% if item.reasoning %}<div class="scenario"><strong>推理过程</strong>{{ item.reasoning }}</div>{% endif %}{% if item.quotes %}<div class="subhead">分析证据</div>{% for quote in item.quotes %}<div class="evidence">{{ quote }}</div>{% endfor %}{% endif %}<p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
     </section>
     {% endif %}
   </section>
 
-  <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
+  <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。<br><a href="process.html">查看本次从信源到成稿的处理过程</a></footer>
 </main>
 <script>
   (() => {

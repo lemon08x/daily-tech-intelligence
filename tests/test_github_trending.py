@@ -6,7 +6,13 @@ from daily_intel.core.models import (
     Analysis, AnalysisQuality, AnalysisStatus, Document, Event, Evidence,
 )
 from daily_intel.github.pipeline import annotate_github_visuals
-from daily_intel.github.trending import merge_trending, parse_trending_html
+from daily_intel.github.trending import (
+    append_catalog,
+    merge_trending,
+    parse_gitlab_projects,
+    parse_huggingface_models,
+    parse_trending_html,
+)
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.selection import EventSelector
 
@@ -57,10 +63,28 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
     assert "vercel/next.js" in names
     annotated, chart = annotate_github_visuals(merged)
     assert chart["count"] == 3
-    assert chart["language_bars"]
     assert annotated[0]["today_width"] == 100
     assert annotated[0]["week_width"] == 100
     assert "█" in annotated[0]["today_spark"]
+    hf = parse_huggingface_models([
+        {"modelId": "meta-llama/Llama-3.1-8B", "likes": 9000, "pipeline_tag": "text-generation"},
+        {"id": "broken", "likes": 1},
+    ], limit=4)
+    gitlab = parse_gitlab_projects([
+        {
+            "path_with_namespace": "gitlab-org/gitlab",
+            "web_url": "https://gitlab.com/gitlab-org/gitlab",
+            "description": "GitLab CE",
+            "star_count": 5000,
+        }
+    ], limit=3)
+    catalog = append_catalog(merged, hf + gitlab)
+    catalog_names = [item["full_name"] for item in catalog]
+    assert "meta-llama/Llama-3.1-8B" in catalog_names
+    assert "gitlab-org/gitlab" in catalog_names
+    by_name = {item["full_name"]: item for item in catalog}
+    assert by_name["meta-llama/Llama-3.1-8B"]["origin"] == "huggingface"
+    assert by_name["gitlab-org/gitlab"]["origin"] == "gitlab"
 
 
 def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:

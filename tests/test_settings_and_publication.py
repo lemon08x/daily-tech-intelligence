@@ -107,6 +107,8 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
             "kicker": "软件",
             "plain": "这是一个开源机器学习库，用来加载和运行各种大模型。",
             "language": "Python",
+            "origin": "github",
+            "origin_label": "GitHub",
             "reason": "今日最热",
             "stars_today": 1200,
             "stars_week": 5000,
@@ -133,7 +135,10 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         context, [analysis], pd.DataFrame(), pd.DataFrame(), metadata,
         tmp_path, now,
     )
-    assert set(outputs) == {"html", "markdown", "csv", "snapshot", "intelligence", "metadata"}
+    assert set(outputs) == {
+        "html", "markdown", "csv", "snapshot", "intelligence", "metadata",
+        "process", "process_json",
+    }
     html = outputs["html"].read_text(encoding="utf-8")
     markdown = outputs["markdown"].read_text(encoding="utf-8")
     assert 'role="tab"' in html
@@ -145,29 +150,37 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "今日速读" in html and "今日速读" in markdown
     assert "硬核" in html and "硬核" in markdown
     assert "市场情报" in html and "产业风向" in html
-    assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in html.split("新闻精选", 1)[0]
-    assert "scan-kicker" in html.split("新闻精选", 1)[0]
+    assert 'data-tab="news">科技</button>' in html
+    assert "新闻精选" not in html
+    digest_html = html.split('id="news-panel"', 1)[0]
+    digest_md = markdown.split("## 科技", 1)[0]
+    assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in digest_html
+    digest_body = digest_html.split("<h2>今日速读</h2>", 1)[1]
+    assert "泛读" not in digest_body
+    assert "scan-kicker" not in digest_body
+    assert "<p class=\"takeaway\">" in digest_body
     assert "技术深研" in html
     assert "纳斯达克" in html and "黄金" in html
     assert "赚钱效应" not in html
-    digest_html = html.split('id="news-panel"', 1)[0]
-    digest_md = markdown.split("## 新闻精选", 1)[0]
     market_html = html.split('id="market-panel"', 1)[1]
     assert "产业风向" not in digest_html and "全球市场" not in digest_html
-    assert "金融行业" not in digest_html and "纳斯达克" not in digest_html
     assert "**产业风向**" not in digest_md and "**全球市场**" not in digest_md
     assert "产业风向" in market_html and "金融行业" in market_html
+    assert "可能影响" in market_html and "推理过程" in market_html
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" in html
     assert "金融行业" in markdown and "可归因事件" in markdown
+    assert "可能影响" in markdown and "商务部宣布对半导体设备实施出口管制" in markdown
     assert "个股扫描" not in html and "个股扫描" not in markdown
     assert "长江证券" not in html and "长江证券" not in markdown
     assert 'id="git-panel"' in html and 'data-tab="git"' in html
     assert "huggingface/transformers" in html and "Git 热门项目" in markdown
     git_html = html.split('id="git-panel"', 1)[1].split('id="market-panel"', 1)[0]
     assert 'class="story"' in git_html
-    assert "语言与热度" in git_html and "使用场景模拟" in git_html
-    assert "打开仓库" in git_html and "trend-fill" in git_html
+    assert "语言与热度" not in git_html
+    assert "使用场景模拟" in git_html
+    assert "打开GitHub" in git_html and "trend-fill" in git_html
+    assert "Hugging Face" in markdown.split("Git 热门项目", 1)[1]
     assert "使用场景模拟" in markdown and "Python" in markdown.split("Git 热门项目", 1)[1]
     collapsed, expanded = html.split('<details class="deep-dive">', 1)
     assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
@@ -179,6 +192,12 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert outputs["html"].parent == tmp_path / "2026-08-24" / "runs" / "100000-test"
     assert not (tmp_path / "2026-08-24" / "daily_digest.html").exists()
     assert not (tmp_path / "2026-08-24" / "latest_run.json").exists()
+    process_html = outputs["process"].read_text(encoding="utf-8")
+    process_json = json.loads(outputs["process_json"].read_text(encoding="utf-8"))
+    assert "处理过程" in process_html
+    assert "商务部宣布对半导体设备实施出口管制" in process_html
+    assert process_json["published"][0]["headline"] == "技术深研"
+    assert "process.html" in html
 
 
 def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
@@ -357,12 +376,24 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
     assert "…" not in digest["tech_items"][0]["scan"]
     assert "news_threads" not in digest
     names = [item["name"] for item in digest["industry_bars"]]
-    assert "半导体" in names and "金融行业" in names and "发电设备" in names
-    assert "农业" not in names and "食品" not in names and "传媒娱乐" not in names
+    assert names[:3] == ["半导体", "有色金属", "化纤行业"]
+    assert names[-3:] == ["酿酒行业", "电器行业", "发电设备"]
+    assert "金融行业" not in names and "农业" not in names
+    assert all("why" not in item for item in digest["industry_bars"])
     labels = [item["label"] for item in digest["board"]]
     assert "创业板" in labels and "纳斯达克" in labels and "黄金" in labels
     assert "原油" in labels
     assert "上证" not in labels and "铜" not in labels
+    from daily_intel.publication.briefing import apply_digest_brief
+    paragraph, news = apply_digest_brief(
+        None, [analysis],
+        {"news_records": [{"title": "商务部宣布对半导体设备实施出口管制", "summary": "政策落地。"}]},
+        digest["industry_bars"], digest["board"],
+    )
+    assert "实验室公布了一项可核对的工程改进" in paragraph
+    assert "半导体" in paragraph or "商务部" in paragraph
+    assert news[0]["impact"] and news[0]["reasoning"]
+    assert "商务部宣布对半导体设备实施出口管制" in news[0]["quotes"]
 
     robot = analysis.model_copy(update={
         "headline": "多臂机器人协作",

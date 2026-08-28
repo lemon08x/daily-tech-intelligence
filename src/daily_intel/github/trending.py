@@ -47,6 +47,8 @@ def parse_trending_html(html: str, period: str) -> list[dict[str, Any]]:
             "url": f"https://github.com/{full_name}",
             "description": clean_text(description, 220),
             "language": language,
+            "origin": "github",
+            "origin_label": "GitHub",
             "period": period,
             "stars_today": stars_today,
             "stars_week": stars_week,
@@ -101,6 +103,100 @@ def merge_trending(
     picked = []
     for item in ranked[: max(1, publish_limit)]:
         row = dict(item)
+        row["origin"] = row.get("origin") or "github"
+        row["origin_label"] = row.get("origin_label") or "GitHub"
         row["reason"] = "、".join(row.get("reasons") or [row.get("reason") or "热门"])
         picked.append(row)
     return picked
+
+
+def parse_huggingface_models(payload: object, *, limit: int = 4) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not isinstance(payload, list):
+        return rows
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        full_name = str(item.get("modelId") or item.get("id") or "").strip()
+        if not full_name or "/" not in full_name:
+            continue
+        likes = int(item.get("likes") or 0)
+        rows.append({
+            "full_name": full_name,
+            "url": f"https://huggingface.co/{full_name}",
+            "description": clean_text(str(item.get("pipeline_tag") or item.get("library_name") or "机器学习模型"), 220),
+            "language": str(item.get("pipeline_tag") or "").strip(),
+            "origin": "huggingface",
+            "origin_label": "Hugging Face",
+            "stars_today": 0,
+            "stars_week": likes,
+            "delta": likes,
+            "reason": "Hugging Face 热门模型",
+        })
+        if len(rows) >= max(1, limit):
+            break
+    return rows
+
+
+def parse_gitlab_projects(payload: object, *, limit: int = 3) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not isinstance(payload, list):
+        return rows
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        full_name = str(item.get("path_with_namespace") or "").strip()
+        url = str(item.get("web_url") or "").strip()
+        if not full_name or not url:
+            continue
+        stars = int(item.get("star_count") or 0)
+        rows.append({
+            "full_name": full_name,
+            "url": url,
+            "description": clean_text(str(item.get("description") or ""), 220),
+            "language": "",
+            "origin": "gitlab",
+            "origin_label": "GitLab",
+            "stars_today": 0,
+            "stars_week": stars,
+            "delta": stars,
+            "reason": "GitLab 高星项目",
+        })
+        if len(rows) >= max(1, limit):
+            break
+    return rows
+
+
+def fetch_huggingface_models(limit: int = 4, timeout: int = 20) -> list[dict[str, Any]]:
+    response = http_get(
+        f"https://huggingface.co/api/models?sort=trending&limit={max(1, limit)}",
+        timeout=timeout,
+        headers={"User-Agent": TRENDING_HEADERS["User-Agent"], "Accept": "application/json"},
+    )
+    response.raise_for_status()
+    return parse_huggingface_models(response.json(), limit=limit)
+
+
+def fetch_gitlab_projects(limit: int = 3, timeout: int = 20) -> list[dict[str, Any]]:
+    response = http_get(
+        "https://gitlab.com/api/v4/projects?order_by=star_count&sort=desc&simple=true"
+        f"&per_page={max(1, limit)}&visibility=public",
+        timeout=timeout,
+        headers={"User-Agent": TRENDING_HEADERS["User-Agent"], "Accept": "application/json"},
+    )
+    response.raise_for_status()
+    return parse_gitlab_projects(response.json(), limit=limit)
+
+
+def append_catalog(
+    base: list[dict[str, Any]], extra: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    seen = {str(item.get("full_name") or "").lower() for item in base}
+    merged = list(base)
+    for item in extra:
+        name = str(item.get("full_name") or "").lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        merged.append(dict(item))
+    return merged

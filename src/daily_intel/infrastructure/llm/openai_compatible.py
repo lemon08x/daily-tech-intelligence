@@ -73,7 +73,7 @@ class OpenAICompatibleLLM(LLMClient):
             "api_key_env": self.config.get("api_key_env", ""),
             "configured_models": {
                 stage: self.config.get(stage, self.config.get("scout", {})).get("model", "")
-                for stage in ("scout", "analyst", "verifier", "git_brief")
+                for stage in ("scout", "analyst", "verifier", "git_brief", "digest_brief")
             },
             "usage_reporting": "reported",
         }

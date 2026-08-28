@@ -79,19 +79,15 @@ output/YYYY-MM-DD/
 Harness 运行还包含 `harness_io` 请求/响应审计。同一天重复运行不会覆盖此前
 运行目录，也不会在日期根目录生成重复副本。
 
-- `daily_digest.html`：默认显示新闻精选，并可切换到 Git、市场情报；
+- `daily_digest.html`：默认显示科技页，并可切换到 Git、市场情报；
 - `daily_digest.md`：适合推送和二次编辑；
 - `intelligence.json`：稳定的科技分析数据契约；
 - `candidates.csv`：规则过滤后的市场候选备查表；
 - `market_snapshot.csv`：标准化市场快照；
-- `run_meta.json`：模型、提示词版本、token、失败源、缓存和新鲜度状态。
+- `run_meta.json`：模型、提示词版本、token、失败源、缓存和新鲜度状态；
+- `process.html`：本次从信源采集、聚类、选题、深研、质量门到成稿的处理过程，便于对照改进；同目录 `process.json` 是同一份结构化记录。
 
-HTML 先给出可扫的“今日速读”（泛读/硬核短句，条目前有主题词），再进入
-“新闻精选”。泛读来自周刊和投稿池，硬核来自论文与官方发布。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度
-分析按需展开。“Git”页用卡片列出当日最热和本周增长最快的开源项目，附星标/语言条形图，
-并用一句话说明项目在做什么，再给一段具体使用场景模拟。“市场情报”页把交易所当信息源：产业和全球市场只列当日涨跌
-前三后三或幅度够大的条目，并保留可归因事件；日报不再列出个股扫描。
-前一天已经出现过的科技事件，第二天会降低入选权重。
+HTML 先给出一段“今日速读”，把当天科技或市场新闻写成连贯短文。科技页分泛读和硬核：泛读来自周刊、IT 热点和社区精选，硬核来自论文与官方发布。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度分析按需展开。“Git”页用卡片列出 GitHub 今日最热和本周增长最快的仓库，并补充 Hugging Face 热门模型和 GitLab 高星项目；每条用一句话说清项目在做什么，再给一段具体使用场景模拟。“市场情报”页只列产业/全球涨幅前三和跌幅后三，不分析涨跌原因；市场新闻则给出影响、可能后果、推理过程和原文证据。日报不再列出个股扫描。前一天已经出现过的科技事件，第二天会降低入选权重。
 
 持久化情报位于 `data\intelligence.db`，包括文档、事件、证据、按实验及
 模型指纹隔离的分析版本、产业/公司映射、LLM调用和流水线游标。市场CSV缓存
@@ -159,7 +155,7 @@ src/daily_intel/
 
 程序仍按三个阶段分别读模型配置：`scout`（初筛）、`analyst`（深研）、`verifier`（校验），外加 `git_brief`（Git 页解说）。每个阶段都可以在 YAML 里写成不同模型。
 
-日常定时任务用的是 `config/settings.deepseek.yaml`：局域网 `http://192.168.31.236:8000/v1`，密钥变量 `OMLX_API_KEY`，**三个阶段目前都指向同一个** `deepseek-v4-flash-0731`。所以最近几次日报是单模型跑完的，不是 flash 初筛 + pro 深研。
+日常定时任务用的是 `config/settings.deepseek.yaml`：局域网 `http://192.168.31.236:8000/v1`，密钥变量 `OMLX_API_KEY`，**三个阶段目前都指向同一个** `deepseek-v4-flash-0731`。所以最近几次日报是单模型跑完的，不是 flash 初筛 + pro 深研。本地 Qwen / DeepSeek 各阶段都开思考，并使用端点支持的最高 reasoning（Qwen 默认 `xhigh`，DeepSeek 显式 `xhigh`），输出上限放到 32000，质量优先、不省 token。
 
 `config/settings.yaml` 里仍保留云端 DeepSeek 示例（`https://api.deepseek.com` / `DEEPSEEK_API_KEY`，scout=`deepseek-v4-flash`，analyst/verifier=`deepseek-v4-pro`），那不是早间任务实际走的配置。要恢复双模型，只要在对应 YAML 里把三个阶段写成不同 `model` 即可。运行元数据记录客户端报告的实际提供方和模型，不再把静态 YAML 直接当成运行结果。
 

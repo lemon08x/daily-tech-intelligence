@@ -8,6 +8,7 @@ from typing import Any
 from daily_intel.core.models import Analysis, Document, Event
 from daily_intel.core.ports import IntelligenceRepository
 from daily_intel.intelligence.modeling import ModelStageRunner
+from daily_intel.intelligence.sources.common import event_lane
 
 
 class EventSelector:
@@ -28,6 +29,7 @@ class EventSelector:
         self.model_reject_floor = float(self.config.get("selection_model_reject_floor", 55))
         self.repeat_penalty = float(self.config.get("selection_repeat_penalty", .4))
         self.repeat_hours = float(self.config.get("selection_repeat_hours", 36))
+        self.last_trace: list[dict[str, Any]] = []
 
     def select(
         self, event_docs: list[tuple[Event, list[Document]]], cache_scope: str,
@@ -35,6 +37,7 @@ class EventSelector:
     ) -> tuple[list[tuple[Event, list[Document]]], str | None]:
         current = now or datetime.now(timezone.utc)
         recent = self._recent_analyses(current)
+        self.last_trace = []
         signature = hashlib.sha256(json.dumps(
             {
                 "events": [event.id for event, _ in event_docs],
@@ -67,7 +70,10 @@ class EventSelector:
                         if score is None:
                             score = event.deterministic_score
                         ranked.append((float(score), event, docs))
-                    return self._apply_repeat(ranked, recent), None
+                    result = self._apply_repeat(ranked, recent)
+                    self._record_ranked(ranked, "scout_cached")
+                    self._annotate_repeat(result, recent)
+                    return result, None
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 pass
         try:
@@ -76,10 +82,23 @@ class EventSelector:
             ranked: list[tuple[float, Event, list[Document]]] = []
             for event, docs in event_docs:
                 item = by_id.get(event.id)
+                row = self._event_row(event, docs)
                 if item is None:
+                    row.update({"action": "scout_missing", "score": event.deterministic_score})
                     ranked.append((event.deterministic_score, event, docs))
+                    self.last_trace.append(row)
                     continue
+                row.update({
+                    "relevant": item.relevant,
+                    "reason": item.reason,
+                    "novelty": item.novelty,
+                    "technical_depth": item.technical_depth,
+                    "industry_impact": item.industry_impact,
+                    "relevance": item.relevance,
+                })
                 if not item.relevant and event.deterministic_score < self.model_reject_floor:
+                    row["action"] = "scout_rejected"
+                    self.last_trace.append(row)
                     continue
                 model_score = (
                     item.relevance * .30
@@ -91,7 +110,13 @@ class EventSelector:
                     event.deterministic_score * self.deterministic_weight
                     + model_score * self.model_weight
                 )
+                row.update({
+                    "action": "kept",
+                    "model_score": round(model_score, 2),
+                    "score": round(score, 2),
+                })
                 ranked.append((score, event, docs))
+                self.last_trace.append(row)
             ranked.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
             self.repository.set_state(cache_key, json.dumps({
                 "signature": signature,
@@ -101,7 +126,9 @@ class EventSelector:
                     for score, event, _ in ranked
                 ],
             }))
-            return self._apply_repeat(ranked, recent), None
+            result = self._apply_repeat(ranked, recent)
+            self._annotate_repeat(result, recent)
+            return result, None
         except Exception as exc:
             return self.order_with_repeat(event_docs, current), f"scout: {type(exc).__name__}: {exc}"
 
@@ -109,15 +136,59 @@ class EventSelector:
         self, event_docs: list[tuple[Event, list[Document]]], now: datetime,
     ) -> list[tuple[Event, list[Document]]]:
         recent = self._recent_analyses(now)
-        ranked = sorted(
-            event_docs,
-            key=lambda item: (
-                item[0].deterministic_score * self._repeat_factor(item[0], item[1], recent),
-                item[0].last_seen,
-            ),
-            reverse=True,
-        )
-        return self.balance(ranked)
+        self.last_trace = []
+        scored: list[tuple[float, Event, list[Document]]] = []
+        for event, docs in event_docs:
+            factor = self._repeat_factor(event, docs, recent)
+            score = event.deterministic_score * factor
+            row = self._event_row(event, docs)
+            row.update({
+                "action": "deterministic",
+                "score": round(score, 2),
+                "repeat_factor": factor,
+            })
+            self.last_trace.append(row)
+            scored.append((score, event, docs))
+        scored.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
+        result = self.balance([(event, docs) for _, event, docs in scored])
+        self._annotate_repeat(result, recent)
+        return result
+
+    def _event_row(self, event: Event, docs: list[Document]) -> dict[str, Any]:
+        return {
+            "event_id": event.id,
+            "title": event.title,
+            "topic": event.topic_name or event.topic_id,
+            "lane": event_lane(docs),
+            "deterministic_score": round(float(event.deterministic_score), 2),
+            "doc_count": len(docs),
+            "sources": [doc.source_name for doc in docs],
+        }
+
+    def _record_ranked(
+        self, ranked: list[tuple[float, Event, list[Document]]], action: str,
+    ) -> None:
+        self.last_trace = []
+        for score, event, docs in ranked:
+            row = self._event_row(event, docs)
+            row.update({"action": action, "score": round(float(score), 2)})
+            self.last_trace.append(row)
+
+    def _annotate_repeat(
+        self,
+        ordered: list[tuple[Event, list[Document]]],
+        recent: list[Analysis],
+    ) -> None:
+        by_id = {row["event_id"]: row for row in self.last_trace}
+        for index, (event, docs) in enumerate(ordered, 1):
+            row = by_id.get(event.id)
+            if row is None:
+                row = self._event_row(event, docs)
+                row["action"] = "kept"
+                self.last_trace.append(row)
+                by_id[event.id] = row
+            row["rank"] = index
+            row["repeat_factor"] = self._repeat_factor(event, docs, recent)
 
     def _apply_repeat(
         self,

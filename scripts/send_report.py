@@ -69,7 +69,7 @@ def build_summary(run: Path) -> str:
             lines.append(excerpt[:1500])
     else:
         for block in digest.split("\n## "):
-            if block.startswith(("新闻精选", "深度研究结论")):
+            if block.startswith(("科技", "新闻精选", "深度研究结论")):
                 for item in block.split("\n### "):
                     head = item.strip().splitlines()
                     if head and head[0][:2].rstrip(".").isdigit():

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from daily_intel.core.models import (
     AnalysisDraft,
+    DigestBrief,
     Document,
     Event,
     GitBriefingBatch,
@@ -19,10 +20,12 @@ from daily_intel.core.ports import IntelligenceRepository, LLMClient, LLMResult
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.intelligence.prompts import (
     ANALYST_SYSTEM,
+    DIGEST_BRIEF_SYSTEM,
     GIT_BRIEF_SYSTEM,
     SCOUT_SYSTEM,
     VERIFIER_SYSTEM,
     analyst_user,
+    digest_brief_user,
     git_brief_user,
     scout_user,
     verifier_user,
@@ -104,6 +107,11 @@ class ModelStageRunner:
     def brief_github(self, projects: list[dict[str, Any]]) -> GitBriefingBatch:
         return self._generate(
             "git_brief", GIT_BRIEF_SYSTEM, git_brief_user(projects), GitBriefingBatch, None
+        ).value
+
+    def brief_digest(self, payload: dict[str, Any]) -> DigestBrief:
+        return self._generate(
+            "digest_brief", DIGEST_BRIEF_SYSTEM, digest_brief_user(payload), DigestBrief, None
         ).value
 
     def analyze(self, event: Event, documents: list[Document]) -> tuple[AnalysisDraft, str]:

@@ -10,7 +10,7 @@ topics:
     keywords: ["robot", "robotics", "embodied", "humanoid", "具身智能", "机器人", "人形机器人"]
   - id: cloud_devtools
     name: "云与开发工具"
-    keywords: ["cloud", "database", "compiler", "developer tool", "software engineering", "code generation", "coding agent", "code agent", "devops", "open source", "runtime", "云计算", "数据库", "编译器", "软件工程", "代码生成", "开发工具", "开源"]
+    keywords: ["cloud", "database", "compiler", "developer tool", "software engineering", "code generation", "coding agent", "code agent", "devops", "open source", "runtime", "linux", "kernel", "javascript", "golang", "kubernetes", "云计算", "数据库", "编译器", "软件工程", "代码生成", "开发工具", "开源", "编程"]
   - id: cybersecurity
     name: "网络安全"
     keywords: ["security", "cybersecurity", "vulnerability", "zero day", "privacy", "网络安全", "漏洞", "隐私"]

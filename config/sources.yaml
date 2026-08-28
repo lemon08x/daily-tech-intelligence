@@ -136,6 +136,51 @@ feeds:
     unshorten: true
     fetch_full_text: false
     max_items: 8
+  - id: hacker_news_frontpage
+    publisher_id: hacker_news
+    name: Hacker News
+    url: "https://hnrss.org/frontpage"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 12
+    exclude_keywords: ["who's hiring", "who is hiring", "Ask HN", "job", "hiring"]
+  - id: ars_technica
+    publisher_id: ars_technica
+    name: Ars Technica
+    url: "https://feeds.arstechnica.com/arstechnica/index"
+    tier: 2
+    lane: general
+    fetch_full_text: false
+    max_items: 10
+    include_keywords: [AI, chip, GPU, software, security, linux, cloud, open source, semiconductor, robot, model]
+  - id: phoronix
+    publisher_id: phoronix
+    name: Phoronix
+    url: "https://www.phoronix.com/rss.php"
+    tier: 2
+    lane: general
+    fetch_full_text: false
+    max_items: 8
+  - id: infoq_en
+    publisher_id: infoq
+    name: InfoQ
+    url: "https://feed.infoq.com"
+    tier: 2
+    lane: general
+    fetch_full_text: false
+    max_items: 8
+    include_keywords: [AI, architecture, cloud, kubernetes, database, java, python, rust, javascript, security, devops]
+  - id: solidot
+    publisher_id: solidot
+    name: Solidot
+    url: "https://www.solidot.org/index.rss"
+    tier: 2
+    lane: general
+    fetch_full_text: false
+    max_items: 10
+    include_keywords: [AI, Linux, 开源, 安全, 芯片, 软件, 微软, 谷歌, 苹果, 机器人, 数据库, 编程]
 
 # 没有稳定 RSS 的官方站点通过带 lastmod 的 sitemap 增量采集。
 sitemaps:

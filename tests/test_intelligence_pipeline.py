@@ -121,6 +121,10 @@ def test_ai_pipeline_deep_analysis_and_same_day_reuse(tmp_path, monkeypatch) -> 
     assert llm.calls == ["scout", "analyst", "verifier"]
     assert first.analysis_cache_misses == 1
     assert second.analysis_cache_hits == 1
+    assert first.process["documents"]
+    assert first.process["events"]
+    assert first.process["research"][0]["decision"] == "analyzed"
+    assert second.process["research"][0]["decision"] == "cache"
     assert first.model_runtime["models"]["analyst"] == "analyst"
     assert second.model_runtime["models"] == {}
     assert second.model_runtime["analysis_models"] == ["analyst"]

@@ -41,6 +41,8 @@ GITHUB_DEFAULTS = {
     "daily_limit": 8,
     "weekly_limit": 8,
     "publish_limit": 10,
+    "huggingface_limit": 4,
+    "gitlab_limit": 3,
 }
 
 

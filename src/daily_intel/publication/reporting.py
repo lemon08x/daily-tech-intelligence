@@ -11,7 +11,9 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from daily_intel.core.models import Analysis, Digest
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.market.normalize import clean_text
+from daily_intel.publication.briefing import apply_digest_brief
 from daily_intel.publication.plain_digest import build_plain_digest
+from daily_intel.publication.process_trace import assemble_process
 
 
 QUALITY_ISSUE_LABELS = {
@@ -55,33 +57,13 @@ def _markdown_text(value: str) -> str:
     return clean_text(value, 1000).replace("|", "\\|").replace("\n", " ")
 
 
-def _render_scan_items(items: list[dict[str, Any]], heading: str) -> list[str]:
-    if not items:
-        return []
-    lines = [f"**{heading}**"]
-    for item in items:
-        scan = _markdown_text(item.get("scan") or item.get("headline") or "")
-        url = item.get("url") or ""
-        if url:
-            scan = f"[{scan}]({url})"
-        kicker = _markdown_text(item.get("kicker") or "")
-        prefix = f"**{kicker}** " if kicker else ""
-        lines.append(f"- {prefix}{scan}")
-    lines.append("")
-    return lines
-
-
 def _render_plain_digest_markdown(digest: dict[str, Any]) -> list[str]:
-    if not digest.get("has_content"):
+    paragraph = str(digest.get("scan_paragraph") or "").strip()
+    if not paragraph and not digest.get("has_content"):
         return []
-    lines = ["## 今日速读", ""]
-    general = digest.get("general_items") or []
-    hardcore = digest.get("hardcore_items") or []
-    if general or hardcore:
-        lines.extend(_render_scan_items(general, "泛读"))
-        lines.extend(_render_scan_items(hardcore, "硬核"))
-        return lines
-    return lines + _render_scan_items(digest.get("tech_items") or [], "科技")
+    if not paragraph:
+        return []
+    return ["## 今日速读", "", paragraph, ""]
 
 
 def _render_analysis_markdown(index: int, analysis: Analysis) -> list[str]:
@@ -150,7 +132,7 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
         f"运行：**{context.get('run_name', 'default')}**。", "",
     ]
     lines.extend(_render_plain_digest_markdown(digest))
-    lines.extend(["## 新闻精选", ""])
+    lines.extend(["## 科技", ""])
     general = [item for item in analyses if item.lane == "general"]
     hardcore = [item for item in analyses if item.lane != "general"]
     if not analyses:
@@ -165,29 +147,17 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
             lines.extend(_render_analysis_markdown(index, analysis))
     projects = context.get("github_projects") or []
     if projects:
-        chart = context.get("github_chart") or {}
-        lines.extend(["## Git 热门项目", "", "今日最热或本周增长最快的开源项目，用一句话说清它在做什么，并附使用场景模拟。", ""])
-        if chart:
-            lines.append(
-                f"共 {chart.get('count', len(projects))} 个仓库；语言 {chart.get('language_count', 0)} 种；"
-                f"今日最高 +{chart.get('max_stars_today', 0)}；本周最高 +{chart.get('max_stars_week', 0)}。"
-            )
-            lines.append("")
-        languages = chart.get("language_bars") or []
-        if languages:
-            lines.extend(["### 语言分布", ""])
-            for item in languages:
-                lines.append(
-                    f"- {item.get('name', '')} {item.get('label', '')} `{item.get('spark', '')}`"
-                )
-            lines.append("")
+        lines.extend(["## Git 热门项目", "", "GitHub 今日最热和本周增长最快的仓库，并补充 Hugging Face 热门模型和 GitLab 高星项目。", ""])
         for item in projects:
             name = _markdown_text(item.get("full_name") or "")
             url = item.get("url") or ""
             title = f"[{name}]({url})" if url else name
             kicker = _markdown_text(item.get("kicker") or "开源")
             reason = _markdown_text(item.get("reason") or "")
+            origin = _markdown_text(item.get("origin_label") or "GitHub")
             lines.extend([f"### {item.get('rank', '')}. **{kicker}** {title}", ""])
+            lines.append(f"- 来源：{origin}")
+            lines.append("")
             if item.get("plain"):
                 lines.extend([f"**一句话：** {_markdown_text(item['plain'])}", ""])
             meta = []
@@ -209,22 +179,20 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
 
     lines.extend([
         "## 市场情报", "",
-        "只保留能解释交易原因的事件：政策、监管、供给冲击、合作与禁令。产业和全球市场列出当日涨跌前三后三，或幅度够大的条目。", "",
+        "产业和全球市场只列当日涨幅前三、跌幅后三。市场新闻给出影响、可能后果、推理过程和原文证据。", "",
     ])
     bars = digest.get("industry_bars") or []
     if bars:
         lines.extend(["### 产业风向", ""])
         for item in bars:
-            extra = f"：{item['why']}" if item.get("why") else ""
-            lines.append(f"- {item.get('name', '')} {item.get('label', '')}{extra}")
+            lines.append(f"- {item.get('name', '')} {item.get('label', '')}")
         lines.append("")
     board = digest.get("board") or []
     if board:
         lines.extend(["### 全球市场", ""])
         for item in board:
-            extra = f"：{item['why']}" if item.get("why") else ""
             lines.append(
-                f"- {item.get('region', '')} {item.get('label', '')}：{item.get('label_change', '')}{extra}"
+                f"- {item.get('region', '')} {item.get('label', '')}：{item.get('label_change', '')}"
             )
         lines.append("")
     if context.get("news_records"):
@@ -235,6 +203,14 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
                 title = f"[{title}]({item['url']})"
             summary = _markdown_text(item.get("summary", ""))
             lines.append(f"- {title}" + (f"：{summary}" if summary else ""))
+            if item.get("impact"):
+                lines.append(f"  - 可能影响：{_markdown_text(item['impact'])}")
+            if item.get("consequences"):
+                lines.append(f"  - 可能后果：{_markdown_text(item['consequences'])}")
+            if item.get("reasoning"):
+                lines.append(f"  - 推理过程：{_markdown_text(item['reasoning'])}")
+            for quote in item.get("quotes") or []:
+                lines.append(f"  - 证据：{_markdown_text(quote)}")
         lines.append("")
     runtime = context.get("model_runtime", {})
     usage = context.get("usage", {})
@@ -295,22 +271,37 @@ def publish(
     snapshot_path = run_dir / "market_snapshot.csv"
     intelligence_path = run_dir / "intelligence.json"
     metadata_path = run_dir / "run_meta.json"
+    process_html_path = run_dir / "process.html"
+    process_json_path = run_dir / "process.json"
     run_files = (
         html_path, markdown_path, candidate_path, snapshot_path,
-        intelligence_path, metadata_path,
+        intelligence_path, metadata_path, process_html_path, process_json_path,
     )
     if any(path.exists() for path in run_files):
         raise FileExistsError(f"运行目录已包含日报文件，拒绝覆盖: {run_dir}")
 
+    draft = build_plain_digest(analyses, context)
+    scan_paragraph, news_records = apply_digest_brief(
+        None, analyses, context, draft["industry_bars"], draft["board"],
+    )
+    digest = {
+        **draft,
+        "scan_paragraph": scan_paragraph,
+        "has_content": bool(
+            scan_paragraph or draft["tech_items"] or draft["industry_bars"] or draft["board"]
+        ),
+    }
     render_context = {
         "model_runtime": {},
         "quality_summary": {},
         "github_projects": [],
         "github_chart": {},
         **context,
-        "plain_digest": build_plain_digest(analyses, context),
+        "news_records": news_records,
+        "scan_paragraph": scan_paragraph,
+        "plain_digest": digest,
     }
-    context = {**context, "plain_digest": render_context["plain_digest"]}
+    context = {**context, "plain_digest": digest, "news_records": news_records}
     html_path.write_text(
         env.get_template("report.html.j2").render(**render_context), encoding="utf-8"
     )
@@ -338,8 +329,16 @@ def publish(
     metadata_path.write_text(
         json.dumps(metadata_payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    process = assemble_process(context, analyses, metadata)
+    process_html_path.write_text(
+        env.get_template("process.html.j2").render(**process), encoding="utf-8"
+    )
+    process_json_path.write_text(
+        json.dumps(process, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     outputs = {
         "html": html_path, "markdown": markdown_path, "csv": candidate_path,
         "snapshot": snapshot_path, "intelligence": intelligence_path, "metadata": metadata_path,
+        "process": process_html_path, "process_json": process_json_path,
     }
     return outputs

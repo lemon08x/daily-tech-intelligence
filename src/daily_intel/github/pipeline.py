@@ -8,7 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from daily_intel.core.progress import progress
-from daily_intel.github.trending import fetch_trending, merge_trending
+from daily_intel.github.trending import (
+    append_catalog,
+    fetch_gitlab_projects,
+    fetch_huggingface_models,
+    fetch_trending,
+    merge_trending,
+)
 from daily_intel.market.normalize import clean_text
 
 
@@ -23,11 +29,12 @@ class GitRunResult:
 def _fallback_plain(item: dict[str, Any]) -> str:
     description = clean_text(str(item.get("description") or ""), 160)
     language = str(item.get("language") or "").strip()
+    origin = str(item.get("origin_label") or "开源平台")
     if description:
-        prefix = f"这是一个{language}开源项目：" if language else "这是一个开源项目："
+        prefix = f"这是一个{language}项目：" if language else f"这是一个来自{origin}的项目："
         return prefix + description
     name = item.get("full_name") or "该项目"
-    return f"{name} 正在 GitHub 热门榜上，页面没有给出项目简介。"
+    return f"{name} 正在 {origin} 热门榜上，页面没有给出项目简介。"
 
 
 def _fallback_scenario(item: dict[str, Any]) -> tuple[str, str]:
@@ -155,6 +162,37 @@ class GitHubTrendingPipeline:
             weekly_limit=int(self.config.get("weekly_limit", 8)),
             publish_limit=int(self.config.get("publish_limit", 10)),
         )
+        extras: list[dict[str, Any]] = []
+        catalog = (
+            ("huggingface", "Hugging Face 热门模型", int(self.config.get("huggingface_limit", 4)), fetch_huggingface_models),
+            ("gitlab", "GitLab 高星项目", int(self.config.get("gitlab_limit", 3)), fetch_gitlab_projects),
+        )
+        for cache_key, label, limit, fetcher in catalog:
+            if limit <= 0:
+                continue
+            try:
+                progress(f"当前：拉取 {label}…")
+                rows = fetcher(limit=limit, timeout=timeout)
+                if not rows:
+                    raise ValueError("没有解析到项目")
+                extras.extend(rows)
+                self._save_cache(cache_key, rows)
+                status.append({
+                    "name": f"{cache_key}_trending", "source": label,
+                    "fetched_at": now.isoformat(timespec="seconds"), "stale": False,
+                    "count": len(rows), "error": "",
+                })
+            except Exception as exc:
+                message = f"{label}: {type(exc).__name__}: {exc}"
+                errors.append(message)
+                cached = self._load_cache(cache_key)
+                extras.extend(cached)
+                status.append({
+                    "name": f"{cache_key}_trending", "source": label,
+                    "fetched_at": now.isoformat(timespec="seconds"), "stale": True,
+                    "count": len(cached), "error": message,
+                })
+        projects = append_catalog(projects, extras)
         briefs = self._brief(projects, stages, ai_enabled, errors)
         briefs, chart = annotate_github_visuals(briefs)
         return GitRunResult(projects=briefs, chart=chart, source_status=status, errors=errors)
@@ -171,6 +209,7 @@ class GitHubTrendingPipeline:
                         "full_name": item["full_name"],
                         "description": item.get("description") or "",
                         "language": item.get("language") or "",
+                        "origin": item.get("origin_label") or item.get("origin") or "GitHub",
                         "reason": item.get("reason") or "",
                         "stars_today": item.get("stars_today") or 0,
                         "stars_week": item.get("stars_week") or 0,

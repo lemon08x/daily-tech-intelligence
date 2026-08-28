@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from daily_intel.core.models import (
-    AnalysisDraft, Document, Event, GitBriefingBatch, ScoutBatch, VerificationResult,
+    AnalysisDraft, DigestBrief, Document, Event, GitBriefingBatch, ScoutBatch, VerificationResult,
 )
 
 
@@ -35,12 +35,35 @@ supported_evidence_indexes只能列出引用确实存在且能支持相关结论
 不要因文字完整、引用数量多或模型自报置信度高而放宽标准。输出严格JSON。"""
 
 
-GIT_BRIEF_SYSTEM = """你是开源项目讲解员。只依据用户提供的GitHub热门榜信息写大白话，不使用未提供的事实。
+GIT_BRIEF_SYSTEM = """你是开源项目讲解员。只依据用户提供的项目信息写大白话，不使用未提供的事实。
+项目可能来自 GitHub、Hugging Face 或 GitLab。
 每个项目写：
 - plain：一句中文说清它是做什么的、怎么工作，或这次为什么上榜。
 - scenario_title：四个字到十个字的场景标题。
-- scenario：一段具体使用场景模拟。写清谁、在什么任务里、怎么用这个仓库、期望看到什么结果。
+- scenario：一段具体使用场景模拟。写清谁、在什么任务里、怎么用这个项目、期望看到什么结果。
 场景只能根据简介做合理推演，并写明这是模拟不是实测。不要编造星标数字、版本号、公司关系或文档里没有的能力。输出严格JSON。"""
+
+
+DIGEST_BRIEF_SYSTEM = """你是科技与市场日报编辑。只依据用户提供的科技条目、涨跌名单和市场新闻写稿，不使用未提供的事实。
+写两块内容：
+- scan_paragraph：一段连贯中文，讲述今天值得看的科技或市场新闻。不要列点，不要写成涨跌原因分析。没有科技就写市场，没有市场就写科技。
+- market_news：只分析用户提供的市场新闻。每条必须包含 impact（相关影响）、consequences（可能导致的后果）、reasoning（推理过程）、quotes（从该条 title 或 summary 逐字摘录的连续原文）。
+影响和后果必须能从给定标题/摘要推出来；做不到就明确写“来源没有给出”。不要预测个股涨跌，不要编造未出现的公司、数字或政策细节。输出严格JSON。"""
+
+
+def digest_brief_user(payload: dict) -> str:
+    return json.dumps(
+        {
+            "material": payload,
+            "requirements": {
+                "language": "简体中文",
+                "scan_paragraph": "一段话，同时覆盖今天的科技或市场新闻，不要列表。",
+                "quotes": "必须是给定 title 或 summary 中的连续原文。",
+                "schema": DigestBrief.model_json_schema(),
+            },
+        },
+        ensure_ascii=False,
+    )
 
 
 def git_brief_user(projects: list[dict]) -> str:

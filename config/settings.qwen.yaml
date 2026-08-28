@@ -58,6 +58,8 @@ github:
   daily_limit: 8
   weekly_limit: 8
   publish_limit: 10
+  huggingface_limit: 4
+  gitlab_limit: 3
 
 llm:
   provider: "openai_compatible"
@@ -68,20 +70,30 @@ llm:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
-        type: disabled
-      reasoning_effort: low
-    max_output_tokens: 8000
-  verifier:
-    model: "qwen3.8-27b"
-    extra_body:
-      thinking:
         type: enabled
-      reasoning_effort: medium
-    max_output_tokens: 8000
+      # 该端点默认 xhigh；显式传 xhigh 会被改写成 high 并 400。
+    max_output_tokens: 32000
   analyst:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
         type: enabled
-      reasoning_effort: medium
-    max_output_tokens: 8000
+    max_output_tokens: 32000
+  verifier:
+    model: "qwen3.8-27b"
+    extra_body:
+      thinking:
+        type: enabled
+    max_output_tokens: 32000
+  git_brief:
+    model: "qwen3.8-27b"
+    extra_body:
+      thinking:
+        type: enabled
+    max_output_tokens: 32000
+  digest_brief:
+    model: "qwen3.8-27b"
+    extra_body:
+      thinking:
+        type: enabled
+    max_output_tokens: 32000

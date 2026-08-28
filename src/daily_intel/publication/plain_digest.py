@@ -6,9 +6,7 @@ from daily_intel.core.models import Analysis
 from daily_intel.market.normalize import clean_text
 
 
-INDUSTRY_MOVE_PCT = 2.0
-INDEX_MOVE_PCT = 1.0
-COMMODITY_MOVE_PCT = 1.5
+RANK_KEEP = 3
 
 INDEX_BOARD = (
     (("sh000001", "000001"), "A股", "上证", ("上证",)),
@@ -109,43 +107,39 @@ def _match_quote(rows: list[dict[str, Any]], codes: tuple[str, ...], hints: tupl
     return None
 
 
-def _news_why(aliases: tuple[str, ...], news_records: list[dict[str, Any]]) -> str:
-    needles = [item.lower() for item in aliases if item]
-    for item in news_records:
-        haystack = f"{item.get('title') or ''} {item.get('summary') or ''}"
-        if any(needle in haystack.lower() for needle in needles):
-            return clean_text(str(item.get("title") or ""), 48)
-    return ""
-
-
 def _ranked_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     valid = [row for row in rows if row.get("pct_change") is not None]
     return sorted(valid, key=lambda row: float(row["pct_change"]), reverse=True)
 
 
-def _industry_bars(
-    rows: list[dict[str, Any]], news_records: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    ranked = _ranked_rows(rows)
-    total = len(ranked)
+def _top_and_bottom(ranked: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+    if not ranked:
+        return []
+    keep = RANK_KEEP
     picked: list[dict[str, Any]] = []
     seen: set[str] = set()
-    for index, row in enumerate(ranked):
-        name = str(row.get("name") or "").strip()
+    for row in [*ranked[:keep], *ranked[-keep:]]:
+        name = str(row.get(key) or "").strip()
         if not name or name in seen:
             continue
-        change = float(row["pct_change"])
-        why = _news_why((name,), news_records)
-        rank_ok = index < 3 or index >= total - 3
-        if not rank_ok and abs(change) < INDUSTRY_MOVE_PCT and not why:
-            continue
         seen.add(name)
-        picked.append({
+        picked.append(row)
+    return sorted(picked, key=lambda row: float(row["pct_change"]), reverse=True)
+
+
+def _industry_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = _ranked_rows(rows)
+    slim: list[dict[str, Any]] = []
+    for row in ranked:
+        name = str(row.get("name") or "").strip()
+        if not name:
+            continue
+        slim.append({
             "name": name,
-            "pct_change": change,
+            "pct_change": float(row["pct_change"]),
             "leader": str(row.get("leader") or "").strip(),
-            "why": why,
         })
+    picked = _top_and_bottom(slim, "name")
     peak = max((abs(item["pct_change"]) for item in picked), default=1.0) or 1.0
     for item in picked:
         item["width"] = round(min(100.0, abs(item["pct_change"]) / peak * 100), 1)
@@ -170,7 +164,6 @@ def _board_item(region: str, label: str, row: dict[str, Any]) -> dict[str, Any]:
 
 def build_market_board(context: dict[str, Any]) -> list[dict[str, Any]]:
     quotes = list(context.get("index_records") or []) + list(context.get("global_index_records") or [])
-    news_records = list(context.get("news_records") or [])
     candidates: list[dict[str, Any]] = []
     seen: set[str] = set()
     for codes, region, label, hints in INDEX_BOARD:
@@ -178,35 +171,22 @@ def build_market_board(context: dict[str, Any]) -> list[dict[str, Any]]:
         if row is None or label in seen or row.get("pct_change") is None:
             continue
         seen.add(label)
-        item = _board_item(region, label, row)
-        item["why"] = _news_why((label, *hints), news_records)
-        item["threshold"] = INDEX_MOVE_PCT
-        candidates.append(item)
+        candidates.append(_board_item(region, label, row))
     commodities = list(context.get("commodity_records") or [])
     for hint, region, label in COMMODITY_BOARD:
         row = _match_quote(commodities, (), (hint,))
         if row is None or label in seen or row.get("pct_change") is None:
             continue
         seen.add(label)
-        item = _board_item(region, label, row)
-        item["why"] = _news_why((label, hint), news_records)
-        item["threshold"] = COMMODITY_MOVE_PCT
-        candidates.append(item)
+        candidates.append(_board_item(region, label, row))
     ranked = sorted(candidates, key=lambda item: float(item["pct_change"]), reverse=True)
-    total = len(ranked)
-    picked: list[dict[str, Any]] = []
-    for index, item in enumerate(ranked):
-        rank_ok = index < 3 or index >= total - 3
-        mag_ok = abs(float(item["pct_change"])) >= float(item["threshold"])
-        if rank_ok or mag_ok or item.get("why"):
-            picked.append(item)
-    return picked
+    return _top_and_bottom(ranked, "label")
 
 
 def build_plain_digest(
     analyses: list[Analysis], context: dict[str, Any],
 ) -> dict[str, Any]:
-    """Compact scan board. Full takeaways stay on story cards; news stays in 市场情报."""
+    """Scan paragraph plus lane lists for the 科技 tab. Market lists stay on 市场情报."""
     tech_items = []
     general_items = []
     hardcore_items = []
@@ -226,19 +206,20 @@ def build_plain_digest(
             general_items.append(item)
         else:
             hardcore_items.append(item)
-    news_records = list(context.get("news_records") or [])
     industries = list(context.get("industry_records") or [])
     if not industries:
         industries = list(context.get("hot_industry_records") or []) + list(
             context.get("weak_industry_records") or []
         )
-    industry_bars = _industry_bars(industries, news_records)
+    industry_bars = _industry_bars(industries)
     board = build_market_board(context)
+    scan_paragraph = clean_text(str(context.get("scan_paragraph") or ""), 900)
     return {
         "tech_items": tech_items,
         "general_items": general_items,
         "hardcore_items": hardcore_items,
         "industry_bars": industry_bars,
         "board": board,
-        "has_content": bool(tech_items),
+        "scan_paragraph": scan_paragraph,
+        "has_content": bool(scan_paragraph or tech_items or industry_bars or board),
     }
