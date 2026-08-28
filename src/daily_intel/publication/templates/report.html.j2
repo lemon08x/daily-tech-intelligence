@@ -145,7 +145,19 @@
   {% if plain_digest and plain_digest.has_content %}
   <section class="section digest">
     <h2>今日速读</h2>
-    {% if plain_digest.tech_items %}
+    {% if plain_digest.general_items %}
+    <div class="digest-block">
+      <h3>泛读</h3>
+      <div class="scan-list">{% for item in plain_digest.general_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
+    {% if plain_digest.hardcore_items %}
+    <div class="digest-block">
+      <h3>硬核</h3>
+      <div class="scan-list">{% for item in plain_digest.hardcore_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
+    {% if not plain_digest.general_items and not plain_digest.hardcore_items and plain_digest.tech_items %}
     <div class="digest-block">
       <h3>科技</h3>
       <div class="scan-list">{% for item in plain_digest.tech_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
@@ -163,25 +175,32 @@
   <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
     <section class="section">
       <h2>今日科技精选 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
-      <p class="muted section-intro">每条给出大白话要点；技术机制、产业影响、风险、证据及公司关联收在“展开深度分析”中。标题和“阅读原文”均指向首条可定位来源。</p>
+      <p class="muted section-intro">分成泛读和硬核两栏。泛读来自周刊、投稿池和行业精选；硬核来自论文、官方发布和基础设施 Release。周刊源默认是线索，缺少一手来源时不会升成深度结论。</p>
     </section>
 
-    {% for analysis in analyses %}
+    {% set general_news = analyses | selectattr('lane', 'equalto', 'general') | list %}
+    {% set hardcore_news = analyses | rejectattr('lane', 'equalto', 'general') | list %}
+    {% if not analyses %}
+    <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
+    {% endif %}
+    {% if general_news %}
+    <section class="section">
+      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
+      <p class="muted">适合快速扫一眼的工具、周刊和社区精选。</p>
+    </section>
+    {% for analysis in general_news %}
     <article class="story">
       <div class="story-kicker">
-        <span>科技精选 {{ '%02d'|format(loop.index) }}</span>
+        <span>泛读 {{ '%02d'|format(loop.index) }}</span>
         <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
       </div>
       <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
       <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
       {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% endif %}
-
       {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-
       <div class="story-actions">
         {% if analysis.evidence %}<a class="source-link" href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a><span class="muted">{{ analysis.evidence[0].locator }} · 共 {{ analysis.evidence|length }} 条证据</span>{% else %}<span class="muted">本条暂无可定位原文</span>{% endif %}
       </div>
-
       <details class="deep-dive">
         <summary>展开深度分析</summary>
         <div class="deep-body">
@@ -195,15 +214,53 @@
             {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
           </div>{% endif %}
           {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.company_mappings %}<div class="subhead">A股关联假设（不参与评分）</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
+          {% if analysis.company_mappings %}<div class="subhead">公司关联假设</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
           {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
           {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
         </div>
       </details>
     </article>
-    {% else %}
-    <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
     {% endfor %}
+    {% endif %}
+    {% if hardcore_news %}
+    <section class="section">
+      <h2>硬核 <span class="muted" style="font-size:13px;font-weight:400">{{ hardcore_news|length }} 项</span></h2>
+      <p class="muted">论文、官方发布和基础设施更新，适合对照原文深读。</p>
+    </section>
+    {% for analysis in hardcore_news %}
+    <article class="story">
+      <div class="story-kicker">
+        <span>硬核 {{ '%02d'|format(loop.index) }}</span>
+        <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
+      </div>
+      <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
+      <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
+      {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% endif %}
+      {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      <div class="story-actions">
+        {% if analysis.evidence %}<a class="source-link" href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a><span class="muted">{{ analysis.evidence[0].locator }} · 共 {{ analysis.evidence|length }} 条证据</span>{% else %}<span class="muted">本条暂无可定位原文</span>{% endif %}
+      </div>
+      <details class="deep-dive">
+        <summary>展开深度分析</summary>
+        <div class="deep-body">
+          {% if analysis.key_facts|length > 2 %}<div class="subhead">更多事实</div><ul>{% for item in analysis.key_facts[2:] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.quality.issues %}<div class="quality-alert"><strong>质量门降级原因：</strong>{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
+          {% if analysis.quality.unsupported_claims %}<div class="quality-alert"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
+          {% if analysis.technical_mechanism or analysis.novelty or analysis.maturity or analysis.outlook_6_24m %}<div class="analysis-grid">
+            {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
+            {% if analysis.novelty %}<div><strong>新颖性</strong><p>{{ analysis.novelty }}</p></div>{% endif %}
+            {% if analysis.maturity %}<div><strong>成熟度</strong><p>{{ analysis.maturity }}</p></div>{% endif %}
+            {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
+          </div>{% endif %}
+          {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.company_mappings %}<div class="subhead">公司关联假设</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
+          {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+          {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
+        </div>
+      </details>
+    </article>
+    {% endfor %}
+    {% endif %}
 
 
 
@@ -290,7 +347,7 @@
     {% endif %}
   </section>
 
-  <footer>免责声明：本报告仅做公开信息整理、策略研究和后续回测候选，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
+  <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
 </main>
 <script>
   (() => {

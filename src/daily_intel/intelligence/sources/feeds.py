@@ -12,10 +12,14 @@ from daily_intel.intelligence.sources.common import (
     canonicalize_url,
     content_hash,
     document_id,
+    document_lane,
     document_source_id,
     effective_limit,
+    extract_http_urls,
     passes_keyword_filters,
     plain_text,
+    resolve_public_url,
+    should_unshorten,
     source_metadata,
 )
 
@@ -60,17 +64,36 @@ class FeedSource:
                 or not passes_keyword_filters(title, summary, self.config)
             ):
                 continue
+            content_type = str(
+                self.config.get(
+                    "content_type",
+                    "github_release" if "/releases" in self.config["url"] else "article",
+                )
+            )
+            public_url = (
+                resolve_public_url(url, min(self.timeout, 12))
+                if should_unshorten(url, self.config)
+                else url
+            )
+            target_url = ""
+            for candidate in extract_http_urls(f"{title} {summary}"):
+                if "github.com/ruanyf/weekly" in candidate.lower():
+                    continue
+                target_url = (
+                    resolve_public_url(candidate, min(self.timeout, 12))
+                    if should_unshorten(candidate, self.config)
+                    else canonicalize_url(candidate)
+                )
+                if target_url:
+                    break
             metadata = {
                 **source_metadata(self.config),
                 "feed_url": self.config["url"],
                 "fetch_full_text": bool(self.config.get("fetch_full_text", False)),
+                "lane": document_lane(self.config, content_type),
             }
-            content_type = str(
-                self.config.get(
-                    "content_type",
-                    "github_release" if "github.com" in self.config["url"] else "article",
-                )
-            )
+            if target_url:
+                metadata["target_url"] = target_url
             documents.append(
                 Document(
                     id=document_id(document_source, external_id),
@@ -78,8 +101,8 @@ class FeedSource:
                     source_name=str(self.config["name"]),
                     external_id=external_id,
                     title=title,
-                    url=url,
-                    canonical_url=canonicalize_url(url),
+                    url=public_url,
+                    canonical_url=canonicalize_url(public_url),
                     published_at=published,
                     fetched_at=now,
                     summary=summary,

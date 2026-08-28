@@ -26,7 +26,9 @@
 - 智源和上海 AI Lab 官网当前没有可解析的 RSS/Atom，禁止把普通 HTML 首页伪装成 Feed。
 - AnandTech 已不适合作为持续更新来源；硬件产业动态由官方源、IEEE 和带过滤的 Tom's Hardware 补充。
 - GitHub Commits、Pull Requests、Discussions 和 Trending 暂不启用。它们噪声高、公共 API 限流明显，后续应作为独立 Radar 适配器实现高信号规则，不能混入正式 Release。
-- 券商研报聚合暂不加入。需要先解决版权、稳定接口、正文授权和来源标识；不能将摘要聚合站升级为一手来源。
+- 科技周刊进入泛读栏：阮一峰周刊 Issue 投稿池为 Tier 3 线索；Hacker Newsletter、Import AI、TLDR、Golang/JavaScript Weekly 为 Tier 2。缺少 Tier 1 一手来源时质量门会降为线索，不会单独变成深度结论。
+- 阮一峰周刊历史 `docs/` 外链不在每日主流程里 git pull。用 `scripts/refresh_weekly_catalog.py` 解析栏目并探测 RSS，写入 `data/cache/weekly_blog_feeds.json` 后作为 Tier 3 泛读补充源。
+- 周刊短链会还原成最终 URL，再按 canonical_url / GitHub owner/repo 去重，避免同一项目被多个周刊重复深研。
 
 ## 配置和去重约定
 

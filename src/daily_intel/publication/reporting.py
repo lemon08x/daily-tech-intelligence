@@ -55,22 +55,89 @@ def _markdown_text(value: str) -> str:
     return clean_text(value, 1000).replace("|", "\\|").replace("\n", " ")
 
 
+def _render_scan_items(items: list[dict[str, Any]], heading: str) -> list[str]:
+    if not items:
+        return []
+    lines = [f"**{heading}**"]
+    for item in items:
+        scan = _markdown_text(item.get("scan") or item.get("headline") or "")
+        url = item.get("url") or ""
+        if url:
+            scan = f"[{scan}]({url})"
+        kicker = _markdown_text(item.get("kicker") or "")
+        prefix = f"**{kicker}** " if kicker else ""
+        lines.append(f"- {prefix}{scan}")
+    lines.append("")
+    return lines
+
+
 def _render_plain_digest_markdown(digest: dict[str, Any]) -> list[str]:
     if not digest.get("has_content"):
         return []
     lines = ["## 今日速读", ""]
-    tech_items = digest.get("tech_items") or []
-    if tech_items:
-        lines.append("**科技**")
-        for item in tech_items:
-            scan = _markdown_text(item.get("scan") or item.get("headline") or "")
-            url = item.get("url") or ""
-            if url:
-                scan = f"[{scan}]({url})"
-            kicker = _markdown_text(item.get("kicker") or "")
-            prefix = f"**{kicker}** " if kicker else ""
-            lines.append(f"- {prefix}{scan}")
+    general = digest.get("general_items") or []
+    hardcore = digest.get("hardcore_items") or []
+    if general or hardcore:
+        lines.extend(_render_scan_items(general, "泛读"))
+        lines.extend(_render_scan_items(hardcore, "硬核"))
+        return lines
+    return lines + _render_scan_items(digest.get("tech_items") or [], "科技")
+
+
+def _render_analysis_markdown(index: int, analysis: Analysis) -> list[str]:
+    label = "深度结论" if analysis.status.value == "deep" else "线索"
+    quality = analysis.quality
+    audit = (
+        f"质量分 {quality.score}/100 · 有效证据 {quality.supported_evidence} · "
+        f"来源 {quality.source_diversity}（一手 {quality.primary_sources}）"
+    )
+    headline = _markdown_text(analysis.headline)
+    if analysis.evidence:
+        headline = f"[{headline}]({analysis.evidence[0].url})"
+    lines = [
+        f"### {index}. {headline}", "",
+        f"**状态：{label} · 置信度 {analysis.confidence:.0%} · {audit}**", "",
+    ]
+    if analysis.plain_takeaway:
+        lines.extend([f"**一句话：** {_markdown_text(analysis.plain_takeaway)}", ""])
+    if quality.issues:
+        reasons = "、".join(quality_issue_label(item) for item in quality.issues)
+        lines.extend([f"> 质量门降级原因：{reasons}", ""])
+    if quality.unsupported_claims:
+        lines.append("> 未被来源支持的结论：" + "；".join(
+            _markdown_text(item) for item in quality.unsupported_claims
+        ))
         lines.append("")
+    for fact in analysis.key_facts:
+        lines.append(f"- {_markdown_text(fact)}")
+    if analysis.technical_mechanism:
+        lines.extend(["", f"**技术机制：** {_markdown_text(analysis.technical_mechanism)}"])
+    if analysis.novelty:
+        lines.extend(["", f"**新颖性：** {_markdown_text(analysis.novelty)}"])
+    if analysis.maturity:
+        lines.extend(["", f"**成熟度：** {_markdown_text(analysis.maturity)}"])
+    if analysis.outlook_6_24m:
+        lines.extend(["", f"**6–24个月影响：** {_markdown_text(analysis.outlook_6_24m)}"])
+    if analysis.industry_impacts:
+        lines.extend(["", "**产业链影响：**", ""])
+        for item in analysis.industry_impacts:
+            lines.append(f"- {item.segment}（{item.horizon} / {item.direction}）：{_markdown_text(item.rationale)}")
+    if analysis.company_mappings:
+        lines.extend(["", "**公司关联假设：**", ""])
+        for item in analysis.company_mappings:
+            state = "已核验关联" if item.status.value == "verified" else "待核验假设"
+            industry = f" · 巨潮行业 {item.industry}" if item.industry else ""
+            lines.append(f"- {item.code} {item.name}{industry} · {state}：{_markdown_text(item.rationale)}")
+            for evidence in item.evidence:
+                lines.append(f"  - [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
+    if analysis.risks or analysis.counterpoints:
+        lines.extend(["", "**风险与反面证据：**", ""])
+        lines.extend(f"- {_markdown_text(item)}" for item in analysis.risks + analysis.counterpoints)
+    if analysis.evidence:
+        lines.extend(["", "**证据：**", ""])
+        for evidence in analysis.evidence:
+            lines.append(f"- [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
+    lines.append("")
     return lines
 
 
@@ -84,63 +151,18 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
     ]
     lines.extend(_render_plain_digest_markdown(digest))
     lines.extend(["## 新闻精选", ""])
+    general = [item for item in analyses if item.lane == "general"]
+    hardcore = [item for item in analyses if item.lane != "general"]
     if not analyses:
         lines.extend(["今日没有可发布的科技事件。请查看数据源状态或在联网后重试。", ""])
-    for index, analysis in enumerate(analyses, 1):
-        label = "深度结论" if analysis.status.value == "deep" else "线索"
-        quality = analysis.quality
-        audit = (
-            f"质量分 {quality.score}/100 · 有效证据 {quality.supported_evidence} · "
-            f"来源 {quality.source_diversity}（一手 {quality.primary_sources}）"
-        )
-        headline = _markdown_text(analysis.headline)
-        if analysis.evidence:
-            headline = f"[{headline}]({analysis.evidence[0].url})"
-        lines.extend([
-            f"### {index}. {headline}", "",
-            f"**状态：{label} · 置信度 {analysis.confidence:.0%} · {audit}**", "",
-        ])
-        if analysis.plain_takeaway:
-            lines.extend([f"**一句话：** {_markdown_text(analysis.plain_takeaway)}", ""])
-        if quality.issues:
-            reasons = "、".join(quality_issue_label(item) for item in quality.issues)
-            lines.extend([f"> 质量门降级原因：{reasons}", ""])
-        if quality.unsupported_claims:
-            lines.append("> 未被来源支持的结论：" + "；".join(
-                _markdown_text(item) for item in quality.unsupported_claims
-            ))
-            lines.append("")
-        for fact in analysis.key_facts:
-            lines.append(f"- {_markdown_text(fact)}")
-        if analysis.technical_mechanism:
-            lines.extend(["", f"**技术机制：** {_markdown_text(analysis.technical_mechanism)}"])
-        if analysis.novelty:
-            lines.extend(["", f"**新颖性：** {_markdown_text(analysis.novelty)}"])
-        if analysis.maturity:
-            lines.extend(["", f"**成熟度：** {_markdown_text(analysis.maturity)}"])
-        if analysis.outlook_6_24m:
-            lines.extend(["", f"**6–24个月影响：** {_markdown_text(analysis.outlook_6_24m)}"])
-        if analysis.industry_impacts:
-            lines.extend(["", "**产业链影响：**", ""])
-            for item in analysis.industry_impacts:
-                lines.append(f"- {item.segment}（{item.horizon} / {item.direction}）：{_markdown_text(item.rationale)}")
-        if analysis.company_mappings:
-            lines.extend(["", "**A股关联假设（不参与股票评分）：**", ""])
-            for item in analysis.company_mappings:
-                state = "已核验关联" if item.status.value == "verified" else "待核验假设"
-                industry = f" · 巨潮行业 {item.industry}" if item.industry else ""
-                lines.append(f"- {item.code} {item.name}{industry} · {state}：{_markdown_text(item.rationale)}")
-                for evidence in item.evidence:
-                    lines.append(f"  - [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
-        if analysis.risks or analysis.counterpoints:
-            lines.extend(["", "**风险与反面证据：**", ""])
-            lines.extend(f"- {_markdown_text(item)}" for item in analysis.risks + analysis.counterpoints)
-        if analysis.evidence:
-            lines.extend(["", "**证据：**", ""])
-            for evidence in analysis.evidence:
-                lines.append(f"- [{_markdown_text(evidence.locator)}]({evidence.url})：{_markdown_text(evidence.quote)}")
-        lines.append("")
-
+    if general:
+        lines.extend(["### 泛读", ""])
+        for index, analysis in enumerate(general, 1):
+            lines.extend(_render_analysis_markdown(index, analysis))
+    if hardcore:
+        lines.extend(["### 硬核", ""])
+        for index, analysis in enumerate(hardcore, 1):
+            lines.extend(_render_analysis_markdown(index, analysis))
     projects = context.get("github_projects") or []
     if projects:
         chart = context.get("github_chart") or {}
@@ -246,7 +268,7 @@ def _render_markdown(context: dict[str, Any], analyses: list[Analysis]) -> str:
         lines.extend(f"- {_markdown_text(item)}" for item in context["pipeline_errors"])
     lines.extend([
         "", "---", "",
-        "本报告仅做公开信息整理与研究观察。科技事件与公司关联不进入规则股票评分，不构成投资建议。",
+        "本报告仅做公开信息整理与研究观察，不构成投资建议。",
     ])
     return "\n".join(lines) + "\n"
 

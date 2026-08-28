@@ -12,6 +12,7 @@ from daily_intel.core.ports import (
     LLMClient,
     MarketWorkflow,
 )
+from daily_intel.core.progress import progress
 from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.github.pipeline import GitHubTrendingPipeline
@@ -75,15 +76,15 @@ def run_application(
     )
     run_metadata: dict[str, Any] = {"run_id": run_id}
     try:
-        print("[1/6] 运行A股市场数据与规则评分…", flush=True)
+        progress(f"[1/6] 运行市场数据… 实验 {experiment_id}")
         market = market_runner.run()
-        print("[2/6] 采集、去重并聚类权威科技来源…", flush=True)
+        progress("[2/6] 采集、去重并聚类科技来源…")
         intelligence = intelligence_runner.run(
             current, market.snapshot, market.radar_news,
             offline=offline, no_ai=no_ai, require_ai=require_ai,
             experiment_id=experiment_id, force_analysis=force_analysis,
         )
-        print("[3/6] 采集GitHub热门与增长最快项目…", flush=True)
+        progress("[3/6] 采集 GitHub 热门项目…")
         github_runner = github_workflow or GitHubTrendingPipeline(
             settings, resolve_path(settings, "cache_dir"),
         )
@@ -92,7 +93,7 @@ def run_application(
             stages=getattr(intelligence_runner, "stages", None),
             ai_enabled=intelligence.ai_status == "enabled",
         )
-        print("[4/6] 整理AI深研、证据校验与产业映射…", flush=True)
+        progress("[4/6] 汇总分析、质量门与页签数据…")
 
         ai_label = AI_STATUS_LABELS.get(intelligence.ai_status, intelligence.ai_status)
         context = {
@@ -154,12 +155,12 @@ def run_application(
                 "all_sources_fresh": not failed_sources,
             },
         }
-        print("[5/6] 生成统一HTML、Markdown和可追溯数据文件…", flush=True)
+        progress("[5/6] 生成 HTML、Markdown 和数据文件…")
         outputs = digest_publisher.publish(
             context, intelligence.analyses, market.snapshot, market.candidates,
             run_metadata, resolve_path(settings, "output_dir"), current,
         )
-        print("[6/6] 保存流水线状态…", flush=True)
+        progress("[6/6] 保存运行状态…")
         repository.finish_run(run_id, "success", run_metadata)
         return outputs
     except Exception as exc:

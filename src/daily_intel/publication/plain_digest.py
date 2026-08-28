@@ -208,16 +208,24 @@ def build_plain_digest(
 ) -> dict[str, Any]:
     """Compact scan board. Full takeaways stay on story cards; news stays in 市场情报."""
     tech_items = []
+    general_items = []
+    hardcore_items = []
     for analysis in analyses:
         url = analysis.evidence[0].url if analysis.evidence else ""
-        tech_items.append({
+        item = {
             "headline": analysis.headline,
             "kicker": _topic_kicker(analysis),
             "scan": _scan_line(analysis),
             "takeaway": _takeaway(analysis),
             "url": url,
             "status": analysis.status.value,
-        })
+            "lane": analysis.lane,
+        }
+        tech_items.append(item)
+        if analysis.lane == "general":
+            general_items.append(item)
+        else:
+            hardcore_items.append(item)
     news_records = list(context.get("news_records") or [])
     industries = list(context.get("industry_records") or [])
     if not industries:
@@ -228,6 +236,8 @@ def build_plain_digest(
     board = build_market_board(context)
     return {
         "tech_items": tech_items,
+        "general_items": general_items,
+        "hardcore_items": hardcore_items,
         "industry_bars": industry_bars,
         "board": board,
         "has_content": bool(tech_items),

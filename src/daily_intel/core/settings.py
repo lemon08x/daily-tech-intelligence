@@ -33,6 +33,8 @@ INTELLIGENCE_DEFAULTS = {
     "selection_model_reject_floor": 55,
     "selection_repeat_penalty": .4,
     "selection_repeat_hours": 36,
+    "max_general_events": 5,
+    "max_hardcore_events": 5,
 }
 GITHUB_DEFAULTS = {
     "enabled": True,

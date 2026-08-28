@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from daily_intel.core.progress import progress
 from daily_intel.github.trending import fetch_trending, merge_trending
 from daily_intel.market.normalize import clean_text
 
@@ -111,6 +112,7 @@ class GitHubTrendingPipeline:
         daily, weekly = [], []
         for period, label in (("daily", "GitHub Trending 今日"), ("weekly", "GitHub Trending 本周")):
             try:
+                progress(f"当前：拉取 {label}…")
                 rows = fetch_trending(period, timeout=timeout)
                 if not rows:
                     raise ValueError("页面没有解析到项目")
@@ -163,6 +165,7 @@ class GitHubTrendingPipeline:
         by_name = {item["full_name"]: item for item in projects}
         if ai_enabled and stages is not None and projects:
             try:
+                progress(f"当前：为 {len(projects)} 个仓库生成解说和使用场景…")
                 payload = [
                     {
                         "full_name": item["full_name"],

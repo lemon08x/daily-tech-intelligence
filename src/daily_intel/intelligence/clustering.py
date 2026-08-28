@@ -7,6 +7,7 @@ from datetime import timedelta
 from rapidfuzz.fuzz import token_set_ratio
 
 from daily_intel.core.models import Document, Event
+from daily_intel.intelligence.sources.common import project_identity_keys
 
 
 IMPACT_WORDS = {
@@ -67,14 +68,19 @@ def cluster_documents(
         matched = False
         for group in groups:
             leader, leader_topic, _, _ = group[0]
-            if topic_id != leader_topic:
-                continue
             if abs(document.published_at - leader.published_at) > timedelta(hours=window_hours):
                 continue
-            if token_set_ratio(_normalize_title(document.title), _normalize_title(leader.title)) >= similarity_threshold:
-                group.append(item)
-                matched = True
-                break
+            same_project = bool(_project_keys(document) & _project_keys(leader))
+            if not same_project:
+                if topic_id != leader_topic:
+                    continue
+                if token_set_ratio(
+                    _normalize_title(document.title), _normalize_title(leader.title)
+                ) < similarity_threshold:
+                    continue
+            group.append(item)
+            matched = True
+            break
         if not matched:
             groups.append([item])
 
@@ -101,3 +107,11 @@ def cluster_documents(
             )
         )
     return sorted(events, key=lambda event: (event.deterministic_score, event.last_seen), reverse=True)
+
+
+def _project_keys(document: Document) -> set[str]:
+    keys = project_identity_keys(document.canonical_url or document.url)
+    target = str((document.metadata or {}).get("target_url") or "")
+    if target:
+        keys |= project_identity_keys(target)
+    return keys

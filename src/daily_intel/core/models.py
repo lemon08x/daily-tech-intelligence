@@ -110,6 +110,7 @@ class Analysis(StrictModel):
     model: str = ""
     prompt_version: str = ""
     created_at: datetime
+    lane: Literal["general", "hardcore"] = "hardcore"
 
 
 class MarketSignal(StrictModel):

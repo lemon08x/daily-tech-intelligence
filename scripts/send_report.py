@@ -120,7 +120,7 @@ def main() -> int:
         ("daily_digest.html", (run / "daily_digest.html").read_bytes()),
         ("daily_digest.md", (run / "daily_digest.md").read_bytes()),
     ]
-    send(env, f"科技产业情报与A股观察日报 {date.today().isoformat()}", summary, attachments)
+    send(env, f"科技产业情报日报 {date.today().isoformat()}", summary, attachments)
     print(f"已发送日报（运行 {run.name}）")
     return 0
 

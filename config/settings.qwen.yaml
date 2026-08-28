@@ -1,5 +1,5 @@
 app:
-  title: "科技产业情报与A股观察 · Qwen3.8 27B"
+  title: "科技产业情报日报 · Qwen3.8 27B"
   timezone: "Asia/Shanghai"
   top_stocks: 12
   top_industries: 8
@@ -42,7 +42,9 @@ intelligence:
   cluster_window_hours: 72
   max_items_per_source: 30
   max_scout_events: 40
-  max_deep_events: 5
+  max_deep_events: 10
+  max_general_events: 5
+  max_hardcore_events: 5
   max_company_hypotheses: 3
   full_text_max_chars: 50000
   title_similarity_threshold: 88

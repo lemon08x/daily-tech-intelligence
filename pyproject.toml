@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "daily-a-share-digest"
 version = "0.4.0"
-description = "Evidence-grounded daily technology intelligence with A-share market context."
+description = "Evidence-grounded daily technology intelligence digest."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = { text = "MIT" }

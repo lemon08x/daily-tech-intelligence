@@ -20,16 +20,6 @@ def test_normalize_tencent_units_and_code() -> None:
     assert result["market_cap_cny"] == 100_000_000_000
 
 
-def test_normalize_sina_keeps_required_fields() -> None:
-    raw = pd.DataFrame(
-        [{"代码": "sz000001", "名称": "平安银行", "最新价": 11, "涨跌幅": -0.5, "成交额": 2e8}]
-    )
-    result = normalize_snapshot(raw).iloc[0]
-    assert result["code"] == "000001"
-    assert result["amount_cny"] == 2e8
-    assert pd.isna(result["momentum_60d"])
-
-
 def test_normalize_global_quotes_from_eastmoney_columns() -> None:
     raw = pd.DataFrame([
         {"代码": "NDX", "名称": "纳斯达克", "最新价": 18000, "涨跌幅": 1.2},

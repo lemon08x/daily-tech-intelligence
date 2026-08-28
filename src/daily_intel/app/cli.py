@@ -16,7 +16,7 @@ DEFAULT_CONFIG = Path("config/settings.yaml")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="生成科技产业情报与A股市场统一日报")
+    parser = argparse.ArgumentParser(description="生成科技产业情报日报")
     subparsers = parser.add_subparsers(dest="command", required=True)
     run = subparsers.add_parser("run", help="采集数据并生成统一日报")
     run.add_argument("--config", type=Path, default=DEFAULT_CONFIG)

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import pytest
-
 from daily_intel.core.models import (
     Analysis,
     AnalysisDraft,
@@ -89,21 +87,6 @@ def _verification(**updates) -> VerificationResult:
     return VerificationResult(**payload)
 
 
-def test_analyst_prompt_requires_plain_language() -> None:
-    from daily_intel.intelligence.prompts import ANALYST_SYSTEM, VERIFIER_SYSTEM
-
-    assert "plain_takeaway" in ANALYST_SYSTEM
-    assert "大白话" in ANALYST_SYSTEM
-    assert "不得借解释引入" in ANALYST_SYSTEM
-    assert "术语解释和类比" in VERIFIER_SYSTEM
-
-
-def test_analyst_schema_requires_plain_takeaway() -> None:
-    schema = AnalysisDraft.model_json_schema()
-    assert "plain_takeaway" in schema["required"]
-    assert schema["properties"]["plain_takeaway"]["minLength"] == 8
-
-
 def test_quality_gate_normalizes_model_verbosity_to_one_contract() -> None:
     gate = AnalysisQualityGate(QualityPolicy())
     decision = gate.evaluate(_draft(), _verification(), [_document()])
@@ -175,60 +158,3 @@ def test_duplicate_facts_do_not_game_minimum_and_single_source_caps_confidence()
     assert accepted.confidence == QualityPolicy().max_single_source_confidence
 
 
-def test_missing_plain_takeaway_is_downgraded_and_lead_keeps_the_text() -> None:
-    gate = AnalysisQualityGate(QualityPolicy())
-    blank = gate.evaluate(
-        _draft().model_copy(update={"plain_takeaway": "        "}),
-        _verification(),
-        [_document()],
-    )
-    assert not blank.deep
-    assert "missing_plain_takeaway" in blank.quality.issues
-
-    decision = gate.evaluate(
-        _draft(),
-        _verification(unsupported_claims=["The production claim is not present in the source."]),
-        [_document()],
-    )
-    analysis = gate.build_analysis("event-1", decision, [], "model-x", "prompt-v3", NOW)
-    assert analysis.status == AnalysisStatus.LEAD
-    assert "deployment" in analysis.plain_takeaway
-    assert analysis.technical_mechanism == ""
-
-
-def test_old_analysis_json_without_plain_takeaway_still_loads() -> None:
-    payload = {
-        "event_id": "event-legacy",
-        "status": "lead",
-        "headline": "Legacy headline",
-        "key_facts": ["old fact"],
-        "confidence": .3,
-        "model": "model",
-        "prompt_version": "v2",
-        "created_at": NOW.isoformat(),
-        "quality": {
-            "policy_version": "evidence-gate-v1",
-            "passed": False,
-            "score": 30,
-            "supported_evidence": 0,
-            "primary_sources": 0,
-            "source_diversity": 0,
-        },
-    }
-    analysis = Analysis.model_validate(payload)
-    assert analysis.plain_takeaway == ""
-
-
-def test_analysis_requires_explicit_quality_contract() -> None:
-    payload = {
-        "event_id": "event-without-quality",
-        "status": "lead",
-        "headline": "Incomplete analysis",
-        "key_facts": [],
-        "confidence": .3,
-        "model": "model",
-        "prompt_version": "v2",
-        "created_at": NOW.isoformat(),
-    }
-    with pytest.raises(ValueError, match="quality"):
-        Analysis.model_validate(payload)

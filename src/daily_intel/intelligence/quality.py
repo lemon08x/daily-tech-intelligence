@@ -199,8 +199,9 @@ class AnalysisQualityGate:
 
     def build_analysis(
         self, event_id: str, decision: QualityDecision, mappings: list[CompanyMapping],
-        model: str, prompt_version: str, created_at: datetime,
+        model: str, prompt_version: str, created_at: datetime, lane: str = "hardcore",
     ) -> Analysis:
+        reading = "general" if lane == "general" else "hardcore"
         draft = decision.draft
         if decision.deep:
             return Analysis(
@@ -215,6 +216,7 @@ class AnalysisQualityGate:
                 confidence=decision.confidence, evidence=decision.evidence,
                 company_mappings=mappings, quality=decision.quality,
                 model=model, prompt_version=prompt_version, created_at=created_at,
+                lane=reading,
             )
         return Analysis(
             event_id=event_id, status=AnalysisStatus.LEAD,
@@ -224,6 +226,7 @@ class AnalysisQualityGate:
             confidence=decision.confidence, evidence=decision.evidence,
             quality=decision.quality, model=model,
             prompt_version=prompt_version, created_at=created_at,
+            lane=reading,
         )
 
     def _normalize_draft(self, draft: AnalysisDraft) -> AnalysisDraft:

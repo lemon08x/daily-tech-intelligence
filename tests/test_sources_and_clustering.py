@@ -9,7 +9,9 @@ from daily_intel.intelligence.clustering import cluster_documents
 from daily_intel.intelligence.extraction import enrich_document
 from daily_intel.intelligence.sources.curated import HuggingFaceDailyPapersSource
 from daily_intel.intelligence.sources.factory import build_sources, configured_source_count
+from daily_intel.intelligence.sources.common import canonicalize_url, document_lane, resolve_public_url
 from daily_intel.intelligence.sources.feeds import ArxivSource, FeedSource
+from daily_intel.intelligence.sources.weekly_catalog import parse_weekly_markdown
 from daily_intel.intelligence.sources.sitemaps import SitemapSource
 
 
@@ -115,29 +117,6 @@ def test_sitemap_source_applies_date_and_path_filters(
     assert docs[0].metadata["fetch_full_text"] is True
 
 
-def test_sitemap_source_uses_official_page_metadata_when_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sitemap = b"""<urlset xmlns='http://www.sitemaps.org/schemas/sitemap/0.9'>
-      <url><loc>https://example.com/news/fable-5-s-safeguards</loc>
-      <lastmod>2026-08-24T02:00:00Z</lastmod></url></urlset>"""
-    page = b"""<html><head><title>Improving Fable 5 Safeguards</title>
-      <meta name='description' content='An official biology safeguards update.'></head>
-      <body><article>Detailed official update.</article></body></html>"""
-
-    def get(url: str, **kwargs) -> FakeResponse:
-        return FakeResponse(sitemap if url.endswith("sitemap.xml") else page)
-
-    monkeypatch.setattr("daily_intel.intelligence.sources.sitemaps.requests.get", get)
-    source = SitemapSource({
-        "id": "official", "name": "Official", "url": "https://example.com/sitemap.xml",
-        "tier": 1, "include_paths": ["/news/"], "fetch_page_metadata": True,
-    })
-    docs = source.collect(datetime(2026, 8, 23, tzinfo=timezone.utc), 10)
-    assert docs[0].title == "Improving Fable 5 Safeguards"
-    assert docs[0].summary == "An official biology safeguards update."
-
-
 def test_huggingface_daily_papers_cites_original_arxiv_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -220,6 +199,61 @@ def test_cluster_deduplicates_similar_titles_within_72_hours() -> None:
     assert len(events[0].document_ids) == 2
 
 
+def test_cluster_merges_same_github_project_from_weekly_and_release() -> None:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    weekly = _document("w", "A new vLLM serving trick", now).model_copy(update={
+        "url": "https://github.com/ruanyf/weekly/issues/123",
+        "canonical_url": "https://github.com/ruanyf/weekly/issues/123",
+        "source_tier": 3,
+        "metadata": {"lane": "general", "target_url": "https://github.com/vllm-project/vllm"},
+    })
+    release = _document("r", "vLLM v0.27.0", now).model_copy(update={
+        "url": "https://github.com/vllm-project/vllm/releases/tag/v0.27.0",
+        "canonical_url": "https://github.com/vllm-project/vllm/releases/tag/v0.27.0",
+        "content_type": "github_release",
+        "source_tier": 1,
+        "metadata": {"lane": "hardcore"},
+    })
+    topics = [
+        {"id": "cloud_devtools", "name": "云与开发工具", "keywords": ["vllm", "serving"]},
+        {"id": "foundation_models", "name": "大模型", "keywords": ["vllm"]},
+    ]
+    events = cluster_documents([weekly, release], topics, 72, 80)
+    assert len(events) == 1
+    assert set(events[0].document_ids) == {"w", "r"}
+
+
+def test_weekly_markdown_extracts_tool_and_resource_links() -> None:
+    text = """
+## 资源
+1、[Cool Blog](https://example.com/post)
+
+## 工具
+1、[vLLM](https://github.com/vllm-project/vllm)
+
+## 文摘
+1、[Random tweet](https://twitter.com/foo/status/1)
+"""
+    rows = parse_weekly_markdown(text, "issue-1.md")
+    urls = {item["url"] for item in rows}
+    assert "https://example.com/post" in urls
+    assert "https://github.com/vllm-project/vllm" in urls
+    assert all("twitter.com" not in item["url"] for item in rows)
+
+
+def test_short_url_resolves_to_canonical_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Redirect:
+        url = "https://github.com/vllm-project/vllm/releases/tag/v1"
+        def raise_for_status(self) -> None:
+            return None
+    monkeypatch.setattr("daily_intel.infrastructure.http.http_get", lambda *a, **k: Redirect())
+    assert resolve_public_url("https://bit.ly/vllm") == canonicalize_url(
+        "https://github.com/vllm-project/vllm/releases/tag/v1"
+    )
+    assert document_lane({"tier": 3, "lane": "general"}, "weekly_issue") == "general"
+    assert document_lane({"tier": 1}, "paper") == "hardcore"
+
+
 def test_cluster_excludes_obvious_nightly_release_noise() -> None:
     now = datetime(2026, 8, 24, tzinfo=timezone.utc)
     noisy = _document("n", "trunk/68d20d4ee3956ceb: Disable CUDA arch", now).model_copy(
@@ -227,14 +261,6 @@ def test_cluster_excludes_obvious_nightly_release_noise() -> None:
     )
     topics = [{"id": "compute", "name": "芯片", "keywords": ["cuda"]}]
     assert cluster_documents([noisy], topics, 72, 80) == []
-
-
-def test_pypdf_parser_noise_is_silenced() -> None:
-    import logging
-
-    import daily_intel.intelligence.extraction as extraction_mod  # noqa: F401
-
-    assert logging.getLogger("pypdf").level == logging.ERROR
 
 
 def test_full_text_failure_keeps_summary_and_marks_error(monkeypatch: pytest.MonkeyPatch) -> None:

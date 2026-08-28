@@ -31,7 +31,7 @@ if (Test-Path (Join-Path $ProjectRoot ".env")) {
         }
     }
 }
-foreach ($key in @("OMLX_API_KEY", "DEEPSEEK_API_KEY")) {
+foreach ($key in @("OMLX_API_KEY", "DEEPSEEK_API_KEY", "QWEN_LAN_API_KEY")) {
     if (-not [Environment]::GetEnvironmentVariable($key)) {
         $fromUser = [Environment]::GetEnvironmentVariable($key, "User")
         if ($fromUser) {
@@ -47,9 +47,38 @@ if ($env:NO_PROXY) {
     $env:NO_PROXY = $lanBypass
 }
 $env:no_proxy = $env:NO_PROXY
+$env:PYTHONUTF8 = "1"
 $env:PYTHONUNBUFFERED = "1"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$configName = Split-Path -Leaf $Config
+if ($configName -match "qwen" -or $ExperimentId -match "qwen") {
+    $backend = "LAN Qwen 3.8-27B"
+} elseif ($configName -match "deepseek" -or $ExperimentId -match "deepseek") {
+    $backend = "LAN DeepSeek V4 Flash"
+} else {
+    $backend = $configName
+}
+if ($RequireAI) { $mode = "require-ai" }
+elseif ($NoAI) { $mode = "no-ai" }
+elseif ($Offline) { $mode = "offline" }
+else { $mode = "default" }
+
+Write-Host ""
+Write-Host "============================================================"
+Write-Host " Daily digest"
+Write-Host " Backend      $backend"
+Write-Host " Config       $Config"
+Write-Host " Experiment   $ExperimentId"
+Write-Host " Mode         $mode"
+if ($ForceAnalysis) {
+    Write-Host " Analysis     force (ignore same-scope cache)"
+}
+Write-Host " Progress     [1/6] market -> collect -> git -> publish"
+Write-Host " Log          $(Join-Path $LogDir 'latest.log')"
+Write-Host "============================================================"
+Write-Host ""
+
 $Arguments = @("-m", "daily_intel", "run", "--config", $Config)
 if ($Offline) { $Arguments += "--offline" }
 if ($Open) { $Arguments += "--open" }

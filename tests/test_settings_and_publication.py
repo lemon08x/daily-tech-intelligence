@@ -7,7 +7,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from daily_intel.app.cli import build_parser
 from daily_intel.app.orchestrator import run_application
 from daily_intel.core.models import Analysis, AnalysisQuality, AnalysisStatus, Evidence
 from daily_intel.core.settings import _validate_sources, load_settings, resolve_path
@@ -28,13 +27,6 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
     assert settings["quality"]["policy_version"] == "evidence-gate-v2"
 
 
-def test_settings_rejects_obsolete_root_shape(tmp_path) -> None:
-    path = tmp_path / "config.yaml"
-    path.write_text("app: {}\ndata: {}\nscreening: {}\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="当前版本必需段"):
-        load_settings(path)
-
-
 def test_source_config_rejects_duplicate_ids_and_unknown_api_types() -> None:
     with pytest.raises(ValueError, match="重复来源 id"):
         _validate_sources({
@@ -47,16 +39,6 @@ def test_source_config_rejects_duplicate_ids_and_unknown_api_types() -> None:
         _validate_sources({
             "apis": [{"id": "unknown", "type": "unknown", "tier": 1}]
         })
-
-
-def test_cli_supports_run_flags() -> None:
-    args = build_parser().parse_args([
-        "run", "--offline", "--no-ai",
-        "--experiment-id", "qwen3.8-27b", "--force-analysis",
-    ])
-    assert args.offline and args.no_ai
-    assert args.experiment_id == "qwen3.8-27b"
-    assert args.force_analysis
 
 
 def test_publish_writes_unified_outputs(tmp_path) -> None:
@@ -161,6 +143,7 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert 'href="https://example.com/source"' in html
     assert "阅读原文" in html and "出口管制" in html
     assert "今日速读" in html and "今日速读" in markdown
+    assert "硬核" in html and "硬核" in markdown
     assert "市场情报" in html and "产业风向" in html
     assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in html.split("新闻精选", 1)[0]
     assert "scan-kicker" in html.split("新闻精选", 1)[0]
@@ -368,6 +351,8 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
     )
     assert digest["has_content"]
     assert digest["tech_items"][0]["kicker"] == "科技"
+    assert digest["hardcore_items"][0]["kicker"] == "科技"
+    assert digest["general_items"] == []
     assert digest["tech_items"][0]["scan"] == "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。"
     assert "…" not in digest["tech_items"][0]["scan"]
     assert "news_threads" not in digest

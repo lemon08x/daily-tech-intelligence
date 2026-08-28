@@ -1,12 +1,16 @@
-# 科技产业情报与 A 股观察
+# 科技产业情报日报
 
-这是一个可每日运行的模块化单体：从权威白名单采集科技前沿信息，以可替换的模型完成受限筛选、深研和独立证据校验，同时保留原有 AkShare 行情、透明规则评分与缓存降级。两条流水线最后合并成一份 HTML/Markdown 日报。
+这是一个可每日运行的模块化单体：从权威白名单采集科技前沿信息，以可替换的模型完成受限筛选、深研和独立证据校验，并附带产业/全球市场作为信息源。最后合并成一份 HTML/Markdown 日报。
 
-AI 科技事件和公司关联始终只是研究信息，**不会进入股票综合分**，也不构成投资建议。
+本报告只做公开信息整理与研究观察，不构成投资建议。
 
 ## 快速开始
 
 最简单的方式是双击根目录的 `启动日报.cmd`。它与早间定时任务同一条链路：局域网 DeepSeek V4 Flash、`config/settings.deepseek.yaml`，生成后打开当天 HTML。首次运行会创建 `.venv` 并安装依赖。
+
+本地想用更快的局域网 Qwen 3.8-27B 验证改动时，双击 `启动日报-qwen.cmd`。它走 `config/settings.qwen.yaml` 和独立库 `data/intelligence_qwen.db`，不会覆盖 DeepSeek 的分析缓存。密钥变量是 `QWEN_LAN_API_KEY`。
+
+两个启动窗口都会先打印后端、配置和实验 id，再输出 `[1/6]` 到 `[6/6]` 阶段，以及 `当前：…` 明细（采集、选题、深研、Git 解说等）。
 
 PowerShell 方式：
 
@@ -16,13 +20,19 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\run_daily.ps1 -RequireAI -Open
 ```
 
-没有 API 密钥也能运行：系统会采集权威来源，发布明确标为“线索”的事件和完整市场报告，不会伪造 AI 分析。
-
-启用 AI 时，只把密钥写入本机环境变量，不要写进配置或仓库：
+Qwen 一次性运行：
 
 ```powershell
-[Environment]::SetEnvironmentVariable("DEEPSEEK_API_KEY", "你的密钥", "User")
-$env:DEEPSEEK_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
+.\scripts\run_daily.ps1 -RequireAI -Open -Config .\config\settings.qwen.yaml -ExperimentId "qwen3.8-27b"
+```
+
+没有 API 密钥也能运行：系统会采集权威来源，发布明确标为“线索”的事件，不会伪造 AI 分析。
+
+每日定时任务走局域网 DeepSeek，密钥变量是 `OMLX_API_KEY`，只写本机环境变量，不要写进配置或仓库：
+
+```powershell
+[Environment]::SetEnvironmentVariable("OMLX_API_KEY", "你的密钥", "User")
+$env:OMLX_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 .\scripts\run_daily.ps1 -RequireAI -Open
 ```
 
@@ -69,15 +79,15 @@ output/YYYY-MM-DD/
 Harness 运行还包含 `harness_io` 请求/响应审计。同一天重复运行不会覆盖此前
 运行目录，也不会在日期根目录生成重复副本。
 
-- `daily_digest.html`：默认显示新闻精选，并通过页签切换到A股行情；
+- `daily_digest.html`：默认显示新闻精选，并可切换到 Git、市场情报；
 - `daily_digest.md`：适合推送和二次编辑；
 - `intelligence.json`：稳定的科技分析数据契约；
-- `candidates.csv`：规则过滤后的完整股票候选及因子分；
-- `market_snapshot.csv`：标准化全市场快照；
+- `candidates.csv`：规则过滤后的市场候选备查表；
+- `market_snapshot.csv`：标准化市场快照；
 - `run_meta.json`：模型、提示词版本、token、失败源、缓存和新鲜度状态。
 
-HTML 先给出可扫的“今日速读”（科技短句，条目前有主题词），再进入
-“新闻精选”。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度
+HTML 先给出可扫的“今日速读”（泛读/硬核短句，条目前有主题词），再进入
+“新闻精选”。泛读来自周刊和投稿池，硬核来自论文与官方发布。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度
 分析按需展开。“Git”页用卡片列出当日最热和本周增长最快的开源项目，附星标/语言条形图，
 并用一句话说明项目在做什么，再给一段具体使用场景模拟。“市场情报”页把交易所当信息源：产业和全球市场只列当日涨跌
 前三后三或幅度够大的条目，并保留可归因事件；日报不再列出个股扫描。
@@ -93,7 +103,7 @@ HTML 先给出可扫的“今日速读”（科技短句，条目前有主题词
 daily/
 ├── AGENTS.md         Harness薄操作契约
 ├── config/           运行、主题、来源配置
-├── docs/             架构与扩展说明
+├── docs/             架构、来源与测试说明
 ├── scripts/
 │   ├── harness/      Harness文件桥接与请求核验
 │   └── diagnostics/  只读诊断工具
@@ -134,8 +144,8 @@ src/daily_intel/
 1. 首次回看 48 小时；之后每个来源从自己的上次成功游标继续，并保留 6 小时重叠。
 2. 分组 arXiv、RSS/Atom、官方 sitemap、结构化论文 API 和 GitHub Release 先做来源级去重、主题过滤和 72 小时事件聚类；明显的 nightly/build 自动记录在进入 AI 前丢弃。
 3. 初筛模型最多处理 40 个候选事件；最终排序由确定性分数 65% 与模型分数 35% 融合，模型漏项时回退到确定性排序，避免模型完全控制选题。
-4. 深研最多 5 个事件，再由独立校验阶段审计；只有至少两条原文逐字证据且包含权威一手来源时才标为“深度结论”，否则确定性降级成“线索”。无效 JSON 或单事件模型失败会重试一次，仍失败则跳过，不合成伪分析。
-5. A 股代码和名称必须存在于当日快照；巨潮行业分类只作背景，必须有近 365 天巨潮公告证据才能标为“已核验关联”，否则只能是“待核验假设”。
+4. 深研最多各 5 条泛读/硬核事件，再由独立校验阶段审计；只有至少两条原文逐字证据且包含权威一手来源时才标为“深度结论”，否则确定性降级成“线索”。无效 JSON 或单事件模型失败会重试一次，仍失败则跳过，不合成伪分析。
+5. 公司关联只是待核验假设；必须有近 365 天官方公告证据才能标为“已核验关联”。
 
 模型输出还会经过统一质量契约：事实、证据、产业影响、风险与反面观点都有固定上下限；重复项和伪造引用会被程序剔除；存在 `unsupported_claims` 时，即使校验模型返回 `pass` 也强制降级；单一来源和线索状态都有置信度上限。质量分、证据数、来源数与降级原因会写入 HTML、Markdown、`intelligence.json` 和 `run_meta.json`。
 
@@ -147,9 +157,11 @@ src/daily_intel/
 - `config\topics.yaml`：主题及中英文关键词；
 - `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库。
 
-默认模型端点为 `https://api.deepseek.com`，密钥变量为 `DEEPSEEK_API_KEY`。初筛模型 `deepseek-v4-flash`，深研/校验模型 `deepseek-v4-pro`；这些名称、采样参数和供应商扩展参数全部可在 YAML 修改。运行元数据记录客户端报告的实际提供方和模型，不再直接把静态 YAML 当作实际运行结果；文件代理无法获得真实 token 时会明确标为“估算”。
+程序仍按三个阶段分别读模型配置：`scout`（初筛）、`analyst`（深研）、`verifier`（校验），外加 `git_brief`（Git 页解说）。每个阶段都可以在 YAML 里写成不同模型。
 
-原有股票综合分保持不变：趋势 30%、估值 20%、流动性 15%、活跃度 15%、当日强弱 10%、市值 10%。AI 分析不会读写这条评分路径。
+日常定时任务用的是 `config/settings.deepseek.yaml`：局域网 `http://192.168.31.236:8000/v1`，密钥变量 `OMLX_API_KEY`，**三个阶段目前都指向同一个** `deepseek-v4-flash-0731`。所以最近几次日报是单模型跑完的，不是 flash 初筛 + pro 深研。
+
+`config/settings.yaml` 里仍保留云端 DeepSeek 示例（`https://api.deepseek.com` / `DEEPSEEK_API_KEY`，scout=`deepseek-v4-flash`，analyst/verifier=`deepseek-v4-pro`），那不是早间任务实际走的配置。要恢复双模型，只要在对应 YAML 里把三个阶段写成不同 `model` 即可。运行元数据记录客户端报告的实际提供方和模型，不再把静态 YAML 直接当成运行结果。
 
 ## 自动运行与测试
 
@@ -159,7 +171,7 @@ src/daily_intel/
 .\scripts\install_agent_task.ps1 -At "08:30"
 ```
 
-该任务读取 `config/settings.deepseek.yaml`，密钥变量为 `OMLX_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报，行情沿用最近交易日。
+该任务读取 `config/settings.deepseek.yaml`，密钥变量为 `OMLX_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报。
 
 如需另建工作日 18:10 的默认配置任务：
 
@@ -169,10 +181,10 @@ src/daily_intel/
 
 运行日志保存在 `logs\`。
 
-测试：
+回归测试说明见 [`docs/testing.md`](docs/testing.md)。固定响应加临时 SQLite，不需要网络或真实密钥：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-测试使用固定响应和临时 SQLite，不需要网络或真实密钥。第三方组件与许可证见 `THIRD_PARTY_NOTICES.md`。
+第三方组件与许可证见 `THIRD_PARTY_NOTICES.md`。

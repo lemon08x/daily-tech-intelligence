@@ -68,6 +68,75 @@ feeds:
     max_items: 15
     include_keywords: [battery, energy storage, grid, solar, fusion, hydrogen, heat pump, renewable, clean energy, nuclear, electricity]
 
+  # 泛读：科技周刊与投稿池。Tier 2/3 不能单独支撑深度结论。
+  - id: ruanyf_weekly_issues
+    publisher_id: ruanyf_weekly
+    name: "阮一峰周刊投稿池"
+    url: "https://github.com/ruanyf/weekly/issues.atom"
+    tier: 3
+    lane: general
+    content_type: weekly_issue
+    unshorten: true
+    fetch_full_text: false
+    max_items: 15
+    include_keywords: [AI, LLM, GPU, GitHub, open source, model, agent, 开源, 大模型, 工具, 芯片, 机器人, 数据库, 安全, python, rust]
+  - id: hacker_newsletter
+    publisher_id: hacker_newsletter
+    name: Hacker Newsletter
+    url: "https://hackernewsletter.com/rss.xml"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 10
+    exclude_keywords: ["who's hiring", "who is hiring", "job", "hiring"]
+  - id: import_ai
+    publisher_id: import_ai
+    name: Import AI
+    url: "https://importai.substack.com/feed"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: true
+    max_items: 8
+  - id: tldr_tech
+    publisher_id: tldr
+    name: TLDR Tech
+    url: "https://tldr.tech/rss"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 10
+    include_keywords: [AI, OpenAI, Anthropic, Nvidia, GPU, model, chip, robot, agent, semiconductor, 开源]
+  - id: tldr_ai
+    publisher_id: tldr
+    name: TLDR AI
+    url: "https://tldr.tech/ai/rss"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 10
+  - id: golang_weekly
+    publisher_id: golang_weekly
+    name: Golang Weekly
+    url: "https://golangweekly.com/rss/"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 8
+  - id: javascript_weekly
+    publisher_id: javascript_weekly
+    name: JavaScript Weekly
+    url: "https://javascriptweekly.com/rss/"
+    tier: 2
+    lane: general
+    unshorten: true
+    fetch_full_text: false
+    max_items: 8
+
 # 没有稳定 RSS 的官方站点通过带 lastmod 的 sitemap 增量采集。
 sitemaps:
   - id: anthropic_official

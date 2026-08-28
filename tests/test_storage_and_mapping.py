@@ -66,6 +66,8 @@ def test_sqlite_keeps_model_scoped_analysis_variants(tmp_path) -> None:
     latest = repository.get_latest_analyses(5)
     assert len(latest) == 1
     assert latest[0].model == "model-b"
+
+
 def test_company_mapping_requires_exact_snapshot_and_announcement(monkeypatch) -> None:
     snapshot = pd.DataFrame([{"code": "600000", "name": "浦发银行"}])
     mapper = CompanyMapper(snapshot, datetime(2026, 8, 24, tzinfo=timezone.utc))

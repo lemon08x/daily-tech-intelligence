@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 
 from daily_intel.core.models import Analysis
+from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository, LLMClient
 from daily_intel.intelligence.clustering import is_obvious_build_title
 from daily_intel.intelligence.collection import DocumentCollector
@@ -19,6 +20,7 @@ from daily_intel.intelligence.quality import (
 )
 from daily_intel.intelligence.research import EventResearcher
 from daily_intel.intelligence.selection import EventSelector
+from daily_intel.intelligence.sources.common import event_lane
 
 
 @dataclass(slots=True)
@@ -86,35 +88,53 @@ class IntelligencePipeline:
         if offline:
             return self._offline_result(cache_scope)
 
+        progress("当前：正在采集科技来源…")
         documents, source_status = self.collector.collect_sources(now)
         documents.extend(self.collector.radar_documents(radar_news, now))
+        progress(f"当前：采集完成 {len(documents)} 篇，正在聚类…")
         event_docs = self.catalog.index_and_discover(documents, now)
 
         errors: list[str] = []
         if ai_enabled and event_docs:
+            progress(f"当前：正在初筛选题（{len(event_docs)} 个事件）…")
             selected, scout_error = self.selector.select(event_docs, cache_scope, now)
             if scout_error:
                 errors.append(scout_error)
         else:
             selected = self.selector.order_with_repeat(event_docs, now)
+        progress(f"当前：选题完成，准备深研 {len(selected)} 个事件")
 
         analyses: list[Analysis] = []
         cache_hits = 0
         cache_misses = 0
-        target_count = int(self.config["max_deep_events"])
+        max_general = int(self.config.get("max_general_events", 5))
+        max_hardcore = int(self.config.get("max_hardcore_events", 5))
+        overall = int(self.config.get("max_deep_events", max_general + max_hardcore))
+        lane_counts = {"general": 0, "hardcore": 0}
         for event, event_documents in selected:
-            if len(analyses) >= target_count:
-                break
+            lane = event_lane(event_documents)
+            lane_limit = max_general if lane == "general" else max_hardcore
+            if lane_counts[lane] >= lane_limit or len(analyses) >= overall:
+                if lane_counts["general"] >= max_general and lane_counts["hardcore"] >= max_hardcore:
+                    break
+                if len(analyses) >= overall:
+                    break
+                continue
             cached = (
                 None
                 if force_analysis
                 else self.repository.get_analysis(event.id, cache_scope)
             )
+            title = (event.title or event.id)[:48]
             if cached and self.researcher.can_reuse(cached, ai_enabled):
+                progress(f"当前：复用缓存 · {title}")
                 cache_hits += 1
+                cached = cached.model_copy(update={"lane": lane})
                 analyses.append(cached)
+                lane_counts[lane] += 1
                 continue
             cache_misses += 1
+            progress(f"当前：深研 {lane} · {title}")
             if not ai_enabled:
                 analysis = self.researcher.lead(
                     event, event_documents, now, "AI未启用，仅展示权威来源线索"
@@ -132,6 +152,7 @@ class IntelligencePipeline:
                     continue
             self.repository.save_analysis(analysis, cache_scope)
             analyses.append(analysis)
+            lane_counts[analysis.lane] += 1
 
         return self._result(
             analyses=analyses,

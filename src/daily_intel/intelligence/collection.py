@@ -14,7 +14,8 @@ from daily_intel.intelligence.sources.common import (
     content_hash,
     document_id,
 )
-from daily_intel.intelligence.sources.factory import build_sources
+from daily_intel.core.settings import resolve_path
+from daily_intel.intelligence.sources.factory import build_sources, load_weekly_blog_feeds
 
 
 SourceFactory = Callable[[dict[str, Any], int], list[SourceAdapter]]
@@ -47,9 +48,19 @@ class DocumentCollector:
         )
 
     def collect_sources(self, now: datetime) -> tuple[list[Document], list[dict[str, Any]]]:
-        sources = self.source_factory(
-            self.settings["sources"], int(self.config["source_fetch_timeout_seconds"])
-        )
+        extra_feeds = []
+        try:
+            extra_feeds = load_weekly_blog_feeds(
+                resolve_path(self.settings, "cache_dir") / "weekly_blog_feeds.json",
+                int(self.config.get("weekly_pool_max_feeds", 12)),
+            )
+        except Exception:
+            extra_feeds = []
+        timeout = int(self.config["source_fetch_timeout_seconds"])
+        try:
+            sources = self.source_factory(self.settings["sources"], timeout, extra_feeds)
+        except TypeError:
+            sources = self.source_factory(self.settings["sources"], timeout)
         documents: list[Document] = []
         statuses: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=6) as executor:
