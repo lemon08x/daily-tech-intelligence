@@ -14,14 +14,12 @@ from daily_intel.core.models import (
     Evidence,
 )
 from daily_intel.intelligence.extraction import enrich_document
-from daily_intel.intelligence.mapping import CompanyMapper
 from daily_intel.intelligence.modeling import ModelStageRunner
 from daily_intel.intelligence.quality import AnalysisQualityGate
 from daily_intel.intelligence.sources.common import event_lane
 
 
 Enricher = Callable[[Document, int, int], Document]
-MapperFactory = Callable[..., CompanyMapper]
 
 
 class EventResearcher:
@@ -30,14 +28,12 @@ class EventResearcher:
     def __init__(
         self, settings: dict[str, Any], stages: ModelStageRunner,
         quality_gate: AnalysisQualityGate, enricher: Enricher = enrich_document,
-        mapper_factory: MapperFactory = CompanyMapper,
     ) -> None:
         self.settings = settings
         self.config = settings["intelligence"]
         self.stages = stages
         self.quality_gate = quality_gate
         self.enricher = enricher
-        self.mapper_factory = mapper_factory
 
     def can_reuse(self, analysis: Analysis, ai_enabled: bool) -> bool:
         if not ai_enabled:
@@ -70,12 +66,8 @@ class EventResearcher:
         draft, model = self.stages.analyze(event, documents)
         verification = self.stages.verify(event, documents, draft)
         decision = self.quality_gate.evaluate(draft, verification, documents)
-        mappings = []
-        if decision.deep:
-            mapper = self.mapper_factory(snapshot, now, offline=False)
-            mappings = mapper.resolve(decision.draft.company_hypotheses)
         return self.quality_gate.build_analysis(
-            event.id, decision, mappings, model, self.stages.prompt_version, now,
+            event.id, decision, model, self.stages.prompt_version, now,
             lane=event_lane(documents),
         )
 

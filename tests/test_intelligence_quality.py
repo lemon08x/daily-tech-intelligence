@@ -107,7 +107,7 @@ def test_pass_verdict_with_unsupported_claims_is_still_downgraded() -> None:
     )
     assert not decision.deep
     assert "unsupported_claims" in decision.quality.issues
-    analysis = gate.build_analysis("event-1", decision, [], "model-x", "prompt-v2", NOW)
+    analysis = gate.build_analysis("event-1", decision, "model-x", "prompt-v2", NOW)
     assert analysis.status == AnalysisStatus.LEAD
     assert analysis.technical_mechanism == ""
     assert analysis.company_mappings == []

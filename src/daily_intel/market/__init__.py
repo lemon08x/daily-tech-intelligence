@@ -1,1 +1,1 @@
-"""Deterministic A-share market pipeline."""
+"""Deterministic market snapshot and event-cause news ranking."""

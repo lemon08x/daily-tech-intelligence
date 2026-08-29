@@ -17,7 +17,6 @@ from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.github.pipeline import GitHubTrendingPipeline
 from daily_intel.publication.briefing import apply_digest_brief, digest_brief_payload
-from daily_intel.publication.plain_digest import build_plain_digest
 from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.infrastructure.llm.openai_compatible import OpenAICompatibleLLM
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -90,33 +89,20 @@ def run_application(
         github_runner = github_workflow or GitHubTrendingPipeline(
             settings, resolve_path(settings, "cache_dir"),
         )
-        github = github_runner.run(
-            current,
-            stages=getattr(intelligence_runner, "stages", None),
-            ai_enabled=intelligence.ai_status == "enabled",
-        )
+        github = github_runner.run(current)
         progress("[4/6] 汇总分析、质量门与页签数据…")
 
         ai_label = AI_STATUS_LABELS.get(intelligence.ai_status, intelligence.ai_status)
-        draft = build_plain_digest(intelligence.analyses, market.context)
         digest_brief = None
         digest_errors: list[str] = []
         stages = getattr(intelligence_runner, "stages", None)
         if intelligence.ai_status == "enabled" and stages is not None:
             try:
-                progress("当前：撰写今日速读和市场事件分析…")
-                digest_brief = stages.brief_digest(
-                    digest_brief_payload(
-                        intelligence.analyses, market.context,
-                        draft["industry_bars"], draft["board"],
-                    )
-                )
+                progress("当前：撰写市场热点分析…")
+                digest_brief = stages.brief_digest(digest_brief_payload(market.context))
             except Exception as exc:
                 digest_errors.append(f"digest_brief: {type(exc).__name__}: {exc}")
-        scan_paragraph, news_records = apply_digest_brief(
-            digest_brief, intelligence.analyses, market.context,
-            draft["industry_bars"], draft["board"],
-        )
+        news_records = apply_digest_brief(digest_brief, market.context)
         context = {
             **market.context,
             "title": settings["app"]["title"],
@@ -137,30 +123,6 @@ def run_application(
             "github_chart": getattr(github, "chart", {}) or {},
             "github_source_status": github.source_status,
             "news_records": news_records,
-            "scan_paragraph": scan_paragraph,
-            "process": {
-                "intelligence": getattr(intelligence, "process", {}) or {},
-                "market": (market.metadata or {}).get("process") or {},
-                "github": {
-                    "sources": github.source_status,
-                    "projects": [
-                        {
-                            "full_name": item.get("full_name"),
-                            "origin": item.get("origin_label") or item.get("origin") or "GitHub",
-                            "reason": item.get("reason"),
-                            "url": item.get("url"),
-                            "plain": item.get("plain"),
-                        }
-                        for item in github.projects
-                    ],
-                    "errors": github.errors,
-                },
-                "briefing": {
-                    "source": "model" if digest_brief is not None else "fallback",
-                    "scan_paragraph": scan_paragraph,
-                    "errors": digest_errors,
-                },
-            },
         }
         failed_sources = [
             item["name"] for item in market.context["market_source_status"] if item["stale"]
@@ -201,7 +163,7 @@ def run_application(
                 "all_sources_fresh": not failed_sources,
             },
         }
-        progress("[5/6] 生成 HTML、Markdown 和数据文件…")
+        progress("[5/6] 生成 HTML…")
         outputs = digest_publisher.publish(
             context, intelligence.analyses, market.snapshot, market.candidates,
             run_metadata, resolve_path(settings, "output_dir"), current,

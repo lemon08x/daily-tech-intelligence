@@ -20,16 +20,16 @@ MarketWorkflow ─────────────────> app/orchestr
 - `EventCatalog`：只负责文档持久化、72 小时聚类和事件文档装配。
 - `EventSelector`：确定性得分与模型得分受限融合，并负责主题平衡。
 - `ModelStageRunner`：统一模型调用、重试、用量和实际运行时审计。
-- `EventResearcher`：全文增强、分析、独立校验和通过质量门后的公司映射。
+- `EventResearcher`：全文增强、分析、独立校验，再交给质量门。
 - `AnalysisQualityGate`：模型无关的发布裁决；模型的 `verdict` 不是最终决定。
-- `MarketProvider` / `MarketWorkflow`：可注入的数据适配器，以及完全独立的标准化和规则评分路径。
-- `DigestPublisher`：把统一上下文交给默认文件渲染器，或替换成其他展示/推送实现。
+- `MarketProvider` / `MarketWorkflow`：可注入的数据适配器，以及独立的标准化和市场新闻排序。
+- `DigestPublisher`：把统一上下文交给默认 HTML 渲染器，或替换成其他展示/推送实现。
 
 ## 依赖规则
 
 1. `core` 不依赖业务实现，只保存稳定数据契约和端口。
 2. `intelligence` 与 `market` 互不调用；二者只在 `app/orchestrator.py` 汇合。
-3. AI 分析和公司映射不得写入市场候选分数。
+3. 科技分析不得写入市场快照或热点排序。
 4. `infrastructure` 实现端口，但业务阶段不依赖 SQLite、AkShare 或某个模型厂商的具体类。
 5. `publication` 只消费标准化结果，不采集数据、不调用模型、不重新裁决质量。
 6. 新阶段失败应返回局部错误或降级状态，不能补造事实。
@@ -45,22 +45,22 @@ MarketWorkflow ─────────────────> app/orchestr
 - 深度结论必须有至少两条有效证据和至少一个一手来源。
 - 校验结果含实质性 `unsupported_claims` 时强制降级，即使模型返回 `pass`。
 - 单一来源置信度最高 0.85，深度结论最高 0.90，线索最高 0.49。
-- 降级结果隐藏技术推断、产业影响与公司映射，只保留大白话要点、可核验事实、证据和原因。
-- 发布层用一段连贯文字写“今日速读”，覆盖当天科技或市场新闻；科技页内部再分泛读和硬核。主题词只看标题和速读句。
-- 前一天已经发布过的事件，第二天入选权重降低。Git 页展示 GitHub 今日最热、本周增长最快，以及 Hugging Face 热门模型和 GitLab 高星项目。
-- 市场指标只列当日涨幅前三、跌幅后三，不分析涨跌原因。市场新闻给出影响、可能后果、推理过程和可核对原文；过滤资金流向、财报噪音和股票简称/风险警示变更；日报不展示个股扫描。
+- 降级结果隐藏技术推断与产业影响，只保留大白话要点、可核验事实、证据和原因。
+- 发布层用泛读/硬核短句拼“今日速读”；科技页再分成泛读、硬核两个分页。主题词只看标题和速读句。
+- 前一天已经发布过的事件，第二天入选权重降低。Git 页只展示 GitHub 今日最热和本周增长最快，并标明仓库当前总星标。
+- 市场指标只列当日涨幅前三、跌幅后三，不分析涨跌原因。热点给出影响与后果，以及推理依据；过滤资金流向、财报噪音和股票简称/风险警示变更；日报不展示个股扫描。
 
 修改阈值时应更新 `quality.policy_version`，使历史分析不会被错误复用。修改提示词时应更新 `llm.prompt_version`。
 
 ## 运行与输出
 
 一次运行由 `experiment_id`、唯一 `run_name` 和模型指纹共同标识。每次发布
-只写入 `output/YYYY-MM-DD/runs/<run-name>`，不生成日期根副本或“最新运行”
-清单。同目录写入 `process.html` / `process.json`，记录采集、聚类、选题、深研、
-质量门到成稿的处理过程。SQLite 的 `analysis_variants` 保存同一事件的多个模型实验版本。
+只写入 `output/YYYY-MM-DD/runs/<run-name>/daily_digest.html`，不生成日期根副本、
+Markdown、JSON、CSV 或“最新运行”清单。SQLite 的 `analysis_variants` 保存同一
+事件的多个模型实验版本。
 
 `--force-analysis` 只绕过当前实验/模型作用域内的分析缓存，不删除任何历史
-输出。Harness请求与响应与报告归档在同一运行目录，便于后续高级模型复盘。
+输出。
 
 ## 三类常见增强
 
@@ -74,7 +74,8 @@ MarketWorkflow ─────────────────> app/orchestr
 
 ### 优化数据可视化
 
-实现新的 `DigestPublisher.publish(...)` 并注入 `run_application()`。可保留 `intelligence.json` 和 `run_meta.json` 作为稳定数据层，再替换 HTML 模板、图表库、静态站点或消息推送，不需要改采集和分析流程。
+实现新的 `DigestPublisher.publish(...)` 并注入 `run_application()`。默认可替换
+HTML 模板、静态站点或消息推送，不需要改采集和分析流程。
 
 ## 回归要求
 
@@ -82,5 +83,5 @@ MarketWorkflow ─────────────────> app/orchestr
 
 - 任何模型或提示词变更都要运行固定响应集，比较通过率、降级原因、证据有效率和输出长度，而不只比较文字观感。
 - 市场 fixture 的标准化、可归因新闻排序和关键报告区块必须保持回归。
-- `run_meta.json` 必须记录实际客户端元数据；无法读取真实用量时标记 `usage_reporting=estimated`。
+- 运行元数据必须记录实际客户端信息；无法读取真实用量时标记 `usage_reporting=estimated`。
 - `Analysis` 必须显式包含质量字段；不符合当前契约的旧数据不会进入现行发布流程。

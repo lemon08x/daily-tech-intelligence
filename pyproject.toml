@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "daily-a-share-digest"
+name = "daily-intel"
 version = "0.4.0"
 description = "Evidence-grounded daily technology intelligence digest."
 readme = "README.md"

@@ -11,11 +11,8 @@ Both print a start banner (backend, config, experiment id) and then Python statu
 - `run_daily.ps1`: shared production entry. Default config is DeepSeek Flash. Pass `-Config` / `-ExperimentId` for Qwen. Also supports `-RequireAI`, `-NoAI`, `-Offline`, `-Open`, `-ForceAnalysis`.
 - `run_daily_agent.ps1`: scheduled DeepSeek V4 Flash run plus email.
 - `install_agent_task.ps1`: install or update the daily (including weekend) 08:30 scheduler.
-- `install_scheduled_task.ps1`: install the optional weekday 18:10 scheduler.
-- `send_report.py`: email today's latest successful digest.
+- `send_report.py`: email today's latest successful HTML digest.
 - `refresh_weekly_catalog.py`: rebuild the optional weekly-blog RSS catalog cache; not part of the daily run.
-- `harness/run.py`: use a Harness model through the audited file bridge.
-- `harness/*.py`: inspect requests and validate exact quotes.
 - `diagnostics/*.py`: read-only database and event inspection helpers.
 
 Business logic belongs in `src/daily_intel`; scripts are entry points and

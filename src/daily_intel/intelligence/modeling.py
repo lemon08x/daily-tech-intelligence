@@ -12,7 +12,6 @@ from daily_intel.core.models import (
     DigestBrief,
     Document,
     Event,
-    GitBriefingBatch,
     ScoutBatch,
     VerificationResult,
 )
@@ -21,12 +20,10 @@ from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.intelligence.prompts import (
     ANALYST_SYSTEM,
     DIGEST_BRIEF_SYSTEM,
-    GIT_BRIEF_SYSTEM,
     SCOUT_SYSTEM,
     VERIFIER_SYSTEM,
     analyst_user,
     digest_brief_user,
-    git_brief_user,
     scout_user,
     verifier_user,
 )
@@ -102,11 +99,6 @@ class ModelStageRunner:
     def scout(self, event_docs: list[tuple[Event, list[Document]]], topics: list[dict]) -> ScoutBatch:
         return self._generate(
             "scout", SCOUT_SYSTEM, scout_user(event_docs, topics), ScoutBatch, None
-        ).value
-
-    def brief_github(self, projects: list[dict[str, Any]]) -> GitBriefingBatch:
-        return self._generate(
-            "git_brief", GIT_BRIEF_SYSTEM, git_brief_user(projects), GitBriefingBatch, None
         ).value
 
     def brief_digest(self, payload: dict[str, Any]) -> DigestBrief:

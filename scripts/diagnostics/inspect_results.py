@@ -13,14 +13,4 @@ print("== analyses ==")
 for event_id, status, analysis_json in cur.execute("select event_id, status, analysis_json from analyses"):
     data = json.loads(analysis_json)
     print(f"  {event_id} | {status} | {data['headline'][:60]}")
-    print(f"    confidence={data['confidence']} evidence={len(data['evidence'])} mappings={len(data['company_mappings'])}")
-
-print("\n== company_mappings ==")
-for event_id, payload_json in cur.execute(
-    "select event_id, payload_json from company_mappings order by event_id, position"
-):
-    payload = json.loads(payload_json)
-    print(
-        f"  {event_id} | {payload.get('code')} {payload.get('name')} | "
-        f"{payload.get('status')} | {payload.get('confidence')}"
-    )
+    print(f"    confidence={data['confidence']} evidence={len(data['evidence'])}")

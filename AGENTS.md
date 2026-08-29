@@ -1,8 +1,8 @@
-# Harness operating contract
+# Application operating contract
 
 This repository is a runnable daily-intelligence application, not a Skill.
-Harness models are optional LLM backends and must use the existing application
-contracts instead of reimplementing collection, analysis, or publication.
+LLM backends must use the existing application contracts instead of
+reimplementing collection, analysis, or publication.
 
 ## Interpret common requests
 
@@ -13,51 +13,56 @@ contracts instead of reimplementing collection, analysis, or publication.
 - “修复/优化项目”: code changes are allowed; preserve historical outputs and run
   the full test suite before handing off.
 
-## Harness-backed daily run
+## Daily run
 
-Use one truthful, stable model name and experiment id:
+Production is LAN DeepSeek V4 Flash at 08:30 (including weekends):
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\harness\run.py `
-  --harness-name "qwen-code" `
-  --model-name "qwen3.8-27b" `
-  --experiment-id "qwen3.8-27b"
+.\scripts\run_daily.ps1 -RequireAI -Open
 ```
 
-For a same-model A/B rerun, add `--force-analysis`. A different model or
-experiment automatically receives a different analysis and Scout cache scope.
-Never reuse a misleading experiment id for another model.
-Set `--harness-name` to the actual driver, for example `qwen-code`,
-`deepseek-harness`, or `codex`; do not label every run as Qwen Code.
+or double-click `启动日报.cmd`. Config is `config/settings.deepseek.yaml`,
+key env `OMLX_API_KEY`.
 
-The bridge writes each request under
-`output/YYYY-MM-DD/runs/<run-name>/harness_io` and waits for the matching
-`.response.json`.
+Occasional local check with Qwen 3.8-27B: `启动日报-qwen.cmd` or
 
-For every request:
+```powershell
+.\scripts\run_daily.ps1 -RequireAI -Open -Config .\config\settings.qwen.yaml -ExperimentId "qwen3.8-27b"
+```
 
-1. Read the full request, including `system`, `user`, and `json_schema`.
-2. Use only the documents supplied in `user`; do not add remembered or
-   web-searched facts. Extra research must first enter the normal Document and
-   Evidence pipeline.
-3. Write raw JSON matching `json_schema` to the exact `response_file`.
-   Do not wrap it in Markdown or add commentary.
-4. Evidence quotes must be exact continuous substrings of the supplied
-   document. Do not duplicate facts or quotes to meet minimum counts.
-5. During `verifier`, audit the draft independently. Any material unsupported
-   claim must be listed and the verdict cannot be `pass`.
+That path uses `data/intelligence_qwen.db` and does not share analysis cache
+with DeepSeek. Key env `QWEN_LAN_API_KEY`.
+
+Same-model A/B rerun: add `-ForceAnalysis`. A different model or experiment
+automatically receives a different analysis and Scout cache scope. Never reuse
+a misleading experiment id for another model.
+
+There is no Harness file bridge. Do not recreate `scripts/harness`.
+
+## Model stages
+
+Read the configured `scout` / `analyst` / `verifier` / `digest_brief` stages.
+Use only documents supplied to that stage. Evidence quotes must be exact
+continuous substrings of the supplied document. Do not invent company mappings
+or stock calls.
+
+During `verifier`, audit the draft independently. Any material unsupported
+claim must be listed and the verdict cannot be `pass`. The deterministic
+quality gate, not the model verdict, decides whether a conclusion is `deep`.
 
 ## Run acceptance
 
 Before reporting success, verify:
 
-- the returned report paths are inside the new unique run directory;
-- `run_meta.json` records the real model, experiment, cache scope, estimated
-  token flag, source failures, and quality summary;
+- the returned report path is `daily_digest.html` inside the new unique run
+  directory;
+- no Markdown, JSON, CSV, process page, or latest-run manifest was written
+  at the date root or in the run directory;
+- SQLite run metadata records the real model, experiment, cache scope,
+  estimated token flag, source failures, and quality summary;
 - every deep conclusion passed the deterministic quality gate;
-- no company mapping is marked verified without official evidence;
-- no report copies or latest-run manifest were written at the date root;
 - earlier run directories remain intact.
 
-Do not commit or push merely because a daily run completed. Commit and push only
-when the user explicitly requests repository delivery.
+Do not commit or push merely because a daily run completed. Commit and push
+only when the user explicitly requests repository delivery. Never commit
+`output/`, `data/`, `logs/`, or `.env`.

@@ -2,7 +2,7 @@
 
 从 .env 读取 SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/REPORT_TO。
 找到 output/<今日>/runs/ 下最新的成功运行（有 daily_digest.html）：
-- 成功：正文为摘要，附件为 daily_digest.html + daily_digest.md
+- 成功：正文为摘要，附件为 daily_digest.html
 - 无成功运行：发送失败通知（附日志尾部）
 """
 from __future__ import annotations
@@ -14,6 +14,7 @@ from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -38,7 +39,7 @@ def find_today_run() -> tuple[Path | None, list[Path]]:
     candidates: list[Path] = []
     if runs_dir.is_dir():
         candidates = sorted(
-            (p for p in runs_dir.iterdir() if p.is_dir() and (p / "run_meta.json").exists()),
+            (p for p in runs_dir.iterdir() if p.is_dir() and (p / "daily_digest.html").exists()),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
@@ -49,36 +50,16 @@ def find_today_run() -> tuple[Path | None, list[Path]]:
 
 
 def build_summary(run: Path) -> str:
-    import json
-
-    meta = json.loads((run / "run_meta.json").read_text(encoding="utf-8"))
-    intel = meta["intelligence"]
-    usage = (meta.get("ai") or {}).get("usage") or {}
-    lines = [
-        f"运行：{run.name}",
-        f"深研事件：{intel['deep_events']} 个 | 质量均分：{intel['quality'].get('average_score', '-')}",
-        f"模型调用：{usage.get('calls', '-')} 次 | 错误：{len(intel['errors'])} 条",
-        "",
-    ]
-    digest = (run / "daily_digest.md").read_text(encoding="utf-8")
-    if "## 今日速读" in digest:
-        body = digest.split("## 今日速读", 1)[1]
-        next_h2 = body.find("\n## ")
-        excerpt = body[:next_h2].strip() if next_h2 != -1 else body.strip()
-        if excerpt:
-            lines.append(excerpt[:1500])
-    else:
-        for block in digest.split("\n## "):
-            if block.startswith(("科技", "新闻精选", "深度研究结论")):
-                for item in block.split("\n### "):
-                    head = item.strip().splitlines()
-                    if head and head[0][:2].rstrip(".").isdigit():
-                        lines.append(f"• {head[0][:80]}")
-                break
-    if intel["errors"]:
-        lines.append("")
-        lines.append("错误：")
-        lines.extend(f"  - {e[:120]}" for e in intel["errors"][:5])
+    html = (run / "daily_digest.html").read_text(encoding="utf-8")
+    lines = [f"运行：{run.name}", ""]
+    if "<h2>今日速读</h2>" in html:
+        body = html.split("<h2>今日速读</h2>", 1)[1]
+        next_h2 = body.find("<h2>")
+        excerpt = body[:next_h2] if next_h2 != -1 else body
+        text = re.sub(r"<[^>]+>", " ", excerpt)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            lines.append(text[:1500])
     return "\n".join(lines)
 
 
@@ -107,7 +88,7 @@ def main() -> int:
     run, candidates = find_today_run()
     if run is None:
         tail = ""
-        logs = sorted((PROJECT_ROOT / "logs").glob("harness_scheduled*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        logs = sorted((PROJECT_ROOT / "logs").glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if logs:
             tail = "\n".join(logs[0].read_text(encoding="utf-8", errors="replace").splitlines()[-15:])
         body = f"今日日报生成失败或尚未完成（找到 {len(candidates)} 个运行目录，均无 daily_digest.html）。\n\n日志尾部：\n{tail}"
@@ -118,7 +99,6 @@ def main() -> int:
     summary = build_summary(run)
     attachments = [
         ("daily_digest.html", (run / "daily_digest.html").read_bytes()),
-        ("daily_digest.md", (run / "daily_digest.md").read_bytes()),
     ]
     send(env, f"科技产业情报日报 {date.today().isoformat()}", summary, attachments)
     print(f"已发送日报（运行 {run.name}）")

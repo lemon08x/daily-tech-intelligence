@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from daily_intel.core.models import (
-    AnalysisDraft, DigestBrief, Document, Event, GitBriefingBatch, ScoutBatch, VerificationResult,
+    AnalysisDraft, DigestBrief, Document, Event, ScoutBatch, VerificationResult,
 )
 
 
@@ -22,32 +22,21 @@ ANALYST_SYSTEM = """你是审慎的科技产业研究员。只可使用输入文
 - technical_mechanism、novelty、maturity、outlook_6_24m：给愿意展开的读者看，仍须在首次出现时解释术语。
 解释只能转述文档已给出的机制，不得借解释引入文档没有的数字、排名、国别、产品能力或因果判断。
 evidence.quote必须逐字复制输入文档中的连续文本，并填写对应document_id和URL。
-公司关联只是待核验假设，每个事件最多3个；不能确定公司代码和名称时不要输出。
+不要输出公司代码或个股映射。
 严格遵守requirements.quality_contract的数量和长度边界；不要为了填满字段重复事实或堆砌引用。
 输出严格JSON，不要Markdown。"""
 
 
 VERIFIER_SYSTEM = """你是独立证据审计员。检查草稿是否被给定文档支持。
 supported_evidence_indexes只能列出引用确实存在且能支持相关结论的零基索引。
-发现过度推断、营销表述当事实或公司映射缺乏依据时写入unsupported_claims。
+发现过度推断、营销表述当事实时写入unsupported_claims。
 术语解释和类比只要不引入新的数量、排名、国别、产品能力或因果判断，不算新事实；若解释把文档未写的效果说成已验证事实，必须写入unsupported_claims。
 只要存在实质性unsupported_claims，verdict就不得为pass；证据不足时必须downgrade或reject。
 不要因文字完整、引用数量多或模型自报置信度高而放宽标准。输出严格JSON。"""
 
 
-GIT_BRIEF_SYSTEM = """你是开源项目讲解员。只依据用户提供的项目信息写大白话，不使用未提供的事实。
-项目可能来自 GitHub、Hugging Face 或 GitLab。
-每个项目写：
-- plain：一句中文说清它是做什么的、怎么工作，或这次为什么上榜。
-- scenario_title：四个字到十个字的场景标题。
-- scenario：一段具体使用场景模拟。写清谁、在什么任务里、怎么用这个项目、期望看到什么结果。
-场景只能根据简介做合理推演，并写明这是模拟不是实测。不要编造星标数字、版本号、公司关系或文档里没有的能力。输出严格JSON。"""
-
-
-DIGEST_BRIEF_SYSTEM = """你是科技与市场日报编辑。只依据用户提供的科技条目、涨跌名单和市场新闻写稿，不使用未提供的事实。
-写两块内容：
-- scan_paragraph：一段连贯中文，讲述今天值得看的科技或市场新闻。不要列点，不要写成涨跌原因分析。没有科技就写市场，没有市场就写科技。
-- market_news：只分析用户提供的市场新闻。每条必须包含 impact（相关影响）、consequences（可能导致的后果）、reasoning（推理过程）、quotes（从该条 title 或 summary 逐字摘录的连续原文）。
+DIGEST_BRIEF_SYSTEM = """你是科技与市场日报编辑。只依据用户提供的市场新闻写稿，不使用未提供的事实。
+market_news：只分析用户提供的市场新闻。每条包含 impact（把相关影响和可能导致的后果写在同一段）、reasoning（把推理过程和原文依据写在同一段）、quotes（从该条 title 或 summary 逐字摘录的连续原文）。
 影响和后果必须能从给定标题/摘要推出来；做不到就明确写“来源没有给出”。不要预测个股涨跌，不要编造未出现的公司、数字或政策细节。输出严格JSON。"""
 
 
@@ -57,25 +46,8 @@ def digest_brief_user(payload: dict) -> str:
             "material": payload,
             "requirements": {
                 "language": "简体中文",
-                "scan_paragraph": "一段话，同时覆盖今天的科技或市场新闻，不要列表。",
                 "quotes": "必须是给定 title 或 summary 中的连续原文。",
                 "schema": DigestBrief.model_json_schema(),
-            },
-        },
-        ensure_ascii=False,
-    )
-
-
-def git_brief_user(projects: list[dict]) -> str:
-    return json.dumps(
-        {
-            "projects": projects,
-            "requirements": {
-                "language": "简体中文",
-                "plain": "一句完整的话，专业名词首次出现必须立刻用人话解释。",
-                "kicker": "2到4个汉字主题词，例如软件、模型、安全、机器人、工具。",
-                "scenario": "一段具体使用场景模拟，必须标明这是推演。",
-                "schema": GitBriefingBatch.model_json_schema(),
             },
         },
         ensure_ascii=False,
@@ -118,7 +90,7 @@ def analyst_user(
         ],
         "requirements": {
             "language": "简体中文", "evidence_minimum": 2,
-            "company_hypotheses_maximum": 3, "schema": AnalysisDraft.model_json_schema(),
+            "schema": AnalysisDraft.model_json_schema(),
             "quality_contract": quality_contract or {},
         },
     }

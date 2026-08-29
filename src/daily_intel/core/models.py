@@ -113,16 +113,6 @@ class Analysis(StrictModel):
     lane: Literal["general", "hardcore"] = "hardcore"
 
 
-class MarketSignal(StrictModel):
-    """Reserved contract for a future Qlib/RD-Agent adapter."""
-
-    event_id: str
-    signal_name: str
-    direction: Literal["positive", "negative", "neutral"]
-    confidence: float = Field(ge=0, le=1)
-    generated_at: datetime
-
-
 class Digest(StrictModel):
     generated_at: datetime
     market_date: str
@@ -145,37 +135,16 @@ class ScoutBatch(StrictModel):
     items: list[ScoutItem]
 
 
-class GitProjectBrief(StrictModel):
-    full_name: str
-    kicker: str = "开源"
-    plain: str = Field(min_length=8, max_length=280)
-    scenario_title: str = Field(default="使用场景模拟", max_length=40)
-    scenario: str = Field(default="", max_length=420)
-
-
-class GitBriefingBatch(StrictModel):
-    items: list[GitProjectBrief] = Field(default_factory=list, max_length=16)
-
-
 class MarketNewsAnalysis(StrictModel):
     title: str
-    impact: str = Field(min_length=8, max_length=400)
-    consequences: str = Field(min_length=8, max_length=400)
-    reasoning: str = Field(min_length=8, max_length=600)
+    impact: str = Field(min_length=8, max_length=700)
+    consequences: str = Field(default="", max_length=400)
+    reasoning: str = Field(min_length=8, max_length=800)
     quotes: list[str] = Field(default_factory=list, max_length=4)
 
 
 class DigestBrief(StrictModel):
-    scan_paragraph: str = Field(min_length=20, max_length=900)
     market_news: list[MarketNewsAnalysis] = Field(default_factory=list, max_length=12)
-
-
-class CompanyHypothesis(StrictModel):
-    code: str = Field(pattern=r"^\d{6}$")
-    name: str
-    rationale: str
-    keywords: list[str] = Field(default_factory=list, max_length=5)
-    confidence: float = Field(ge=0, le=1)
 
 
 class AnalysisDraft(StrictModel):
@@ -204,7 +173,6 @@ class AnalysisDraft(StrictModel):
     counterpoints: list[str] = Field(default_factory=list, max_length=16)
     confidence: float = Field(ge=0, le=1)
     evidence: list[Evidence] = Field(default_factory=list, max_length=24)
-    company_hypotheses: list[CompanyHypothesis] = Field(default_factory=list, max_length=3)
 
     @field_validator("evidence")
     @classmethod

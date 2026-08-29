@@ -29,7 +29,10 @@
     .report-tabs button { flex:1; min-height:44px; border:0; border-radius:10px; color:#596275; background:transparent; font:inherit; font-weight:750; cursor:pointer; }
     .report-tabs button[aria-selected="true"] { color:#fff; background:var(--brand); box-shadow:0 5px 14px #2446a42e; }
     .report-tabs button:focus-visible { outline:3px solid #91adf3; outline-offset:2px; }
+    .sub-tabs { margin:16px 0 0; }
+    .sub-tabs button { min-height:38px; font-size:14px; }
     .tab-panel { margin-top:16px; }
+    .lane-panel { margin-top:0; }
     .section,.story,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
     .section { padding:24px; margin-top:16px; overflow:hidden; }
     .section-intro { max-width:760px; margin-top:-10px; }
@@ -139,13 +142,30 @@
   <header>
     <h1>{{ title }}</h1>
     <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">先读今日速读，再按需打开科技、Git 和市场情报。科技页分泛读和硬核；市场指标只列涨跌前三后三。</p>
+    <p class="muted">先扫今日速读，再按需打开科技、Git 和市场情报。科技页可在泛读和硬核之间切换。</p>
   </header>
 
-  {% if plain_digest and plain_digest.scan_paragraph %}
+  {% if plain_digest and (plain_digest.general_items or plain_digest.hardcore_items or plain_digest.tech_items) %}
   <section class="section digest">
     <h2>今日速读</h2>
-    <p class="takeaway">{{ plain_digest.scan_paragraph }}</p>
+    {% if plain_digest.general_items %}
+    <div class="digest-block">
+      <h3>泛读</h3>
+      <div class="scan-list">{% for item in plain_digest.general_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
+    {% if plain_digest.hardcore_items %}
+    <div class="digest-block">
+      <h3>硬核</h3>
+      <div class="scan-list">{% for item in plain_digest.hardcore_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
+    {% if not plain_digest.general_items and not plain_digest.hardcore_items and plain_digest.tech_items %}
+    <div class="digest-block">
+      <h3>科技</h3>
+      <div class="scan-list">{% for item in plain_digest.tech_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
+    </div>
+    {% endif %}
   </section>
   {% endif %}
 
@@ -166,6 +186,13 @@
     {% if not analyses %}
     <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
     {% endif %}
+    {% if analyses %}
+    <nav class="report-tabs sub-tabs" role="tablist" aria-label="科技栏位" data-default="{{ 'general' if general_news else 'hardcore' }}">
+      <button id="general-lane-tab" type="button" role="tab" aria-selected="{{ 'true' if general_news else 'false' }}" aria-controls="general-lane" data-subtab="general" {% if not general_news %}tabindex="-1"{% endif %}>泛读 {{ general_news|length }}</button>
+      <button id="hardcore-lane-tab" type="button" role="tab" aria-selected="{{ 'false' if general_news else 'true' }}" aria-controls="hardcore-lane" data-subtab="hardcore" {% if general_news %}tabindex="-1"{% endif %}>硬核 {{ hardcore_news|length }}</button>
+    </nav>
+    {% endif %}
+    <div id="general-lane" class="lane-panel" role="tabpanel" aria-labelledby="general-lane-tab" {% if not general_news %}hidden{% endif %}>
     {% if general_news %}
     <section class="section">
       <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
@@ -197,14 +224,17 @@
             {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
           </div>{% endif %}
           {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.company_mappings %}<div class="subhead">公司关联假设</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
           {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
           {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
         </div>
       </details>
     </article>
     {% endfor %}
+    {% else %}
+    <section class="section"><p class="muted">今日没有泛读条目。</p></section>
     {% endif %}
+    </div>
+    <div id="hardcore-lane" class="lane-panel" role="tabpanel" aria-labelledby="hardcore-lane-tab" {% if general_news %}hidden{% endif %}>
     {% if hardcore_news %}
     <section class="section">
       <h2>硬核 <span class="muted" style="font-size:13px;font-weight:400">{{ hardcore_news|length }} 项</span></h2>
@@ -236,16 +266,16 @@
             {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
           </div>{% endif %}
           {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.company_mappings %}<div class="subhead">公司关联假设</div>{% for item in analysis.company_mappings %}<div class="mapping"><strong>{{ item.code }} {{ item.name }}{% if item.industry %}<small class="muted"><br>{{ item.industry }}</small>{% endif %}</strong><span class="{{ 'verified' if item.status.value == 'verified' else 'unverified' }}">{{ '已核验关联' if item.status.value == 'verified' else '待核验假设' }}</span><span>{{ item.rationale }}{% for evidence in item.evidence %}<small class="muted"><br><a href="{{ evidence.url }}" target="_blank" rel="noopener noreferrer">{{ evidence.locator }}</a>：{{ evidence.quote }}</small>{% endfor %}</span></div>{% endfor %}{% endif %}
           {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
           {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
         </div>
       </details>
     </article>
     {% endfor %}
+    {% else %}
+    <section class="section"><p class="muted">今日没有硬核条目。</p></section>
     {% endif %}
-
-
+    </div>
 
     <details class="section runtime">
       <summary>运行、模型与来源状态</summary>
@@ -260,7 +290,7 @@
   <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
     <section class="section">
       <h2>Git 热门项目 <span class="muted" style="font-size:13px;font-weight:400">{{ github_projects|default([])|length }} 项</span></h2>
-      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库，并补充 Hugging Face 热门模型和 GitLab 高星项目。每条给出大白话简介，并用主题分析模拟一个具体使用场景。</p>
+      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库，标明当前总星标。</p>
     </section>
     {% if github_projects|default([]) %}
       {% for item in github_projects %}
@@ -270,17 +300,14 @@
           <span class="badge">{{ item.reason or '热门' }}</span>
         </div>
         <h3 class="story-title">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.full_name }}</a>{% else %}{{ item.full_name }}{% endif %}</h3>
-        <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.language %}{{ item.language }} · {% endif %}{% if item.stars_today %}今日 +{{ item.stars_today }}{% endif %}{% if item.stars_today and item.stars_week %} · {% endif %}{% if item.origin == 'huggingface' and item.stars_week %}likes {{ item.stars_week }}{% elif item.origin == 'gitlab' and item.stars_week %}星标 {{ item.stars_week }}{% elif item.stars_week %}本周 +{{ item.stars_week }}{% endif %}</p>
+        <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.stars_total_label %}<strong>共 {{ item.stars_total_label }} 星</strong>{% endif %}{% if item.language %} · {{ item.language }}{% endif %}{% if item.stars_today %} · 今日 +{{ item.stars_today }}{% endif %}{% if item.stars_week %} · 本周 +{{ item.stars_week }}{% endif %}</p>
         {% if item.plain %}<p class="takeaway">{{ item.plain }}</p>{% endif %}
-        {% if (item.origin or 'github') == 'github' %}
         <div class="git-bars">
           {% if item.stars_today %}<div class="trend"><strong>今日星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.today_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_today }}</span></div>{% endif %}
           {% if item.stars_week %}<div class="trend"><strong>本周星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.week_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_week }}</span></div>{% endif %}
         </div>
-        {% endif %}
-        {% if item.scenario %}<div class="scenario"><strong>{{ item.scenario_title or '使用场景模拟' }}</strong>{{ item.scenario }}</div>{% endif %}
         <div class="story-actions">
-          {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开{{ item.origin_label or '项目' }} ↗</a><span class="muted">{{ item.origin_label or 'GitHub' }} · 场景为推演</span>{% else %}<span class="muted">本条暂无链接</span>{% endif %}
+          {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开仓库 ↗</a><span class="muted">GitHub</span>{% else %}<span class="muted">本条暂无链接</span>{% endif %}
         </div>
       </article>
       {% endfor %}
@@ -292,7 +319,7 @@
   <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
     <section class="section">
       <h2>市场情报</h2>
-      <p class="muted section-intro">指标只保留当日涨幅前三和跌幅后三。市场新闻给出相关影响、可能后果，以及证据和推理过程。</p>
+      <p class="muted section-intro">指标只保留当日涨幅前三和跌幅后三。热点给出影响与后果，以及推理依据。</p>
     </section>
     {% if plain_digest and plain_digest.industry_bars %}
     <section class="section">
@@ -310,19 +337,31 @@
     {% endif %}
     {% if news_records %}
     <section class="section">
-      <h2>可归因事件</h2>
-      <p class="muted">下面是可能导致交易的事件。影响和后果只根据这条新闻能核对的内容推理，不是价格预测。</p>
-      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p>{% if item.impact %}<p><strong>可能影响：</strong>{{ item.impact }}</p>{% endif %}{% if item.consequences %}<p><strong>可能后果：</strong>{{ item.consequences }}</p>{% endif %}{% if item.reasoning %}<div class="scenario"><strong>推理过程</strong>{{ item.reasoning }}</div>{% endif %}{% if item.quotes %}<div class="subhead">分析证据</div>{% for quote in item.quotes %}<div class="evidence">{{ quote }}</div>{% endfor %}{% endif %}<p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
+      <h2>热点</h2>
+      <p class="muted">下面是当天值得看的市场新闻。影响与后果、依据只根据这条新闻能核对的内容来写，不是价格预测。</p>
+      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p>{% if item.impact_text or item.impact %}<p><strong>影响与后果：</strong>{{ item.impact_text or item.impact }}</p>{% endif %}{% if item.basis_text or item.reasoning %}<div class="scenario"><strong>依据</strong>{{ item.basis_text or item.reasoning }}</div>{% endif %}<p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
     </section>
     {% endif %}
   </section>
 
-  <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。<br><a href="process.html">查看本次从信源到成稿的处理过程</a></footer>
+  <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
 </main>
 <script>
   (() => {
-    const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+    const tabs = Array.from(document.querySelectorAll('.report-tabs:not(.sub-tabs) [role="tab"]'));
     const panels = {news: document.getElementById('news-panel'), git: document.getElementById('git-panel'), market: document.getElementById('market-panel')};
+    const subNav = document.querySelector('.sub-tabs');
+    const subTabs = subNav ? Array.from(subNav.querySelectorAll('[role="tab"]')) : [];
+    const lanes = {general: document.getElementById('general-lane'), hardcore: document.getElementById('hardcore-lane')};
+    const activateLane = (name) => {
+      if (!lanes[name]) name = (subNav && subNav.dataset.default) || 'general';
+      subTabs.forEach((tab) => {
+        const selected = tab.dataset.subtab === name;
+        tab.setAttribute('aria-selected', String(selected));
+        tab.tabIndex = selected ? 0 : -1;
+      });
+      Object.entries(lanes).forEach(([key, panel]) => { if (panel) panel.hidden = key !== name; });
+    };
     const activate = (name, updateHistory = false) => {
       if (!panels[name]) name = 'news';
       tabs.forEach((tab) => {
@@ -344,8 +383,20 @@
         next.focus();
       });
     });
+    subTabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => activateLane(tab.dataset.subtab));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        const delta = event.key === 'ArrowRight' ? 1 : -1;
+        const next = subTabs[(index + delta + subTabs.length) % subTabs.length];
+        activateLane(next.dataset.subtab);
+        next.focus();
+      });
+    });
     window.addEventListener('popstate', () => activate(location.hash.slice(1), false));
     activate(location.hash.slice(1) || 'news', false);
+    if (subNav) activateLane(subNav.dataset.default || 'general');
   })();
 </script>
 </body>

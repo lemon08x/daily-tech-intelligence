@@ -1,6 +1,6 @@
 # 科技产业情报日报
 
-这是一个可每日运行的模块化单体：从权威白名单采集科技前沿信息，以可替换的模型完成受限筛选、深研和独立证据校验，并附带产业/全球市场作为信息源。最后合并成一份 HTML/Markdown 日报。
+这是一个可每日运行的模块化单体：从权威白名单采集科技前沿信息，以可替换的模型完成受限筛选、深研和独立证据校验，并附带产业/全球市场作为信息源。最后写成一份 HTML 日报。
 
 本报告只做公开信息整理与研究观察，不构成投资建议。
 
@@ -10,7 +10,7 @@
 
 本地想用更快的局域网 Qwen 3.8-27B 验证改动时，双击 `启动日报-qwen.cmd`。它走 `config/settings.qwen.yaml` 和独立库 `data/intelligence_qwen.db`，不会覆盖 DeepSeek 的分析缓存。密钥变量是 `QWEN_LAN_API_KEY`。
 
-两个启动窗口都会先打印后端、配置和实验 id，再输出 `[1/6]` 到 `[6/6]` 阶段，以及 `当前：…` 明细（采集、选题、深研、Git 解说等）。
+两个启动窗口都会先打印后端、配置和实验 id，再输出 `[1/6]` 到 `[6/6]` 阶段，以及 `当前：…` 明细。
 
 PowerShell 方式：
 
@@ -49,20 +49,7 @@ $env:OMLX_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 .\.venv\Scripts\python.exe -m daily_intel doctor --config .\config\settings.yaml
 ```
 
-使用 Qwen Code、DeepSeek Harness 或 Codex 等 Harness 模型作为分析后端：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\harness\run.py `
-  --harness-name "qwen-code" `
-  --model-name "qwen3.8-27b" `
-  --experiment-id "qwen3.8-27b"
-```
-
-相同模型需要强制重新分析时追加 `--force-analysis`。项目级 Harness
-行为约束见 [`AGENTS.md`](AGENTS.md)，这里不使用 Skill。
-
-当前版本只保留 `daily_intel` 应用、`daily-intel` 命令和
-`config/settings.yaml` 配置入口，不再维护旧包名、旧命令或旧根配置。
+当前版本只保留 `daily_intel` 应用、`daily-intel` 命令和 YAML 配置入口。没有 Harness 文件桥，也不再维护旧包名。
 
 ## 每日输出
 
@@ -71,41 +58,27 @@ $env:OMLX_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 ```text
 output/YYYY-MM-DD/
 └── runs/
-    ├── HHMMSS-run-id-qwen3.8-27b/
-    └── HHMMSS-run-id-deepseek-v4-flash/
+    ├── HHMMSS-run-id-deepseek-v4-flash/
+    └── HHMMSS-run-id-qwen3.8-27b/
 ```
 
-每个 `runs/<run-name>` 都包含完整 HTML、Markdown、JSON、CSV 和运行元数据；
-Harness 运行还包含 `harness_io` 请求/响应审计。同一天重复运行不会覆盖此前
-运行目录，也不会在日期根目录生成重复副本。
+每个 `runs/<run-name>` 只写 `daily_digest.html`。同一天重复运行不会覆盖此前运行目录，也不会在日期根目录生成副本。
 
-- `daily_digest.html`：默认显示科技页，并可切换到 Git、市场情报；
-- `daily_digest.md`：适合推送和二次编辑；
-- `intelligence.json`：稳定的科技分析数据契约；
-- `candidates.csv`：规则过滤后的市场候选备查表；
-- `market_snapshot.csv`：标准化市场快照；
-- `run_meta.json`：模型、提示词版本、token、失败源、缓存和新鲜度状态；
-- `process.html`：本次从信源采集、聚类、选题、深研、质量门到成稿的处理过程，便于对照改进；同目录 `process.json` 是同一份结构化记录。
+HTML 先给出分段“今日速读”（泛读/硬核短句，条目前有主题词）。科技页可在泛读和硬核之间切换：泛读来自周刊、IT 热点和社区精选，硬核来自论文与官方发布。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度分析按需展开。“Git”页列出 GitHub 今日最热和本周增长最快的仓库，并标明当前总星标。“市场情报”页只列产业/全球涨幅前三和跌幅后三；热点给出影响与后果，以及推理依据。日报不再列出个股扫描或公司映射。前一天已经出现过的科技事件，第二天会降低入选权重。
 
-HTML 先给出一段“今日速读”，把当天科技或市场新闻写成连贯短文。科技页分泛读和硬核：泛读来自周刊、IT 热点和社区精选，硬核来自论文与官方发布。每条常显大白话要点，标题和“阅读原文”链接到可定位来源，深度分析按需展开。“Git”页用卡片列出 GitHub 今日最热和本周增长最快的仓库，并补充 Hugging Face 热门模型和 GitLab 高星项目；每条用一句话说清项目在做什么，再给一段具体使用场景模拟。“市场情报”页只列产业/全球涨幅前三和跌幅后三，不分析涨跌原因；市场新闻则给出影响、可能后果、推理过程和原文证据。日报不再列出个股扫描。前一天已经出现过的科技事件，第二天会降低入选权重。
-
-持久化情报位于 `data\intelligence.db`，包括文档、事件、证据、按实验及
-模型指纹隔离的分析版本、产业/公司映射、LLM调用和流水线游标。市场CSV缓存
-仍位于 `data\cache\`。
+持久化情报位于 `data\intelligence_deepseek.db`（Qwen 为 `intelligence_qwen.db`），包括文档、事件、证据、按实验及模型指纹隔离的分析版本、LLM 调用和流水线游标。市场 CSV 缓存仍位于 `data\cache\`。
 
 ## 架构
 
 ```text
 daily/
-├── AGENTS.md         Harness薄操作契约
+├── AGENTS.md         应用操作契约
 ├── config/           运行、主题、来源配置
 ├── docs/             架构、来源与测试说明
-├── scripts/
-│   ├── harness/      Harness文件桥接与请求核验
-│   └── diagnostics/  只读诊断工具
-├── src/              可安装Python包
-├── tests/            固定Fixture与回归测试
-└── output/           按日期、运行名归档的可追溯产物
+├── scripts/          启动、定时任务、发信与只读诊断
+├── src/              可安装 Python 包
+├── tests/            固定 Fixture 与回归测试
+└── output/           按日期、运行名归档的 HTML
 ```
 
 ```text
@@ -113,9 +86,10 @@ src/daily_intel/
 ├── app/             CLI 与统一编排器
 ├── core/            Document/Event/Analysis/Digest 等契约及可替换端口
 ├── intelligence/    分阶段的采集、事件目录、筛选、模型调用、深研与质量门
-├── market/          AkShare 适配、CSV缓存、标准化、规则筛选与评分
+├── github/          GitHub Trending 解析与总星标
+├── market/          AkShare 适配、CSV 缓存、标准化与热点排序
 ├── infrastructure/  SQLite 仓库和 OpenAI 兼容模型客户端
-└── publication/     可替换发布器及 HTML/Markdown/JSON/CSV 默认实现
+└── publication/     可替换发布器及 HTML 默认实现
 ```
 
 关键边界：
@@ -125,15 +99,9 @@ src/daily_intel/
 - `IntelligenceRepository`：情报持久化契约；
 - `MarketProvider`：市场数据适配契约；
 - `MarketWorkflow` / `IntelligenceWorkflow`：两条流水线可独立替换；
-- `DigestPublisher`：报告渲染、文件输出或后续消息推送的替换边界；
-- `MarketSignal`：为下一轮 Qlib/RD-Agent 预留，但本轮没有安装或调用这些项目。
+- `DigestPublisher`：报告渲染或后续消息推送的替换边界。
 
-应用实现只位于 `src/daily_intel`，不存在第二套兼容包或重复实现。
-
-情报流水线内部继续拆为 `collection.py`、`discovery.py`、`selection.py`、
-`modeling.py`、`research.py` 和 `quality.py`。主 `pipeline.py` 只编排阶段，
-不再实现抓取、提示词重试、证据判断或公司映射。完整依赖规则与扩展方式见
-[`docs/architecture.md`](docs/architecture.md)。
+应用实现只位于 `src/daily_intel`。情报流水线内部继续拆为 `collection.py`、`discovery.py`、`selection.py`、`modeling.py`、`research.py` 和 `quality.py`。主 `pipeline.py` 只编排阶段。完整依赖规则见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 科技情报流程
 
@@ -141,23 +109,22 @@ src/daily_intel/
 2. 分组 arXiv、RSS/Atom、官方 sitemap、结构化论文 API 和 GitHub Release 先做来源级去重、主题过滤和 72 小时事件聚类；明显的 nightly/build 自动记录在进入 AI 前丢弃。
 3. 初筛模型最多处理 40 个候选事件；最终排序由确定性分数 65% 与模型分数 35% 融合，模型漏项时回退到确定性排序，避免模型完全控制选题。
 4. 深研最多各 5 条泛读/硬核事件，再由独立校验阶段审计；只有至少两条原文逐字证据且包含权威一手来源时才标为“深度结论”，否则确定性降级成“线索”。无效 JSON 或单事件模型失败会重试一次，仍失败则跳过，不合成伪分析。
-5. 公司关联只是待核验假设；必须有近 365 天官方公告证据才能标为“已核验关联”。
 
-模型输出还会经过统一质量契约：事实、证据、产业影响、风险与反面观点都有固定上下限；重复项和伪造引用会被程序剔除；存在 `unsupported_claims` 时，即使校验模型返回 `pass` 也强制降级；单一来源和线索状态都有置信度上限。质量分、证据数、来源数与降级原因会写入 HTML、Markdown、`intelligence.json` 和 `run_meta.json`。
+模型输出还会经过统一质量契约：事实、证据、产业影响、风险与反面观点都有固定上下限；重复项和伪造引用会被程序剔除；存在 `unsupported_claims` 时，即使校验模型返回 `pass` 也强制降级；单一来源和线索状态都有置信度上限。质量分、证据数、来源数与降级原因会写入 HTML。
 
-首批主题为大模型与 Agent、芯片算力、机器人、云与开发工具、网络安全、智能汽车、能源科技、生物技术。来源白名单见 `config\sources.yaml`，覆盖分组 arXiv、OpenAI、Anthropic、DeepMind、Microsoft Research、NVIDIA、Mistral、Meta、Hugging Face Daily Papers、bioRxiv、Isomorphic Labs、Nature、能源与硬件行业源，以及国内外官方 GitHub Release。市场快讯仅是低权重雷达，不能单独支撑深度结论。分层依据、已验证端点和暂缓来源见 [`docs/sources.md`](docs/sources.md)。
+首批主题为大模型与 Agent、芯片算力、机器人、云与开发工具、网络安全、智能汽车、能源科技、生物技术。来源白名单见 `config\sources.yaml`。分层依据见 [`docs/sources.md`](docs/sources.md)。
 
 ## 配置
 
-- `config\settings.yaml`：路径、市场规则、情报窗口、模型和参数；
+- `config\settings.deepseek.yaml`：早间任务实际配置；
+- `config\settings.qwen.yaml`：本地 Qwen 验证配置；
+- `config\settings.yaml`：云端 DeepSeek 示例，不是早间任务路径；
 - `config\topics.yaml`：主题及中英文关键词；
 - `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库。
 
-程序仍按三个阶段分别读模型配置：`scout`（初筛）、`analyst`（深研）、`verifier`（校验），外加 `git_brief`（Git 页解说）。每个阶段都可以在 YAML 里写成不同模型。
+程序按四个阶段读模型配置：`scout`（初筛）、`analyst`（深研）、`verifier`（校验）、`digest_brief`（市场热点文案）。每个阶段都可以在 YAML 里写成不同模型。
 
-日常定时任务用的是 `config/settings.deepseek.yaml`：局域网 `http://192.168.31.236:8000/v1`，密钥变量 `OMLX_API_KEY`，**三个阶段目前都指向同一个** `deepseek-v4-flash-0731`。所以最近几次日报是单模型跑完的，不是 flash 初筛 + pro 深研。本地 Qwen / DeepSeek 各阶段都开思考，并使用端点支持的最高 reasoning（Qwen 默认 `xhigh`，DeepSeek 显式 `xhigh`），输出上限放到 32000，质量优先、不省 token。
-
-`config/settings.yaml` 里仍保留云端 DeepSeek 示例（`https://api.deepseek.com` / `DEEPSEEK_API_KEY`，scout=`deepseek-v4-flash`，analyst/verifier=`deepseek-v4-pro`），那不是早间任务实际走的配置。要恢复双模型，只要在对应 YAML 里把三个阶段写成不同 `model` 即可。运行元数据记录客户端报告的实际提供方和模型，不再把静态 YAML 直接当成运行结果。
+日常定时任务用的是 `config/settings.deepseek.yaml`：局域网 `http://192.168.31.236:8000/v1`，密钥变量 `OMLX_API_KEY`，四个阶段目前都指向同一个 `deepseek-v4-flash-0731`。本地 Qwen / DeepSeek 各阶段都开思考，并使用端点支持的最高 reasoning（Qwen 默认 `xhigh`，DeepSeek 显式 `xhigh`），输出上限放到 32000，质量优先、不省 token。
 
 ## 自动运行与测试
 
@@ -168,12 +135,6 @@ src/daily_intel/
 ```
 
 该任务读取 `config/settings.deepseek.yaml`，密钥变量为 `OMLX_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报。
-
-如需另建工作日 18:10 的默认配置任务：
-
-```powershell
-.\scripts\install_scheduled_task.ps1 -At "18:10"
-```
 
 运行日志保存在 `logs\`。
 

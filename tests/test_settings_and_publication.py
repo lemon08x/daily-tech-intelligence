@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -78,10 +77,6 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "analyses": [analysis], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
         "prompt_version": "test-v1", "pipeline_errors": [], "breadth": breadth,
-        "eligible_count": 0, "candidate_records": [{
-            "code": "000783", "name": "长江证券", "score": 86.3,
-            "pct_change": 2.64, "momentum_60d": 23.12, "reasons": "动量",
-        }],
         "hot_industry_records": [{"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"}],
         "weak_industry_records": [],
         "index_records": [
@@ -100,7 +95,6 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
             "tags": "制裁",
         }],
         "market_source_status": [], "intelligence_source_status": [],
-        "weights": {"momentum": .3, "value": .2, "liquidity": .15, "activity": .15, "daily_strength": .1, "size": .1},
         "github_projects": [{
             "full_name": "huggingface/transformers",
             "url": "https://github.com/huggingface/transformers",
@@ -112,18 +106,14 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
             "reason": "今日最热",
             "stars_today": 1200,
             "stars_week": 5000,
+            "stars_total": 150000,
+            "stars_total_label": "15万",
             "rank": 1,
             "today_width": 100,
             "week_width": 100,
-            "today_spark": "████████",
-            "week_spark": "████████",
-            "scenario_title": "使用场景模拟",
-            "scenario": "假设一名工程师要加载开源大模型，打开 transformers 文档跑通最小示例。这是场景推演，不是实测记录。",
         }],
         "github_chart": {
-            "count": 1, "language_count": 1, "max_stars_today": 1200, "max_stars_week": 5000,
-            "hottest_name": "huggingface/transformers", "fastest_name": "huggingface/transformers",
-            "language_bars": [{"name": "Python", "count": 1, "width": 100, "label": "1 个", "spark": "████████"}],
+            "count": 1, "max_stars_today": 1200, "max_stars_week": 5000,
         },
     }
     metadata = {
@@ -135,69 +125,55 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         context, [analysis], pd.DataFrame(), pd.DataFrame(), metadata,
         tmp_path, now,
     )
-    assert set(outputs) == {
-        "html", "markdown", "csv", "snapshot", "intelligence", "metadata",
-        "process", "process_json",
-    }
+    assert set(outputs) == {"html"}
     html = outputs["html"].read_text(encoding="utf-8")
-    markdown = outputs["markdown"].read_text(encoding="utf-8")
     assert 'role="tab"' in html
     assert 'id="news-panel"' in html
     assert 'id="market-panel"' in html and 'aria-labelledby="market-tab" hidden' in html
     assert '<details class="deep-dive">' in html
     assert 'href="https://example.com/source"' in html
     assert "阅读原文" in html and "出口管制" in html
-    assert "今日速读" in html and "今日速读" in markdown
-    assert "硬核" in html and "硬核" in markdown
+    assert "今日速读" in html
+    assert "硬核" in html
     assert "市场情报" in html and "产业风向" in html
     assert 'data-tab="news">科技</button>' in html
+    assert 'data-subtab="general"' in html and 'data-subtab="hardcore"' in html
     assert "新闻精选" not in html
     digest_html = html.split('id="news-panel"', 1)[0]
-    digest_md = markdown.split("## 科技", 1)[0]
     assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in digest_html
     digest_body = digest_html.split("<h2>今日速读</h2>", 1)[1]
-    assert "泛读" not in digest_body
-    assert "scan-kicker" not in digest_body
-    assert "<p class=\"takeaway\">" in digest_body
+    assert "硬核" in digest_body
+    assert "scan-kicker" in digest_body
     assert "技术深研" in html
     assert "纳斯达克" in html and "黄金" in html
     assert "赚钱效应" not in html
     market_html = html.split('id="market-panel"', 1)[1]
     assert "产业风向" not in digest_html and "全球市场" not in digest_html
-    assert "**产业风向**" not in digest_md and "**全球市场**" not in digest_md
     assert "产业风向" in market_html and "金融行业" in market_html
-    assert "可能影响" in market_html and "推理过程" in market_html
+    assert "热点" in market_html
+    assert "影响与后果" in market_html and "依据" in market_html
+    assert "可归因事件" not in html
+    assert "可能影响" not in market_html and "推理过程" not in market_html
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" in html
-    assert "金融行业" in markdown and "可归因事件" in markdown
-    assert "可能影响" in markdown and "商务部宣布对半导体设备实施出口管制" in markdown
-    assert "个股扫描" not in html and "个股扫描" not in markdown
-    assert "长江证券" not in html and "长江证券" not in markdown
-    assert 'id="git-panel"' in html and 'data-tab="git"' in html
-    assert "huggingface/transformers" in html and "Git 热门项目" in markdown
+    assert "个股扫描" not in html
+    assert "长江证券" not in html
+    assert 'id="git-panel"' in html
+    assert "huggingface/transformers" in html
     git_html = html.split('id="git-panel"', 1)[1].split('id="market-panel"', 1)[0]
     assert 'class="story"' in git_html
     assert "语言与热度" not in git_html
-    assert "使用场景模拟" in git_html
-    assert "打开GitHub" in git_html and "trend-fill" in git_html
-    assert "Hugging Face" in markdown.split("Git 热门项目", 1)[1]
-    assert "使用场景模拟" in markdown and "Python" in markdown.split("Git 热门项目", 1)[1]
+    assert "使用场景模拟" not in git_html
+    assert "打开仓库" in git_html and "trend-fill" in git_html
+    assert "共 15万 星" in git_html
+    assert "推演" not in git_html
     collapsed, expanded = html.split('<details class="deep-dive">', 1)
     assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
     assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
-    assert "一句话" in markdown
-    assert "[技术深研](https://example.com/source)" in markdown
-    payload = json.loads(outputs["intelligence"].read_text(encoding="utf-8"))
-    assert payload["analyses"][0]["status"] == "deep"
     assert outputs["html"].parent == tmp_path / "2026-08-24" / "runs" / "100000-test"
     assert not (tmp_path / "2026-08-24" / "daily_digest.html").exists()
     assert not (tmp_path / "2026-08-24" / "latest_run.json").exists()
-    process_html = outputs["process"].read_text(encoding="utf-8")
-    process_json = json.loads(outputs["process_json"].read_text(encoding="utf-8"))
-    assert "处理过程" in process_html
-    assert "商务部宣布对半导体设备实施出口管制" in process_html
-    assert process_json["published"][0]["headline"] == "技术深研"
-    assert "process.html" in html
+    assert list(outputs["html"].parent.glob("*")) == [outputs["html"]]
 
 
 def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
@@ -213,10 +189,9 @@ def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
         "analyses": [], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
         "prompt_version": "test", "pipeline_errors": [], "breadth": breadth,
-        "eligible_count": 0, "candidate_records": [], "hot_industry_records": [],
+        "hot_industry_records": [],
         "weak_industry_records": [], "index_records": [], "news_records": [],
         "market_source_status": [], "intelligence_source_status": [],
-        "weights": {},
     }
     first = publish(
         {**context, "run_name": "run-a", "experiment_id": "model-a"},
@@ -247,14 +222,11 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
             "market_date": "2026-08-25",
             "is_trading_day": True,
             "breadth": {},
-            "eligible_count": 0,
-            "candidate_records": [],
             "hot_industry_records": [],
             "weak_industry_records": [],
             "index_records": [],
             "news_records": [],
             "market_source_status": [],
-            "weights": settings["market"]["factor_weights"],
         },
         metadata={"market_date": "2026-08-25"},
     )
@@ -385,14 +357,11 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
     assert "原油" in labels
     assert "上证" not in labels and "铜" not in labels
     from daily_intel.publication.briefing import apply_digest_brief
-    paragraph, news = apply_digest_brief(
-        None, [analysis],
+    news = apply_digest_brief(
+        None,
         {"news_records": [{"title": "商务部宣布对半导体设备实施出口管制", "summary": "政策落地。"}]},
-        digest["industry_bars"], digest["board"],
     )
-    assert "实验室公布了一项可核对的工程改进" in paragraph
-    assert "半导体" in paragraph or "商务部" in paragraph
-    assert news[0]["impact"] and news[0]["reasoning"]
+    assert news[0]["impact_text"] and news[0]["basis_text"]
     assert "商务部宣布对半导体设备实施出口管制" in news[0]["quotes"]
 
     robot = analysis.model_copy(update={

@@ -213,13 +213,11 @@ def build_plain_digest(
         )
     industry_bars = _industry_bars(industries)
     board = build_market_board(context)
-    scan_paragraph = clean_text(str(context.get("scan_paragraph") or ""), 900)
     return {
         "tech_items": tech_items,
         "general_items": general_items,
         "hardcore_items": hardcore_items,
         "industry_bars": industry_bars,
         "board": board,
-        "scan_paragraph": scan_paragraph,
-        "has_content": bool(scan_paragraph or tech_items or industry_bars or board),
+        "has_content": bool(tech_items or industry_bars or board),
     }

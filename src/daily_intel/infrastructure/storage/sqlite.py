@@ -255,7 +255,7 @@ class SQLiteIntelligenceRepository:
             )
             db.executemany(
                 "INSERT INTO company_mappings VALUES(?,?,?)",
-                [(analysis.event_id, i, item.model_dump_json()) for i, item in enumerate(analysis.company_mappings)],
+                [(analysis.event_id, i, item.model_dump_json()) for i, item in enumerate(analysis.company_mappings or [])],
             )
 
     def get_latest_analyses(

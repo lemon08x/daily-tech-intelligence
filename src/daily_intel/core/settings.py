@@ -6,7 +6,6 @@ from typing import Any
 import yaml
 
 
-WEIGHT_KEYS = {"momentum", "value", "liquidity", "activity", "daily_strength", "size"}
 QUALITY_DEFAULTS = {
     "policy_version": "evidence-gate-v2",
     "min_key_facts": 3,
@@ -41,8 +40,6 @@ GITHUB_DEFAULTS = {
     "daily_limit": 8,
     "weekly_limit": 8,
     "publish_limit": 10,
-    "huggingface_limit": 4,
-    "gitlab_limit": 3,
 }
 
 
@@ -86,9 +83,8 @@ def _validate(settings: dict[str, Any]) -> None:
     ):
         if section not in settings:
             raise ValueError(f"配置缺少 {section} 段")
-    weights = settings["market"]["factor_weights"]
-    if set(weights) != WEIGHT_KEYS or abs(sum(float(v) for v in weights.values()) - 1.0) > 1e-9:
-        raise ValueError("market.factor_weights 必须包含六个标准因子且权重之和为 1")
+    if not settings["market"].get("snapshot_providers"):
+        raise ValueError("market.snapshot_providers 不能为空")
     topic_ids = [item["id"] for item in settings["topics"]]
     if len(topic_ids) != len(set(topic_ids)):
         raise ValueError("topics.yaml 中存在重复主题 id")

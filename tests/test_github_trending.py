@@ -6,13 +6,7 @@ from daily_intel.core.models import (
     Analysis, AnalysisQuality, AnalysisStatus, Document, Event, Evidence,
 )
 from daily_intel.github.pipeline import annotate_github_visuals
-from daily_intel.github.trending import (
-    append_catalog,
-    merge_trending,
-    parse_gitlab_projects,
-    parse_huggingface_models,
-    parse_trending_html,
-)
+from daily_intel.github.trending import merge_trending, parse_trending_html
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.selection import EventSelector
 
@@ -54,6 +48,7 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
         "huggingface/transformers", "vercel/next.js",
     ]
     assert daily[0]["stars_today"] == 1234
+    assert daily[0]["stars_total"] == 150000
     assert daily[0]["language"] == "Python"
     merged = merge_trending(daily, weekly, daily_limit=8, weekly_limit=8, publish_limit=10)
     names = [item["full_name"] for item in merged]
@@ -65,26 +60,7 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
     assert chart["count"] == 3
     assert annotated[0]["today_width"] == 100
     assert annotated[0]["week_width"] == 100
-    assert "█" in annotated[0]["today_spark"]
-    hf = parse_huggingface_models([
-        {"modelId": "meta-llama/Llama-3.1-8B", "likes": 9000, "pipeline_tag": "text-generation"},
-        {"id": "broken", "likes": 1},
-    ], limit=4)
-    gitlab = parse_gitlab_projects([
-        {
-            "path_with_namespace": "gitlab-org/gitlab",
-            "web_url": "https://gitlab.com/gitlab-org/gitlab",
-            "description": "GitLab CE",
-            "star_count": 5000,
-        }
-    ], limit=3)
-    catalog = append_catalog(merged, hf + gitlab)
-    catalog_names = [item["full_name"] for item in catalog]
-    assert "meta-llama/Llama-3.1-8B" in catalog_names
-    assert "gitlab-org/gitlab" in catalog_names
-    by_name = {item["full_name"]: item for item in catalog}
-    assert by_name["meta-llama/Llama-3.1-8B"]["origin"] == "huggingface"
-    assert by_name["gitlab-org/gitlab"]["origin"] == "gitlab"
+    assert annotated[0]["stars_total_label"] == "15万"
 
 
 def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:

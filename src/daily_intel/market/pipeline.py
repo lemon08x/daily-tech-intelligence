@@ -18,7 +18,7 @@ from daily_intel.market.normalize import (
     normalize_snapshot,
 )
 from daily_intel.market.providers import AkShareProvider
-from daily_intel.market.scoring import market_breadth, screen_and_score
+from daily_intel.market.scoring import market_breadth
 
 
 @dataclass(slots=True)
@@ -173,7 +173,7 @@ def _status(dataset: Dataset) -> dict[str, Any]:
 
 
 class MarketPipeline:
-    """Deterministic market pipeline; intelligence output never enters this score path."""
+    """Deterministic market snapshot and news ranking; intelligence never enters this path."""
 
     def __init__(
         self,
@@ -201,14 +201,6 @@ class MarketPipeline:
         global_futures_data = self.provider.global_futures()
 
         snapshot = normalize_snapshot(snapshot_data.frame)
-        screening = {
-            key: value for key, value in market_config.items()
-            if key not in {"factor_weights", "snapshot_providers"}
-        }
-        candidates, universe = screen_and_score(
-            snapshot, screening, market_config["factor_weights"]
-        )
-        top_candidates = candidates.head(int(config["app"]["top_stocks"])).copy()
         industries = normalize_industries(industry_data.frame)
         indices = normalize_indices(index_data.frame)
         news = normalize_news(news_data.frame)
@@ -222,18 +214,6 @@ class MarketPipeline:
             *hot["name"].astype(str).tolist(),
         ]
         selected_news = rank_market_news(news, extra_keywords, int(config["app"]["top_news"]))
-        selected_titles = set(selected_news["title"].astype(str)) if not selected_news.empty else set()
-        dropped_news: list[dict[str, Any]] = []
-        if not news.empty:
-            for _, row in news.iterrows():
-                title = str(row.get("title") or "")
-                if not title or title in selected_titles:
-                    continue
-                blob = f"{title} {row.get('summary') or ''}".lower()
-                dropped_news.append({
-                    "title": title,
-                    "reason": "噪音过滤" if is_noise_news(blob) else "未进入前排",
-                })
         breadth = market_breadth(snapshot)
         market_date, is_trading_day = _market_date(calendar_data.frame, self.now)
         source_status = [
@@ -248,8 +228,6 @@ class MarketPipeline:
             "market_date": market_date,
             "is_trading_day": is_trading_day,
             "breadth": breadth,
-            "eligible_count": int(universe["eligible"].sum()),
-            "candidate_records": _records(top_candidates),
             "industry_records": _records(industries),
             "hot_industry_records": _records(hot),
             "weak_industry_records": _records(weak),
@@ -258,23 +236,11 @@ class MarketPipeline:
             "commodity_records": _records(commodities),
             "news_records": _records(selected_news),
             "market_source_status": source_status,
-            "weights": market_config["factor_weights"],
         }
         metadata = {
             "market_date": market_date,
             "is_trading_day": is_trading_day,
             "snapshot_rows": int(len(snapshot)),
-            "eligible_rows": int(len(candidates)),
-            "screening": screening,
-            "factor_weights": market_config["factor_weights"],
             "sources": source_status,
-            "process": {
-                "snapshot_rows": int(len(snapshot)),
-                "eligible_rows": int(len(candidates)),
-                "news_in": int(len(news)),
-                "news_selected": _records(selected_news) if not selected_news.empty else [],
-                "news_dropped": dropped_news[:50],
-                "news_dropped_count": len(dropped_news),
-            },
         }
-        return MarketRunResult(snapshot, candidates, news, context, metadata)
+        return MarketRunResult(snapshot, pd.DataFrame(), news, context, metadata)

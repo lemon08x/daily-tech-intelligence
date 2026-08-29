@@ -24,9 +24,8 @@ def settings() -> dict:
             "first_run_lookback_hours": 48, "resume_overlap_hours": 6,
             "cluster_window_hours": 72, "max_items_per_source": 30,
             "max_scout_events": 40, "max_deep_events": 5,
-            "max_company_hypotheses": 3, "full_text_max_chars": 50000,
+            "full_text_max_chars": 50000,
             "title_similarity_threshold": 88, "source_fetch_timeout_seconds": 1,
-            "publish_leads_when_ai_unavailable": True,
         },
         "llm": {
             "prompt_version": "test-v1",

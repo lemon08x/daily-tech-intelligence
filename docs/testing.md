@@ -29,12 +29,12 @@
 | 文件 | 锁住的行为 |
 | --- | --- |
 | `test_intelligence_quality.py` | 质量门裁剪过长输出；`unsupported_claims` 即使 `pass` 也降级；重复/伪造引文不能凑证据数；重复事实不能凑最低条数；单源置信度封顶 |
-| `test_intelligence_pipeline.py` | 假模型走通 scout→analyst→verifier；同日同实验复用缓存；不同实验不共用分析；无效 JSON 重试一次后跳过；无 AI 只发线索；`--require-ai` 在缺密钥或离线时失败；处理过程记录采集/深研决策 |
+| `test_intelligence_pipeline.py` | 假模型走通 scout→analyst→verifier；同日同实验复用缓存；不同实验不共用分析；无效 JSON 重试一次后跳过；无 AI 只发线索；`--require-ai` 在缺密钥或离线时失败 |
 | `test_sources_and_clustering.py` | RSS/Atom/arXiv/sitemap/HF Daily Papers 解析；`publisher_id` 与 collector 分离；同类标题 72 小时内合并；同一 GitHub 项目跨周刊/Release 合并；周刊 Markdown 抽链；短链还原；nightly 噪音丢弃；全文失败时保留摘要 |
-| `test_settings_and_publication.py` | 配置路径与来源数量；重复 id / 未知 API 类型拒绝；HTML/Markdown 页签（科技/Git/市场）、今日速读一段话、Git 卡片、市场涨跌前三后三、市场新闻影响/后果、处理过程页、不展示个股扫描；同日多次运行不写日期根副本；编排器记录真实模型元数据；主题词看标题和速读句，不看埋在 key_facts 里的词 |
+| `test_settings_and_publication.py` | 配置路径与来源数量；重复 id / 未知 API 类型拒绝；只写 HTML；科技下再分泛读/硬核、今日速读分段、Git 总星标、市场热点影响与后果、不展示个股扫描；同日多次运行不写日期根副本；编排器记录真实模型元数据；主题词看标题和速读句 |
 | `test_normalize.py` | 行情字段单位；全球指数列名；新浪 `hq.sinajs.cn` 解析；可归因新闻优先、资金流/中报/ST 简称变更丢弃；事件过少时用重要新闻填满；同花顺+新浪快讯合并去重 |
-| `test_storage_and_mapping.py` | 文档幂等写入；同一事件按实验保存多份分析；公司映射没有官方公告不得标已核验 |
-| `test_github_trending.py` | Trending HTML 解析与最热/最快合并；Hugging Face / GitLab 目录合并；卡片热度条；前一天已发布事件第二天降权 |
+| `test_storage_and_mapping.py` | 文档幂等写入；同一事件按实验保存多份分析 |
+| `test_github_trending.py` | GitHub Trending HTML 解析与最热/最快合并；卡片热度条与总星标；前一天已发布事件第二天降权 |
 | `test_http_proxy.py` | 国内站先直连再代理，海外站相反；代理失败回退直连 |
 
 `test_scoring.py` 已删除：日报不再做个股打分，也不在报告里展示个股扫描。

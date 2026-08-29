@@ -11,7 +11,6 @@ from daily_intel.core.models import (
     AnalysisDraft,
     AnalysisQuality,
     AnalysisStatus,
-    CompanyMapping,
     Document,
     Evidence,
     VerificationResult,
@@ -198,7 +197,7 @@ class AnalysisQualityGate:
         return QualityDecision(normalized_draft, evidence, quality, confidence)
 
     def build_analysis(
-        self, event_id: str, decision: QualityDecision, mappings: list[CompanyMapping],
+        self, event_id: str, decision: QualityDecision,
         model: str, prompt_version: str, created_at: datetime, lane: str = "hardcore",
     ) -> Analysis:
         reading = "general" if lane == "general" else "hardcore"
@@ -214,7 +213,7 @@ class AnalysisQualityGate:
                 industry_impacts=draft.industry_impacts,
                 risks=draft.risks, counterpoints=draft.counterpoints,
                 confidence=decision.confidence, evidence=decision.evidence,
-                company_mappings=mappings, quality=decision.quality,
+                quality=decision.quality,
                 model=model, prompt_version=prompt_version, created_at=created_at,
                 lane=reading,
             )
@@ -265,7 +264,6 @@ class AnalysisQualityGate:
             "counterpoints": _normalize_list(
                 draft.counterpoints, self.policy.max_counterpoints, item_limit
             ),
-            "company_hypotheses": draft.company_hypotheses[:3],
         })
 
     def _verified_evidence(
