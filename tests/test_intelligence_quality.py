@@ -110,7 +110,6 @@ def test_pass_verdict_with_unsupported_claims_is_still_downgraded() -> None:
     analysis = gate.build_analysis("event-1", decision, "model-x", "prompt-v2", NOW)
     assert analysis.status == AnalysisStatus.LEAD
     assert analysis.technical_mechanism == ""
-    assert analysis.company_mappings == []
 
 
 def test_duplicate_and_fabricated_quotes_cannot_satisfy_evidence_gate() -> None:

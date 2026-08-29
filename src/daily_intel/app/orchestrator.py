@@ -16,7 +16,7 @@ from daily_intel.core.progress import progress
 from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.github.pipeline import GitHubTrendingPipeline
-from daily_intel.publication.briefing import apply_digest_brief, digest_brief_payload
+from daily_intel.publication.briefing import digest_brief_payload
 from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.infrastructure.llm.openai_compatible import OpenAICompatibleLLM
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -81,7 +81,7 @@ def run_application(
         market = market_runner.run()
         progress("[2/6] 采集、去重并聚类科技来源…")
         intelligence = intelligence_runner.run(
-            current, market.snapshot, market.radar_news,
+            current, market.radar_news,
             offline=offline, no_ai=no_ai, require_ai=require_ai,
             experiment_id=experiment_id, force_analysis=force_analysis,
         )
@@ -102,7 +102,6 @@ def run_application(
                 digest_brief = stages.brief_digest(digest_brief_payload(market.context))
             except Exception as exc:
                 digest_errors.append(f"digest_brief: {type(exc).__name__}: {exc}")
-        news_records = apply_digest_brief(digest_brief, market.context)
         context = {
             **market.context,
             "title": settings["app"]["title"],
@@ -120,9 +119,8 @@ def run_application(
             "prompt_version": settings["llm"]["prompt_version"],
             "pipeline_errors": [*intelligence.errors, *github.errors, *digest_errors],
             "github_projects": github.projects,
-            "github_chart": getattr(github, "chart", {}) or {},
             "github_source_status": github.source_status,
-            "news_records": news_records,
+            "digest_brief": digest_brief,
         }
         failed_sources = [
             item["name"] for item in market.context["market_source_status"] if item["stale"]
@@ -165,7 +163,7 @@ def run_application(
         }
         progress("[5/6] 生成 HTML…")
         outputs = digest_publisher.publish(
-            context, intelligence.analyses, market.snapshot, market.candidates,
+            context, intelligence.analyses,
             run_metadata, resolve_path(settings, "output_dir"), current,
         )
         progress("[6/6] 保存运行状态…")

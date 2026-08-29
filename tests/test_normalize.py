@@ -1,23 +1,7 @@
 import pandas as pd
 
-from daily_intel.market.normalize import combine_news_frames, normalize_global_quotes, normalize_news, normalize_snapshot
+from daily_intel.market.normalize import combine_news_frames, normalize_global_quotes, normalize_news
 from daily_intel.market.pipeline import rank_market_news
-
-
-def test_normalize_tencent_units_and_code() -> None:
-    raw = pd.DataFrame(
-        [{
-            "code": "sh600000", "name": "浦发银行", "zxj": "10.5", "zdf": "1.2",
-            "hsl": "2", "lb": "1.3", "pe_ttm": "6", "pn": "0.6", "zsz": "1000",
-            "ltsz": "900", "turnover": "12345", "zdf_d5": "2", "zdf_d10": "3",
-            "zdf_d20": "4", "zdf_d60": "8", "zdf_y": "9",
-        }]
-    )
-    result = normalize_snapshot(raw).iloc[0]
-    assert result["code"] == "600000"
-    assert result["market"] == "sh"
-    assert result["amount_cny"] == 123_450_000
-    assert result["market_cap_cny"] == 100_000_000_000
 
 
 def test_normalize_global_quotes_from_eastmoney_columns() -> None:

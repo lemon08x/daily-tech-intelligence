@@ -66,17 +66,12 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         ),
         model="fixture-model", prompt_version="test-v1", created_at=now,
     )
-    breadth = {
-        "mood": "分化", "advancing": 1, "declining": 1, "flat": 0,
-        "advance_ratio": .5, "median_change": 0, "amount_cny": 100,
-        "limit_up_like": 0, "limit_down_like": 0, "total": 2,
-    }
     context = {
         "title": "测试日报", "report_date": "2026-08-24", "market_date": "2026-08-24",
         "generated_at": "2026-08-24 18:10 CST", "is_trading_day": True,
         "analyses": [analysis], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
-        "prompt_version": "test-v1", "pipeline_errors": [], "breadth": breadth,
+        "prompt_version": "test-v1", "pipeline_errors": [],
         "hot_industry_records": [{"name": "金融行业", "pct_change": 2.21, "leader": "锦龙股份"}],
         "weak_industry_records": [],
         "index_records": [
@@ -112,9 +107,6 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
             "today_width": 100,
             "week_width": 100,
         }],
-        "github_chart": {
-            "count": 1, "max_stars_today": 1200, "max_stars_week": 5000,
-        },
     }
     metadata = {
         "run_name": "100000-test",
@@ -122,7 +114,7 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
         "ai": {"status": "disabled"},
     }
     outputs = publish(
-        context, [analysis], pd.DataFrame(), pd.DataFrame(), metadata,
+        context, [analysis], metadata,
         tmp_path, now,
     )
     assert set(outputs) == {"html"}
@@ -178,29 +170,24 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
 
 def test_publish_preserves_multiple_same_day_runs(tmp_path) -> None:
     now = datetime(2026, 8, 24, 10, tzinfo=timezone.utc)
-    breadth = {
-        "mood": "平稳", "advancing": 0, "declining": 0, "flat": 0,
-        "advance_ratio": 0, "median_change": 0, "amount_cny": 0,
-        "limit_up_like": 0, "limit_down_like": 0, "total": 0,
-    }
     context = {
         "title": "测试", "report_date": "2026-08-24", "market_date": "2026-08-24",
         "generated_at": "2026-08-24 10:00 CST", "is_trading_day": True,
         "analyses": [], "ai_status": "disabled", "ai_status_label": "AI未启用",
         "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
-        "prompt_version": "test", "pipeline_errors": [], "breadth": breadth,
+        "prompt_version": "test", "pipeline_errors": [],
         "hot_industry_records": [],
         "weak_industry_records": [], "index_records": [], "news_records": [],
         "market_source_status": [], "intelligence_source_status": [],
     }
     first = publish(
         {**context, "run_name": "run-a", "experiment_id": "model-a"},
-        [], pd.DataFrame(), pd.DataFrame(),
+        [],
         {"run_name": "run-a", "experiment_id": "model-a"}, tmp_path, now,
     )
     second = publish(
         {**context, "run_name": "run-b", "experiment_id": "model-b"},
-        [], pd.DataFrame(), pd.DataFrame(),
+        [],
         {"run_name": "run-b", "experiment_id": "model-b"}, tmp_path, now,
     )
     assert first["html"].exists() and second["html"].exists()
@@ -215,13 +202,10 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
     settings = load_settings(root / "config" / "settings.yaml")
     now = datetime(2026, 8, 25, 10, tzinfo=timezone.utc)
     market_result = MarketRunResult(
-        snapshot=pd.DataFrame(),
-        candidates=pd.DataFrame(),
         radar_news=pd.DataFrame(),
         context={
             "market_date": "2026-08-25",
             "is_trading_day": True,
-            "breadth": {},
             "hot_industry_records": [],
             "weak_industry_records": [],
             "index_records": [],
@@ -265,7 +249,7 @@ def test_orchestrator_uses_injected_workflows_publisher_and_actual_model_metadat
     class CapturingPublisher:
         metadata = None
 
-        def publish(self, context, analyses, snapshot, candidates, metadata, output_dir, now):
+        def publish(self, context, analyses, metadata, output_dir, now):
             self.metadata = metadata
             return {"custom": tmp_path / "custom-output"}
 

@@ -111,33 +111,26 @@ def _pipeline(tmp_path, llm: LLMClient, monkeypatch) -> IntelligencePipeline:
 def test_ai_pipeline_deep_analysis_and_same_day_reuse(tmp_path, monkeypatch) -> None:
     llm = FakeLLM()
     pipeline = _pipeline(tmp_path, llm, monkeypatch)
-    snapshot = pd.DataFrame([{"code": "600000", "name": "浦发银行"}])
-    first = pipeline.run(NOW, snapshot, pd.DataFrame())
-    second = pipeline.run(NOW, snapshot, pd.DataFrame())
+    first = pipeline.run(NOW, pd.DataFrame())
+    second = pipeline.run(NOW, pd.DataFrame())
     assert first.analyses[0].status.value == "deep"
     assert len(first.analyses[0].evidence) == 2
     assert second.analyses[0].event_id == first.analyses[0].event_id
     assert llm.calls == ["scout", "analyst", "verifier"]
     assert first.analysis_cache_misses == 1
     assert second.analysis_cache_hits == 1
-    assert first.process["documents"]
-    assert first.process["events"]
-    assert first.process["research"][0]["decision"] == "analyzed"
-    assert second.process["research"][0]["decision"] == "cache"
     assert first.model_runtime["models"]["analyst"] == "analyst"
     assert second.model_runtime["models"] == {}
     assert second.model_runtime["analysis_models"] == ["analyst"]
 
-    alternate = pipeline.run(
-        NOW, snapshot, pd.DataFrame(), experiment_id="alternate-model"
-    )
+    alternate = pipeline.run(NOW, pd.DataFrame(), experiment_id="alternate-model")
     assert alternate.cache_scope != first.cache_scope
     assert llm.calls == [
         "scout", "analyst", "verifier",
         "scout", "analyst", "verifier",
     ]
     forced = pipeline.run(
-        NOW, snapshot, pd.DataFrame(),
+        NOW, pd.DataFrame(),
         experiment_id="alternate-model", force_analysis=True,
     )
     assert forced.analysis_cache_misses == 1
@@ -147,7 +140,7 @@ def test_ai_pipeline_deep_analysis_and_same_day_reuse(tmp_path, monkeypatch) -> 
 def test_invalid_ai_output_is_retried_then_skipped(tmp_path, monkeypatch) -> None:
     llm = FakeLLM(fail_analyst=True)
     pipeline = _pipeline(tmp_path, llm, monkeypatch)
-    result = pipeline.run(NOW, pd.DataFrame(columns=["code", "name"]), pd.DataFrame())
+    result = pipeline.run(NOW, pd.DataFrame())
     assert result.analyses == []
     assert llm.calls.count("analyst") == 2
     assert any("invalid model JSON" in item for item in result.errors)
@@ -155,9 +148,8 @@ def test_invalid_ai_output_is_retried_then_skipped(tmp_path, monkeypatch) -> Non
 
 def test_no_ai_publishes_explicit_lead_and_offline_reuses_it(tmp_path, monkeypatch) -> None:
     pipeline = _pipeline(tmp_path, UnavailableLLM(), monkeypatch)
-    snapshot = pd.DataFrame(columns=["code", "name"])
-    live = pipeline.run(NOW, snapshot, pd.DataFrame())
-    offline = pipeline.run(NOW, snapshot, pd.DataFrame(), offline=True)
+    live = pipeline.run(NOW, pd.DataFrame())
+    offline = pipeline.run(NOW, pd.DataFrame(), offline=True)
     assert live.analyses[0].status.value == "lead"
     assert live.analyses[0].model == "none"
     assert offline.ai_status == "cached"
@@ -167,6 +159,6 @@ def test_no_ai_publishes_explicit_lead_and_offline_reuses_it(tmp_path, monkeypat
 def test_require_ai_rejects_missing_key_and_offline(tmp_path, monkeypatch) -> None:
     pipeline = _pipeline(tmp_path, UnavailableLLM(), monkeypatch)
     with pytest.raises(RuntimeError, match="require-ai"):
-        pipeline.run(NOW, pd.DataFrame(), pd.DataFrame(), require_ai=True)
+        pipeline.run(NOW, pd.DataFrame(), require_ai=True)
     with pytest.raises(RuntimeError, match="require-ai"):
-        pipeline.run(NOW, pd.DataFrame(), pd.DataFrame(), offline=True, require_ai=True)
+        pipeline.run(NOW, pd.DataFrame(), offline=True, require_ai=True)

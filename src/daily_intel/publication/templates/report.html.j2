@@ -76,50 +76,29 @@
     .subhead { margin:18px 0 8px; font-weight:800; }
     .evidence,.quality-alert { padding:10px 12px; margin:8px 0; color:#39445b; background:#f7f9fc; border-radius:8px; }
     .quality-alert { color:#744700; background:#fff6e5; }
-    .mapping { display:grid; grid-template-columns:130px 105px 1fr; gap:10px; padding:11px 0; border-bottom:1px solid var(--line); }
-    .verified { color:#08714b; font-weight:750; }
-    .unverified { color:var(--amber); font-weight:750; }
     .brief { padding:15px 0; border-bottom:1px solid var(--line); }
     .brief:last-child { border-bottom:0; }
     .brief h3 { font-size:17px; }
     .brief-meta { font-size:13px; }
-    .git-item { padding:16px 0; }
-    .git-item h3 { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-    .git-board { margin-top:14px; }
     .git-bars { margin-top:8px; }
     .scenario { margin:12px 0 0; padding:12px 14px; border-left:4px solid #9bb5ef; border-radius:0 9px 9px 0; background:#f7f9fd; }
     .scenario strong { display:block; margin-bottom:4px; }
     .runtime summary { cursor:pointer; font-size:18px; font-weight:800; }
-    .metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin:16px 0; }
-    .card { padding:16px; }
-    .metric { margin-top:3px; font-size:24px; font-weight:750; }
     .up { color:var(--up); }
     .down { color:var(--down); }
-    .bar { display:flex; height:8px; margin-top:9px; overflow:hidden; border-radius:8px; background:#edf1f5; }
-    .bar .a { background:var(--up); }
-    .bar .d { background:var(--down); }
-    .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
-    th { text-align:left; color:var(--muted); background:#f8fafc; font-size:12px; }
-    th,td { padding:10px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    td.reason { min-width:180px; white-space:normal; }
-    tr:last-child td { border-bottom:0; }
-    .score { display:inline-block; min-width:47px; padding:3px 8px; border-radius:999px; color:#24439b; background:#eaf0ff; text-align:center; font-weight:750; }
-    .industry,.status { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); }
-    .status { display:grid; grid-template-columns:1.1fr .8fr 1.5fr; }
+    .status { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); display:grid; grid-template-columns:1.1fr .8fr 1.5fr; }
     .stale { color:var(--amber); font-weight:750; }
     footer { padding:20px 4px; color:var(--muted); }
     @media (max-width:800px) {
-      .metrics,.analysis-grid { grid-template-columns:1fr 1fr; }
-      .table-wrap { overflow:auto; }
-      .mapping,.status { grid-template-columns:1fr; }
+      .analysis-grid { grid-template-columns:1fr 1fr; }
+      .status { grid-template-columns:1fr; }
     }
     @media (max-width:560px) {
       body { font-size:14px; }
       main { width:calc(100% - 18px); margin-top:10px; }
       header,.section,.story { padding:18px; }
       h1 { font-size:25px; }
-      .metrics,.two,.analysis-grid { grid-template-columns:1fr; }
+      .analysis-grid { grid-template-columns:1fr; }
       .trend { grid-template-columns:1fr 64px; }
       .trend-track { grid-column:1 / -1; }
       .report-tabs { position:sticky; top:0; z-index:5; }
@@ -192,16 +171,10 @@
       <button id="hardcore-lane-tab" type="button" role="tab" aria-selected="{{ 'false' if general_news else 'true' }}" aria-controls="hardcore-lane" data-subtab="hardcore" {% if general_news %}tabindex="-1"{% endif %}>硬核 {{ hardcore_news|length }}</button>
     </nav>
     {% endif %}
-    <div id="general-lane" class="lane-panel" role="tabpanel" aria-labelledby="general-lane-tab" {% if not general_news %}hidden{% endif %}>
-    {% if general_news %}
-    <section class="section">
-      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
-      <p class="muted">适合快速扫一眼的工具、周刊、IT 热点和社区精选。</p>
-    </section>
-    {% for analysis in general_news %}
+    {% macro story_card(analysis, lane_label, index) %}
     <article class="story">
       <div class="story-kicker">
-        <span>泛读 {{ '%02d'|format(loop.index) }}</span>
+        <span>{{ lane_label }} {{ '%02d'|format(index) }}</span>
         <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
       </div>
       <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
@@ -229,7 +202,14 @@
         </div>
       </details>
     </article>
-    {% endfor %}
+    {% endmacro %}
+    <div id="general-lane" class="lane-panel" role="tabpanel" aria-labelledby="general-lane-tab" {% if not general_news %}hidden{% endif %}>
+    {% if general_news %}
+    <section class="section">
+      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
+      <p class="muted">适合快速扫一眼的工具、周刊、IT 热点和社区精选。</p>
+    </section>
+    {% for analysis in general_news %}{{ story_card(analysis, '泛读', loop.index) }}{% endfor %}
     {% else %}
     <section class="section"><p class="muted">今日没有泛读条目。</p></section>
     {% endif %}
@@ -240,38 +220,7 @@
       <h2>硬核 <span class="muted" style="font-size:13px;font-weight:400">{{ hardcore_news|length }} 项</span></h2>
       <p class="muted">论文、官方发布和基础设施更新，适合对照原文深读。</p>
     </section>
-    {% for analysis in hardcore_news %}
-    <article class="story">
-      <div class="story-kicker">
-        <span>硬核 {{ '%02d'|format(loop.index) }}</span>
-        <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
-      </div>
-      <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
-      <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
-      {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% endif %}
-      {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-      <div class="story-actions">
-        {% if analysis.evidence %}<a class="source-link" href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a><span class="muted">{{ analysis.evidence[0].locator }} · 共 {{ analysis.evidence|length }} 条证据</span>{% else %}<span class="muted">本条暂无可定位原文</span>{% endif %}
-      </div>
-      <details class="deep-dive">
-        <summary>展开深度分析</summary>
-        <div class="deep-body">
-          {% if analysis.key_facts|length > 2 %}<div class="subhead">更多事实</div><ul>{% for item in analysis.key_facts[2:] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.quality.issues %}<div class="quality-alert"><strong>质量门降级原因：</strong>{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
-          {% if analysis.quality.unsupported_claims %}<div class="quality-alert"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
-          {% if analysis.technical_mechanism or analysis.novelty or analysis.maturity or analysis.outlook_6_24m %}<div class="analysis-grid">
-            {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
-            {% if analysis.novelty %}<div><strong>新颖性</strong><p>{{ analysis.novelty }}</p></div>{% endif %}
-            {% if analysis.maturity %}<div><strong>成熟度</strong><p>{{ analysis.maturity }}</p></div>{% endif %}
-            {% if analysis.outlook_6_24m %}<div><strong>6–24个月影响</strong><p>{{ analysis.outlook_6_24m }}</p></div>{% endif %}
-          </div>{% endif %}
-          {% if analysis.industry_impacts %}<div class="subhead">产业链影响</div><ul>{% for item in analysis.industry_impacts %}<li><strong>{{ item.segment }}</strong> · {{ item.horizon }} · {{ item.direction }}：{{ item.rationale }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.risks or analysis.counterpoints %}<div class="subhead">风险与反面证据</div><ul>{% for item in analysis.risks + analysis.counterpoints %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-          {% if analysis.evidence %}<div class="subhead">可定位证据</div>{% for item in analysis.evidence %}<div class="evidence"><a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.locator }} ↗</a>：{{ item.quote }}</div>{% endfor %}{% endif %}
-        </div>
-      </details>
-    </article>
-    {% endfor %}
+    {% for analysis in hardcore_news %}{{ story_card(analysis, '硬核', loop.index) }}{% endfor %}
     {% else %}
     <section class="section"><p class="muted">今日没有硬核条目。</p></section>
     {% endif %}

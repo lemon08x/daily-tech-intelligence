@@ -10,9 +10,6 @@ paths:
   output_dir: "../output"
   intelligence_db: "../data/intelligence.db"
 
-market:
-  snapshot_providers: ["tencent", "sina"]
-
 intelligence:
   first_run_lookback_hours: 48
   resume_overlap_hours: 6

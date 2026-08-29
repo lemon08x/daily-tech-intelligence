@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from daily_intel.core.models import Analysis, Document, Event
+from daily_intel.core.models import Analysis
 from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository, LLMClient
 from daily_intel.intelligence.clustering import is_obvious_build_title
@@ -37,7 +37,6 @@ class IntelligenceRunResult:
     analysis_cache_hits: int = 0
     analysis_cache_misses: int = 0
     errors: list[str] = field(default_factory=list)
-    process: dict[str, Any] = field(default_factory=dict)
 
 
 class IntelligencePipeline:
@@ -70,7 +69,6 @@ class IntelligencePipeline:
     def run(
         self,
         now: datetime,
-        snapshot: pd.DataFrame,
         radar_news: pd.DataFrame,
         offline: bool = False,
         no_ai: bool = False,
@@ -112,15 +110,10 @@ class IntelligencePipeline:
         max_hardcore = int(self.config.get("max_hardcore_events", 5))
         overall = int(self.config.get("max_deep_events", max_general + max_hardcore))
         lane_counts = {"general": 0, "hardcore": 0}
-        research_rows: list[dict[str, Any]] = []
         for event, event_documents in selected:
             lane = event_lane(event_documents)
             lane_limit = max_general if lane == "general" else max_hardcore
             if lane_counts[lane] >= lane_limit or len(analyses) >= overall:
-                research_rows.append(_research_row(
-                    event, event_documents, lane, "lane_cap",
-                    reason=f"{lane} 已满 {lane_limit} 或总数已满 {overall}",
-                ))
                 if lane_counts["general"] >= max_general and lane_counts["hardcore"] >= max_hardcore:
                     break
                 if len(analyses) >= overall:
@@ -138,9 +131,6 @@ class IntelligencePipeline:
                 cached = cached.model_copy(update={"lane": lane})
                 analyses.append(cached)
                 lane_counts[lane] += 1
-                research_rows.append(_research_row(
-                    event, event_documents, lane, "cache", analysis=cached,
-                ))
                 continue
             cache_misses += 1
             progress(f"当前：深研 {lane} · {title}")
@@ -154,21 +144,13 @@ class IntelligencePipeline:
                     errors.extend(extraction_errors)
                     for document in enriched:
                         self.repository.update_document_content(document)
-                    analysis = self.researcher.analyze(event, enriched, snapshot, now)
+                    analysis = self.researcher.analyze(event, enriched, now)
                 except Exception as exc:
                     errors.append(f"{event.id}: {type(exc).__name__}: {exc}")
-                    research_rows.append(_research_row(
-                        event, event_documents, lane, "failed",
-                        reason=f"{type(exc).__name__}: {exc}",
-                    ))
                     continue
             self.repository.save_analysis(analysis, cache_scope)
             analyses.append(analysis)
             lane_counts[analysis.lane] += 1
-            research_rows.append(_research_row(
-                event, event_documents, lane, "analyzed" if ai_enabled else "lead",
-                analysis=analysis,
-            ))
 
         return self._result(
             analyses=analyses,
@@ -180,10 +162,6 @@ class IntelligencePipeline:
             analysis_cache_hits=cache_hits,
             analysis_cache_misses=cache_misses,
             errors=errors,
-            process=_intelligence_process(
-                documents, event_docs, self.selector.last_trace, research_rows,
-                cache_scope, max_general, max_hardcore, overall,
-            ),
         )
 
     def _offline_result(self, cache_scope: str) -> IntelligenceRunResult:
@@ -217,7 +195,6 @@ class IntelligencePipeline:
         analysis_cache_hits: int = 0,
         analysis_cache_misses: int = 0,
         errors: list[str] | None = None,
-        process: dict[str, Any] | None = None,
     ) -> IntelligenceRunResult:
         model_runtime = self.stages.runtime_metadata()
         model_runtime["analysis_models"] = sorted({
@@ -236,90 +213,4 @@ class IntelligencePipeline:
             analysis_cache_hits=analysis_cache_hits,
             analysis_cache_misses=analysis_cache_misses,
             errors=errors or [],
-            process=process or {},
         )
-
-
-def _doc_row(document: Document) -> dict[str, Any]:
-    return {
-        "id": document.id,
-        "title": document.title,
-        "source_id": document.source_id,
-        "source_name": document.source_name,
-        "url": document.url,
-        "tier": document.source_tier,
-        "lane": str((document.metadata or {}).get("lane") or ""),
-        "content_type": document.content_type,
-        "published_at": document.published_at.isoformat(timespec="seconds") if document.published_at else "",
-    }
-
-
-def _event_row(event: Event, documents: list[Document]) -> dict[str, Any]:
-    return {
-        "event_id": event.id,
-        "title": event.title,
-        "topic": event.topic_name or event.topic_id,
-        "lane": event_lane(documents),
-        "deterministic_score": round(float(event.deterministic_score), 2),
-        "document_count": len(documents),
-        "documents": [item.title for item in documents],
-        "sources": [item.source_name for item in documents],
-    }
-
-
-def _research_row(
-    event: Event,
-    documents: list[Document],
-    lane: str,
-    decision: str,
-    *,
-    analysis: Analysis | None = None,
-    reason: str = "",
-) -> dict[str, Any]:
-    row: dict[str, Any] = {
-        "event_id": event.id,
-        "title": event.title,
-        "lane": lane,
-        "decision": decision,
-        "reason": reason,
-        "sources": [item.source_name for item in documents],
-        "urls": [item.url for item in documents if item.url],
-    }
-    if analysis is not None:
-        row.update({
-            "headline": analysis.headline,
-            "status": analysis.status.value,
-            "confidence": analysis.confidence,
-            "quality_score": analysis.quality.score,
-            "quality_passed": analysis.quality.passed,
-            "issues": list(analysis.quality.issues),
-            "unsupported_claims": list(analysis.quality.unsupported_claims),
-            "evidence_count": analysis.quality.supported_evidence,
-            "primary_sources": analysis.quality.primary_sources,
-            "plain_takeaway": analysis.plain_takeaway,
-        })
-    return row
-
-
-def _intelligence_process(
-    documents: list[Document],
-    event_docs: list[tuple[Event, list[Document]]],
-    selection: list[dict[str, Any]],
-    research: list[dict[str, Any]],
-    cache_scope: str,
-    max_general: int,
-    max_hardcore: int,
-    overall: int,
-) -> dict[str, Any]:
-    return {
-        "documents": [_doc_row(item) for item in documents],
-        "events": [_event_row(event, docs) for event, docs in event_docs],
-        "selection": list(selection or []),
-        "research": research,
-        "cache_scope": cache_scope,
-        "limits": {
-            "max_general": max_general,
-            "max_hardcore": max_hardcore,
-            "max_deep": overall,
-        },
-    }

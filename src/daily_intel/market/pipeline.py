@@ -15,16 +15,12 @@ from daily_intel.market.normalize import (
     normalize_indices,
     normalize_industries,
     normalize_news,
-    normalize_snapshot,
 )
 from daily_intel.market.providers import AkShareProvider
-from daily_intel.market.scoring import market_breadth
 
 
 @dataclass(slots=True)
 class MarketRunResult:
-    snapshot: pd.DataFrame
-    candidates: pd.DataFrame
     radar_news: pd.DataFrame
     context: dict[str, Any]
     metadata: dict[str, Any]
@@ -191,8 +187,6 @@ class MarketPipeline:
 
     def run(self) -> MarketRunResult:
         config = self.settings
-        market_config = config["market"]
-        snapshot_data = self.provider.snapshot(market_config["snapshot_providers"])
         industry_data = self.provider.industries()
         index_data = self.provider.indices()
         news_data = self.provider.news()
@@ -200,7 +194,6 @@ class MarketPipeline:
         global_index_data = self.provider.global_indices()
         global_futures_data = self.provider.global_futures()
 
-        snapshot = normalize_snapshot(snapshot_data.frame)
         industries = normalize_industries(industry_data.frame)
         indices = normalize_indices(index_data.frame)
         news = normalize_news(news_data.frame)
@@ -214,12 +207,11 @@ class MarketPipeline:
             *hot["name"].astype(str).tolist(),
         ]
         selected_news = rank_market_news(news, extra_keywords, int(config["app"]["top_news"]))
-        breadth = market_breadth(snapshot)
         market_date, is_trading_day = _market_date(calendar_data.frame, self.now)
         source_status = [
             _status(item)
             for item in (
-                snapshot_data, industry_data, index_data, news_data, calendar_data,
+                industry_data, index_data, news_data, calendar_data,
                 global_index_data, global_futures_data,
             )
         ]
@@ -227,7 +219,6 @@ class MarketPipeline:
         context = {
             "market_date": market_date,
             "is_trading_day": is_trading_day,
-            "breadth": breadth,
             "industry_records": _records(industries),
             "hot_industry_records": _records(hot),
             "weak_industry_records": _records(weak),
@@ -240,7 +231,6 @@ class MarketPipeline:
         metadata = {
             "market_date": market_date,
             "is_trading_day": is_trading_day,
-            "snapshot_rows": int(len(snapshot)),
             "sources": source_status,
         }
-        return MarketRunResult(snapshot, pd.DataFrame(), news, context, metadata)
+        return MarketRunResult(news, context, metadata)

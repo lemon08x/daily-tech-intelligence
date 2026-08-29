@@ -52,8 +52,8 @@ def format_number(value: Any, digits: int = 2) -> str:
 
 
 def publish(
-    context: dict[str, Any], analyses: list[Analysis], snapshot: pd.DataFrame,
-    candidates: pd.DataFrame, metadata: dict[str, Any], output_dir: Path, now: datetime,
+    context: dict[str, Any], analyses: list[Analysis], metadata: dict[str, Any],
+    output_dir: Path, now: datetime,
 ) -> dict[str, Path]:
     day_dir = output_dir / now.strftime("%Y-%m-%d")
     run_name = sanitize_run_identifier(
@@ -72,7 +72,7 @@ def publish(
         raise FileExistsError(f"运行目录已包含日报文件，拒绝覆盖: {run_dir}")
 
     draft = build_plain_digest(analyses, context)
-    news_records = apply_digest_brief(None, context)
+    news_records = apply_digest_brief(context.get("digest_brief"), context)
     digest = {
         **draft,
         "has_content": bool(draft["tech_items"] or draft["industry_bars"] or draft["board"]),
@@ -81,7 +81,6 @@ def publish(
         "model_runtime": {},
         "quality_summary": {},
         "github_projects": [],
-        "github_chart": {},
         **context,
         "news_records": news_records,
         "plain_digest": digest,

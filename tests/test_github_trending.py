@@ -56,8 +56,8 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
     assert "今日最热" in merged[0]["reason"] and "本周增长最快" in merged[0]["reason"]
     assert "openai/whisper" in names
     assert "vercel/next.js" in names
-    annotated, chart = annotate_github_visuals(merged)
-    assert chart["count"] == 3
+    annotated = annotate_github_visuals(merged)
+    assert len(annotated) == 3
     assert annotated[0]["today_width"] == 100
     assert annotated[0]["week_width"] == 100
     assert annotated[0]["stars_total_label"] == "15万"

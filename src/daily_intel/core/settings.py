@@ -54,7 +54,7 @@ def load_settings(path: Path) -> dict[str, Any]:
     path = path.resolve()
     raw = _read_yaml(path)
     config_dir = path.parent
-    required = {"app", "paths", "market", "intelligence", "llm"}
+    required = {"app", "paths", "intelligence", "llm"}
     missing = sorted(required.difference(raw))
     if missing:
         raise ValueError(
@@ -79,12 +79,10 @@ def load_settings(path: Path) -> dict[str, Any]:
 
 def _validate(settings: dict[str, Any]) -> None:
     for section in (
-        "app", "paths", "market", "intelligence", "quality", "llm", "topics", "sources",
+        "app", "paths", "intelligence", "quality", "llm", "topics", "sources",
     ):
         if section not in settings:
             raise ValueError(f"配置缺少 {section} 段")
-    if not settings["market"].get("snapshot_providers"):
-        raise ValueError("market.snapshot_providers 不能为空")
     topic_ids = [item["id"] for item in settings["topics"]]
     if len(topic_ids) != len(set(topic_ids)):
         raise ValueError("topics.yaml 中存在重复主题 id")

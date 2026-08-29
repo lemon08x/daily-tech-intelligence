@@ -9,31 +9,6 @@ def _numeric(frame: pd.DataFrame, column: str, default: float = np.nan) -> pd.Se
     return pd.to_numeric(frame[column], errors="coerce") if column in frame else pd.Series(default, index=frame.index, dtype="float64")
 
 
-def normalize_snapshot(raw: pd.DataFrame) -> pd.DataFrame:
-    result = pd.DataFrame(index=raw.index)
-    if "code" in raw.columns:
-        result["raw_code"] = raw["code"].astype(str).str.lower()
-        result["name"] = raw["name"].astype(str).str.strip()
-        mapping = {"price":"zxj","pct_change":"zdf","turnover_rate":"hsl","volume_ratio":"lb","pe_ttm":"pe_ttm","pb":"pn","market_cap_100m":"zsz","float_cap_100m":"ltsz","amount_10k":"turnover","momentum_5d":"zdf_d5","momentum_10d":"zdf_d10","momentum_20d":"zdf_d20","momentum_60d":"zdf_d60","momentum_ytd":"zdf_y"}
-        for target, source in mapping.items():
-            result[target] = _numeric(raw, source)
-        result["amount_cny"] = result.pop("amount_10k") * 10_000
-        result["market_cap_cny"] = result.pop("market_cap_100m") * 100_000_000
-        result["float_cap_cny"] = result.pop("float_cap_100m") * 100_000_000
-    elif "代码" in raw.columns:
-        result["raw_code"] = raw["代码"].astype(str).str.lower()
-        result["name"] = raw["名称"].astype(str).str.strip()
-        result["price"], result["pct_change"], result["amount_cny"] = _numeric(raw,"最新价"), _numeric(raw,"涨跌幅"), _numeric(raw,"成交额")
-        for column in ("turnover_rate","volume_ratio","pe_ttm","pb","market_cap_cny","float_cap_cny","momentum_5d","momentum_10d","momentum_20d","momentum_60d","momentum_ytd"):
-            result[column] = np.nan
-    else:
-        raise ValueError(f"不认识的行情字段: {list(raw.columns)}")
-    result["code"] = result["raw_code"].str.replace(r"^(sh|sz|bj)", "", regex=True)
-    result["market"] = result["raw_code"].str.extract(r"^(sh|sz|bj)", expand=False)
-    ordered = ["raw_code","code","market","name"] + [c for c in result.columns if c not in {"raw_code","code","market","name"}]
-    return result[ordered].reset_index(drop=True)
-
-
 def normalize_industries(raw: pd.DataFrame) -> pd.DataFrame:
     columns = ["name","pct_change","amount_cny","leader","leader_pct"]
     if raw.empty: return pd.DataFrame(columns=columns)

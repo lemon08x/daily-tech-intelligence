@@ -55,39 +55,12 @@ class AkShareProvider:
         self.cache, self.now, self.offline = cache, now, offline
         install_proxy_fallback()
 
-    def _fetch(self, key: str, providers: Sequence[tuple[str, Callable[[], pd.DataFrame]]], optional: bool = False) -> Dataset:
-        if self.offline:
-            cached = self.cache.load(key, "离线模式：未请求实时接口")
-            if cached:
-                return cached
-            if optional:
-                return Dataset(key, pd.DataFrame(), "无", self.now.isoformat(), True, "没有可用缓存")
-            raise RuntimeError(f"离线模式下没有 {key} 缓存")
-        errors = []
-        for source, callback in providers:
-            try:
-                with contextlib.redirect_stderr(io.StringIO()):
-                    frame = callback()
-                if not isinstance(frame, pd.DataFrame) or frame.empty:
-                    raise ValueError("接口返回空表")
-                fetched_at = self.now.isoformat(timespec="seconds")
-                self.cache.save(key, frame, source, fetched_at)
-                return Dataset(key, frame, source, fetched_at)
-            except Exception as exc:
-                errors.append(f"{source}: {type(exc).__name__}: {exc}")
-        message = " | ".join(errors)
-        cached = self.cache.load(key, message)
-        if cached:
-            return cached
-        if optional:
-            return Dataset(key, pd.DataFrame(), "无", self.now.isoformat(), True, message)
-        raise RuntimeError(f"{key} 的实时接口和缓存均不可用。{message}")
-
-    def _fetch_combined(
+    def _fetch(
         self,
         key: str,
         providers: Sequence[tuple[str, Callable[[], pd.DataFrame]]],
         optional: bool = False,
+        combine: bool = False,
     ) -> Dataset:
         if self.offline:
             cached = self.cache.load(key, "离线模式：未请求实时接口")
@@ -105,16 +78,21 @@ class AkShareProvider:
                     frame = callback()
                 if not isinstance(frame, pd.DataFrame) or frame.empty:
                     raise ValueError("接口返回空表")
+                if not combine:
+                    fetched_at = self.now.isoformat(timespec="seconds")
+                    self.cache.save(key, frame, source, fetched_at)
+                    return Dataset(key, frame, source, fetched_at)
                 parts.append(frame)
                 sources.append(source)
             except Exception as exc:
                 errors.append(f"{source}: {type(exc).__name__}: {exc}")
-        combined = combine_news_frames(parts)
-        if not combined.empty:
-            fetched_at = self.now.isoformat(timespec="seconds")
-            source = " + ".join(sources)
-            self.cache.save(key, combined, source, fetched_at)
-            return Dataset(key, combined, source, fetched_at)
+        if combine:
+            combined = combine_news_frames(parts)
+            if not combined.empty:
+                fetched_at = self.now.isoformat(timespec="seconds")
+                source = " + ".join(sources)
+                self.cache.save(key, combined, source, fetched_at)
+                return Dataset(key, combined, source, fetched_at)
         message = " | ".join(errors)
         cached = self.cache.load(key, message)
         if cached:
@@ -123,13 +101,6 @@ class AkShareProvider:
             return Dataset(key, pd.DataFrame(), "无", self.now.isoformat(), True, message)
         raise RuntimeError(f"{key} 的实时接口和缓存均不可用。{message}")
 
-    def snapshot(self, preferred: Sequence[str]) -> Dataset:
-        choices = {"tencent": ("AkShare / 腾讯证券", ak.stock_zh_a_spot_tx), "sina": ("AkShare / 新浪财经", ak.stock_zh_a_spot)}
-        providers = [choices[name] for name in preferred if name in choices]
-        if not providers:
-            raise ValueError("market.snapshot_providers 至少包含 tencent 或 sina")
-        return self._fetch("stock_snapshot", providers)
-
     def industries(self) -> Dataset:
         return self._fetch("industries", [("AkShare / 新浪行业", lambda: ak.stock_sector_spot(indicator="新浪行业"))], True)
 
@@ -137,13 +108,14 @@ class AkShareProvider:
         return self._fetch("indices", [("AkShare / 新浪指数", ak.stock_zh_index_spot_sina)], True)
 
     def news(self) -> Dataset:
-        return self._fetch_combined(
+        return self._fetch(
             "news",
             [
                 ("AkShare / 同花顺快讯", ak.stock_info_global_ths),
                 ("AkShare / 新浪财经快讯", ak.stock_info_global_sina),
             ],
             True,
+            combine=True,
         )
 
     def trading_calendar(self) -> Dataset:

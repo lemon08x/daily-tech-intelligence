@@ -57,10 +57,7 @@ class DocumentCollector:
         except Exception:
             extra_feeds = []
         timeout = int(self.config["source_fetch_timeout_seconds"])
-        try:
-            sources = self.source_factory(self.settings["sources"], timeout, extra_feeds)
-        except TypeError:
-            sources = self.source_factory(self.settings["sources"], timeout)
+        sources = self.source_factory(self.settings["sources"], timeout, extra_feeds)
         documents: list[Document] = []
         statuses: list[dict[str, Any]] = []
         with ThreadPoolExecutor(max_workers=6) as executor:

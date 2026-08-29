@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 from daily_intel.core.models import (
@@ -60,3 +61,39 @@ def test_sqlite_keeps_model_scoped_analysis_variants(tmp_path) -> None:
     latest = repository.get_latest_analyses(5)
     assert len(latest) == 1
     assert latest[0].model == "model-b"
+
+
+def test_sqlite_skips_unparseable_legacy_analysis_rows(tmp_path) -> None:
+    repository = SQLiteIntelligenceRepository(tmp_path / "intelligence.db")
+    document = _doc()
+    repository.upsert_document(document)
+    event = Event(
+        id="event-1", title=document.title, topic_id="compute", topic_name="芯片算力",
+        document_ids=[document.id], first_seen=document.published_at,
+        last_seen=document.published_at, source_quality=100,
+        deterministic_score=90,
+    )
+    repository.upsert_event(event)
+    repository.save_analysis(
+        Analysis(
+            event_id=event.id, status=AnalysisStatus.LEAD, headline="Model A",
+            confidence=.3, model="model-a", prompt_version="v2",
+            quality=AnalysisQuality(policy_version="evidence-gate-v1"),
+            created_at=document.published_at,
+        ),
+        "experiment-a",
+    )
+    import sqlite3
+
+    with sqlite3.connect(tmp_path / "intelligence.db") as connection:
+        connection.execute(
+            "INSERT INTO analysis_variants VALUES(?,?,?,?,?,?,?)",
+            (
+                "legacy-event", "scope", "deep", "old", "v0",
+                json.dumps({"event_id": "legacy-event", "status": "deep"}),
+                document.published_at.isoformat(),
+            ),
+        )
+    assert repository.get_analysis("legacy-event", "scope") is None
+    assert repository.get_analysis(event.id, "experiment-a") is not None
+    assert [item.event_id for item in repository.get_latest_analyses(10)] == [event.id]

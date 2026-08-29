@@ -3,8 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Callable
 
-import pandas as pd
-
 from daily_intel.core.models import (
     Analysis,
     AnalysisQuality,
@@ -61,7 +59,7 @@ class EventResearcher:
         return enriched, errors
 
     def analyze(
-        self, event: Event, documents: list[Document], snapshot: pd.DataFrame, now: datetime,
+        self, event: Event, documents: list[Document], now: datetime,
     ) -> Analysis:
         draft, model = self.stages.analyze(event, documents)
         verification = self.stages.verify(event, documents, draft)

@@ -7,10 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
+from pydantic import ValidationError
+
 from daily_intel.core.models import Analysis, Document, Event
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class SQLiteIntelligenceRepository:
@@ -90,18 +92,6 @@ class SQLiteIntelligenceRepository:
                     url TEXT NOT NULL,
                     quote TEXT NOT NULL,
                     locator TEXT NOT NULL,
-                    PRIMARY KEY(event_id, position)
-                );
-                CREATE TABLE IF NOT EXISTS industry_mappings (
-                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-                    position INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
-                    PRIMARY KEY(event_id, position)
-                );
-                CREATE TABLE IF NOT EXISTS company_mappings (
-                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-                    position INTEGER NOT NULL,
-                    payload_json TEXT NOT NULL,
                     PRIMARY KEY(event_id, position)
                 );
                 CREATE TABLE IF NOT EXISTS llm_runs (
@@ -215,6 +205,14 @@ class SQLiteIntelligenceRepository:
                 ),
             )
 
+    @staticmethod
+    def _parse_analysis(row: sqlite3.Row) -> Analysis | None:
+        """Rows written by older schema versions may no longer validate; skip them."""
+        try:
+            return Analysis.model_validate_json(row["analysis_json"])
+        except ValidationError:
+            return None
+
     def get_analysis(
         self, event_id: str, cache_scope: str = "default",
     ) -> Analysis | None:
@@ -224,7 +222,7 @@ class SQLiteIntelligenceRepository:
                 WHERE event_id=? AND cache_scope=?""",
                 (event_id, cache_scope),
             ).fetchone()
-        return Analysis.model_validate_json(row["analysis_json"]) if row else None
+        return self._parse_analysis(row) if row else None
 
     def save_analysis(
         self, analysis: Analysis, cache_scope: str = "default",
@@ -243,19 +241,10 @@ class SQLiteIntelligenceRepository:
                     analysis.model_dump_json(), analysis.created_at.isoformat(),
                 ),
             )
-            for table in ("evidence", "industry_mappings", "company_mappings"):
-                db.execute(f"DELETE FROM {table} WHERE event_id=?", (analysis.event_id,))
+            db.execute("DELETE FROM evidence WHERE event_id=?", (analysis.event_id,))
             db.executemany(
                 "INSERT INTO evidence VALUES(?,?,?,?,?,?)",
                 [(analysis.event_id, i, e.document_id, e.url, e.quote, e.locator) for i, e in enumerate(analysis.evidence)],
-            )
-            db.executemany(
-                "INSERT INTO industry_mappings VALUES(?,?,?)",
-                [(analysis.event_id, i, item.model_dump_json()) for i, item in enumerate(analysis.industry_impacts)],
-            )
-            db.executemany(
-                "INSERT INTO company_mappings VALUES(?,?,?)",
-                [(analysis.event_id, i, item.model_dump_json()) for i, item in enumerate(analysis.company_mappings or [])],
             )
 
     def get_latest_analyses(
@@ -282,7 +271,8 @@ class SQLiteIntelligenceRepository:
                     ORDER BY created_at DESC LIMIT ?""",
                     (limit,),
                 ).fetchall()
-        return [Analysis.model_validate_json(row["analysis_json"]) for row in rows]
+        parsed = [self._parse_analysis(row) for row in rows]
+        return [item for item in parsed if item is not None]
 
     def record_llm_run(self, stage: str, event_id: str | None, model: str, prompt_version: str,
                        input_tokens: int, output_tokens: int, status: str, error: str = "") -> None:
@@ -291,14 +281,6 @@ class SQLiteIntelligenceRepository:
                 "INSERT INTO llm_runs(stage,event_id,model,prompt_version,input_tokens,output_tokens,status,error,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
                 (stage, event_id, model, prompt_version, input_tokens, output_tokens, status, error[:1000], datetime.now().astimezone().isoformat()),
             )
-
-    def llm_usage_since(self, since: datetime) -> dict[str, int]:
-        with self._connect() as db:
-            row = db.execute(
-                "SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o, COUNT(*) AS c FROM llm_runs WHERE created_at>=? AND status='success'",
-                (since.isoformat(),),
-            ).fetchone()
-        return {"input_tokens": int(row["i"]), "output_tokens": int(row["o"]), "calls": int(row["c"])}
 
     def start_run(self, metadata: dict[str, Any]) -> int:
         with self._connect() as db:

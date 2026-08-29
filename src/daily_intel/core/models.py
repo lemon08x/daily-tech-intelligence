@@ -14,12 +14,6 @@ class StrictModel(BaseModel):
 class AnalysisStatus(StrEnum):
     DEEP = "deep"
     LEAD = "lead"
-    FAILED = "failed"
-
-
-class MappingStatus(StrEnum):
-    VERIFIED = "verified"
-    UNVERIFIED = "unverified"
 
 
 class Document(StrictModel):
@@ -67,16 +61,6 @@ class IndustryImpact(StrictModel):
     rationale: str
 
 
-class CompanyMapping(StrictModel):
-    code: str = Field(pattern=r"^\d{6}$")
-    name: str
-    industry: str = ""
-    rationale: str
-    status: MappingStatus = MappingStatus.UNVERIFIED
-    confidence: float = Field(ge=0, le=1)
-    evidence: list[Evidence] = Field(default_factory=list)
-
-
 class AnalysisQuality(StrictModel):
     """Deterministic audit result applied after all model stages."""
 
@@ -91,6 +75,10 @@ class AnalysisQuality(StrictModel):
 
 
 class Analysis(StrictModel):
+    # extra="ignore" keeps cached analyses from older schema versions (they still
+    # carry removed fields such as company_mappings) loadable from SQLite.
+    model_config = ConfigDict(extra="ignore")
+
     event_id: str
     status: AnalysisStatus
     headline: str
@@ -105,19 +93,11 @@ class Analysis(StrictModel):
     counterpoints: list[str] = Field(default_factory=list, max_length=8)
     confidence: float = Field(ge=0, le=1)
     evidence: list[Evidence] = Field(default_factory=list, max_length=12)
-    company_mappings: list[CompanyMapping] = Field(default_factory=list, max_length=3)
     quality: AnalysisQuality
     model: str = ""
     prompt_version: str = ""
     created_at: datetime
     lane: Literal["general", "hardcore"] = "hardcore"
-
-
-class Digest(StrictModel):
-    generated_at: datetime
-    market_date: str
-    analyses: list[Analysis]
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ScoutItem(StrictModel):

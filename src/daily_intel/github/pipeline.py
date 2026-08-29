@@ -19,7 +19,6 @@ from daily_intel.market.normalize import clean_text
 @dataclass(slots=True)
 class GitRunResult:
     projects: list[dict[str, Any]]
-    chart: dict[str, Any] = field(default_factory=dict)
     source_status: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -34,7 +33,7 @@ def _fallback_plain(item: dict[str, Any]) -> str:
     return f"{name} 正在 GitHub 热门榜上，页面没有给出项目简介。"
 
 
-def annotate_github_visuals(projects: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def annotate_github_visuals(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
     peak_today = max((int(item.get("stars_today") or 0) for item in projects), default=0) or 1
     peak_week = max((int(item.get("stars_week") or 0) for item in projects), default=0) or 1
     for index, item in enumerate(projects, 1):
@@ -46,14 +45,7 @@ def annotate_github_visuals(projects: list[dict[str, Any]]) -> tuple[list[dict[s
         item["today_width"] = round(min(100.0, today / peak_today * 100), 1) if today else 0.0
         item["week_width"] = round(min(100.0, week / peak_week * 100), 1) if week else 0.0
         item["stars_total_label"] = format_stars(item.get("stars_total") or 0)
-    hottest = max(projects, key=lambda item: int(item.get("stars_today") or 0), default=None)
-    fastest = max(projects, key=lambda item: int(item.get("stars_week") or 0), default=None)
-    chart = {
-        "count": len(projects),
-        "max_stars_today": int(hottest.get("stars_today") or 0) if hottest else 0,
-        "max_stars_week": int(fastest.get("stars_week") or 0) if fastest else 0,
-    }
-    return projects, chart
+    return projects
 
 
 class GitHubTrendingPipeline:
@@ -65,9 +57,9 @@ class GitHubTrendingPipeline:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def run(self, now: datetime, stages: Any | None = None, ai_enabled: bool = False) -> GitRunResult:
+    def run(self, now: datetime) -> GitRunResult:
         if not bool(self.config.get("enabled", True)):
-            return GitRunResult(projects=[], chart={}, source_status=[], errors=[])
+            return GitRunResult(projects=[], source_status=[], errors=[])
         timeout = int(self.settings.get("intelligence", {}).get("source_fetch_timeout_seconds", 20))
         errors: list[str] = []
         status: list[dict[str, Any]] = []
@@ -117,8 +109,8 @@ class GitHubTrendingPipeline:
                 item["stars_total"] = fetch_github_stars(str(item.get("full_name") or ""), timeout=timeout)
             except Exception:
                 item["stars_total"] = 0
-        briefs, chart = annotate_github_visuals(projects)
-        return GitRunResult(projects=briefs, chart=chart, source_status=status, errors=errors)
+        briefs = annotate_github_visuals(projects)
+        return GitRunResult(projects=briefs, source_status=status, errors=errors)
 
     def _cache_path(self, period: str) -> Path:
         return self.cache_dir / f"github_trending_{period}.json"
