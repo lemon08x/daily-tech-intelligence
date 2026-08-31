@@ -8,6 +8,7 @@ from typing import Any
 
 from daily_intel.core.progress import progress
 from daily_intel.github.trending import (
+    fetch_github_project_context,
     fetch_github_stars,
     fetch_trending,
     format_stars,
@@ -25,12 +26,27 @@ class GitRunResult:
 
 def _fallback_plain(item: dict[str, Any]) -> str:
     description = clean_text(str(item.get("description") or ""), 160)
-    language = str(item.get("language") or "").strip()
     if description:
-        prefix = f"这是一个{language}项目：" if language else "这是一个开源项目："
-        return prefix + description
+        return description
     name = item.get("full_name") or "该项目"
-    return f"{name} 正在 GitHub 热门榜上，页面没有给出项目简介。"
+    return f"{name} 是一个正在 GitHub 热门榜上的开源项目，页面没有说明它解决什么问题。"
+
+
+def apply_git_brief(brief: Any, projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_name = {
+        str(item.full_name).lower(): item
+        for item in (getattr(brief, "items", None) or [])
+        if getattr(item, "full_name", "")
+    }
+    for project in projects:
+        match = by_name.get(str(project.get("full_name") or "").lower())
+        if match is None:
+            project["plain"] = project.get("plain") or _fallback_plain(project)
+            continue
+        if str(match.kicker or "").strip():
+            project["kicker"] = str(match.kicker).strip()
+        project["plain"] = clean_text(match.function, 200)
+    return projects
 
 
 def annotate_github_visuals(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -103,12 +119,19 @@ class GitHubTrendingPipeline:
             publish_limit=int(self.config.get("publish_limit", 10)),
         )
         for item in projects:
-            if int(item.get("stars_total") or 0) > 0:
-                continue
+            if int(item.get("stars_total") or 0) <= 0:
+                try:
+                    item["stars_total"] = fetch_github_stars(str(item.get("full_name") or ""), timeout=timeout)
+                except Exception:
+                    item["stars_total"] = 0
+            progress(f"当前：读取 {item.get('full_name') or '仓库'} 的 README…")
             try:
-                item["stars_total"] = fetch_github_stars(str(item.get("full_name") or ""), timeout=timeout)
+                context = fetch_github_project_context(str(item.get("full_name") or ""), timeout=timeout)
             except Exception:
-                item["stars_total"] = 0
+                context = {"readme": "", "root_files": "", "manifest": ""}
+            item["readme"] = context.get("readme") or ""
+            item["root_files"] = context.get("root_files") or ""
+            item["manifest"] = context.get("manifest") or ""
         briefs = annotate_github_visuals(projects)
         return GitRunResult(projects=briefs, source_status=status, errors=errors)
 

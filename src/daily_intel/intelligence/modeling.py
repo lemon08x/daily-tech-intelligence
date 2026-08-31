@@ -12,6 +12,7 @@ from daily_intel.core.models import (
     DigestBrief,
     Document,
     Event,
+    GitBriefingBatch,
     ScoutBatch,
     VerificationResult,
 )
@@ -20,10 +21,12 @@ from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.intelligence.prompts import (
     ANALYST_SYSTEM,
     DIGEST_BRIEF_SYSTEM,
+    GIT_BRIEF_SYSTEM,
     SCOUT_SYSTEM,
     VERIFIER_SYSTEM,
     analyst_user,
     digest_brief_user,
+    git_brief_user,
     scout_user,
     verifier_user,
 )
@@ -96,9 +99,14 @@ class ModelStageRunner:
         ).hexdigest()[:12]
         return f"{identity['experiment_id']}-{fingerprint}"
 
+    def _source_chars(self, key: str, default: int) -> int:
+        return int(self.settings.get("intelligence", {}).get(key, default))
+
     def scout(self, event_docs: list[tuple[Event, list[Document]]], topics: list[dict]) -> ScoutBatch:
         return self._generate(
-            "scout", SCOUT_SYSTEM, scout_user(event_docs, topics), ScoutBatch, None
+            "scout", SCOUT_SYSTEM,
+            scout_user(event_docs, topics, doc_chars=self._source_chars("scout_doc_chars", 4000)),
+            ScoutBatch, None,
         ).value
 
     def brief_digest(self, payload: dict[str, Any]) -> DigestBrief:
@@ -106,11 +114,19 @@ class ModelStageRunner:
             "digest_brief", DIGEST_BRIEF_SYSTEM, digest_brief_user(payload), DigestBrief, None
         ).value
 
+    def brief_github(self, projects: list[dict[str, Any]]) -> GitBriefingBatch:
+        return self._generate(
+            "git_brief", GIT_BRIEF_SYSTEM, git_brief_user(projects), GitBriefingBatch, None
+        ).value
+
     def analyze(self, event: Event, documents: list[Document]) -> tuple[AnalysisDraft, str]:
         result = self._generate(
             "analyst",
             ANALYST_SYSTEM,
-            analyst_user(event, documents, self.quality_policy.prompt_contract()),
+            analyst_user(
+                event, documents, self.quality_policy.prompt_contract(),
+                max_chars=self._source_chars("full_text_max_chars", 50000),
+            ),
             AnalysisDraft,
             event.id,
         )
@@ -120,7 +136,11 @@ class ModelStageRunner:
         self, event: Event, documents: list[Document], draft: AnalysisDraft,
     ) -> VerificationResult:
         return self._generate(
-            "verifier", VERIFIER_SYSTEM, verifier_user(event, documents, draft),
+            "verifier", VERIFIER_SYSTEM,
+            verifier_user(
+                event, documents, draft,
+                max_chars=self._source_chars("full_text_max_chars", 50000),
+            ),
             VerificationResult, event.id,
         ).value
 

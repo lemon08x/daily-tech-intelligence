@@ -8,6 +8,7 @@ from typing import Any
 from daily_intel.core.models import Analysis, Document, Event
 from daily_intel.core.ports import IntelligenceRepository
 from daily_intel.intelligence.modeling import ModelStageRunner
+from daily_intel.intelligence.sources.common import event_lane
 
 
 class EventSelector:
@@ -41,6 +42,7 @@ class EventSelector:
                 "version": self.VERSION,
                 "deterministic_weight": self.deterministic_weight,
                 "model_weight": self.model_weight,
+                "scout_doc_chars": int(self.config.get("scout_doc_chars", 4000)),
             },
             separators=(",", ":"), sort_keys=True,
         ).encode()).hexdigest()
@@ -159,17 +161,17 @@ class EventSelector:
     def balance(
         event_docs: list[tuple[Event, list[Document]]],
     ) -> list[tuple[Event, list[Document]]]:
-        first_by_topic: list[tuple[Event, list[Document]]] = []
+        first_by_lane_topic: list[tuple[Event, list[Document]]] = []
         remainder: list[tuple[Event, list[Document]]] = []
-        seen: set[str] = set()
+        seen: set[tuple[str, str]] = set()
         for item in event_docs:
-            topic = item[0].topic_id
-            if topic not in seen:
-                seen.add(topic)
-                first_by_topic.append(item)
+            key = (event_lane(item[1]), item[0].topic_id)
+            if key not in seen:
+                seen.add(key)
+                first_by_lane_topic.append(item)
             else:
                 remainder.append(item)
-        return first_by_topic + remainder
+        return first_by_lane_topic + remainder
 
 
 def _aware(value: datetime) -> datetime:

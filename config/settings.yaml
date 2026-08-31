@@ -1,8 +1,6 @@
 app:
   title: "科技产业情报日报"
   timezone: "Asia/Shanghai"
-  top_industries: 8
-  weak_industries: 5
   top_news: 10
 
 paths:
@@ -83,6 +81,13 @@ llm:
   digest_brief:
     model: "deepseek-v4-flash"
     max_output_tokens: 6000
+    temperature: 0
+    extra_body:
+      thinking: {type: "disabled"}
+      reasoning_effort: "low"
+  git_brief:
+    model: "deepseek-v4-flash"
+    max_output_tokens: 4000
     temperature: 0
     extra_body:
       thinking: {type: "disabled"}

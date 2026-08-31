@@ -3,13 +3,17 @@ from __future__ import annotations
 import json
 
 from daily_intel.core.models import (
-    AnalysisDraft, DigestBrief, Document, Event, ScoutBatch, VerificationResult,
+    AnalysisDraft, DigestBrief, Document, Event, GitBriefingBatch,
+    ScoutBatch, VerificationResult,
 )
+from daily_intel.intelligence.sources.common import event_lane
 
 
 SCOUT_SYSTEM = """你是科技产业情报编辑。只依据用户提供的事件摘要评分，不使用未提供的事实。
 识别真正具有技术新颖性、工程深度或未来6至24个月产业影响的事件。输出严格JSON，字段必须符合给定结构。
-相关性、创新性、技术深度和产业影响均使用0到100分。营销软文和常规版本更新应低分。"""
+相关性、创新性、技术深度和产业影响均使用0到100分。营销软文和常规版本更新应低分。
+lane=general 的周刊、IT 热点和社区精选也要保留名额，不要把初筛名额全部给论文。
+生物技术应用如果只是常规实验、没有新的计算方法或产业节点，应明显低于大模型、芯片、机器人和开发工具。"""
 
 
 ANALYST_SYSTEM = """你是审慎的科技产业研究员。只可使用输入文档中的事实，不得用记忆补全。
@@ -36,8 +40,14 @@ supported_evidence_indexes只能列出引用确实存在且能支持相关结论
 
 
 DIGEST_BRIEF_SYSTEM = """你是科技与市场日报编辑。只依据用户提供的市场新闻写稿，不使用未提供的事实。
-market_news：只分析用户提供的市场新闻。每条包含 impact（把相关影响和可能导致的后果写在同一段）、reasoning（把推理过程和原文依据写在同一段）、quotes（从该条 title 或 summary 逐字摘录的连续原文）。
-影响和后果必须能从给定标题/摘要推出来；做不到就明确写“来源没有给出”。不要预测个股涨跌，不要编造未出现的公司、数字或政策细节。输出严格JSON。"""
+每条只写 kicker（2到4字主题词，如 政策、芯片、能源、汽车）和 scan（一句完整话，说清谁做了什么）。
+不要写影响分析、不要写依据段落、不要预测涨跌，不要编造未出现的公司、数字或政策细节。输出严格JSON。"""
+
+
+GIT_BRIEF_SYSTEM = """你是开源产品编辑。只依据用户提供的仓库名称、简介、README 和源码线索，用一句话说清这个项目的业务功能：给什么人解决什么问题。
+优先读 README；README 太短或像徽章堆砌时，再用目录和清单文件（package.json / pyproject.toml 等）判断它是库、工具还是应用。
+不要复述星标或热度，不要罗列技术栈，不要编造未给出的用户量、融资或公司采用。
+kicker 用 2 到 4 字中文主题词。输出严格JSON。"""
 
 
 def digest_brief_user(payload: dict) -> str:
@@ -54,15 +64,30 @@ def digest_brief_user(payload: dict) -> str:
     )
 
 
-def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -> str:
+def _clip_text(value: str, max_chars: int) -> str:
+    text = (value or "").strip()
+    if max_chars <= 0 or len(text) <= max_chars:
+        return text
+    return text[:max_chars]
+
+
+def scout_user(
+    events: list[tuple[Event, list[Document]]], topics: list[dict], *,
+    doc_chars: int = 4000,
+) -> str:
     payload = []
     for event, documents in events:
         payload.append(
             {
                 "event_id": event.id, "title": event.title,
-                "topic_hint": event.topic_id, "deterministic_score": event.deterministic_score,
+                "topic_hint": event.topic_id, "lane": event_lane(documents),
+                "deterministic_score": event.deterministic_score,
                 "sources": [
-                    {"name": doc.source_name, "tier": doc.source_tier, "title": doc.title, "summary": doc.summary[:1500]}
+                    {
+                        "name": doc.source_name, "tier": doc.source_tier,
+                        "title": doc.title,
+                        "excerpt": _clip_text(doc.content or doc.summary, doc_chars),
+                    }
                     for doc in documents
                 ],
             }
@@ -77,6 +102,7 @@ def scout_user(events: list[tuple[Event, list[Document]]], topics: list[dict]) -
 
 def analyst_user(
     event: Event, documents: list[Document], quality_contract: dict | None = None,
+    *, max_chars: int = 50000,
 ) -> str:
     payload = {
         "event": event.model_dump(mode="json"),
@@ -84,7 +110,7 @@ def analyst_user(
             {
                 "document_id": doc.id, "source": doc.source_name, "source_tier": doc.source_tier,
                 "url": doc.url, "title": doc.title, "published_at": doc.published_at.isoformat(),
-                "content": (doc.content or doc.summary)[:50000],
+                "content": _clip_text(doc.content or doc.summary, max_chars),
             }
             for doc in documents
         ],
@@ -97,12 +123,45 @@ def analyst_user(
     return json.dumps(payload, ensure_ascii=False)
 
 
-def verifier_user(event: Event, documents: list[Document], draft: AnalysisDraft) -> str:
+def git_brief_user(projects: list[dict]) -> str:
+    payload = [
+        {
+            "full_name": item.get("full_name") or "",
+            "description": item.get("description") or "",
+            "language": item.get("language") or "",
+            "reason": item.get("reason") or "",
+            "readme": _clip_text(str(item.get("readme") or ""), 4500),
+            "root_files": _clip_text(str(item.get("root_files") or ""), 400),
+            "manifest": _clip_text(str(item.get("manifest") or ""), 1500),
+        }
+        for item in projects[:12]
+    ]
+    return json.dumps(
+        {
+            "projects": payload,
+            "requirements": {
+                "language": "简体中文",
+                "focus": "业务功能：给谁、解决什么问题",
+                "prefer": "README，其次清单文件和目录",
+                "schema": GitBriefingBatch.model_json_schema(),
+            },
+        },
+        ensure_ascii=False,
+    )
+
+
+def verifier_user(
+    event: Event, documents: list[Document], draft: AnalysisDraft, *,
+    max_chars: int = 50000,
+) -> str:
     return json.dumps(
         {
             "event": event.model_dump(mode="json"),
             "documents": [
-                {"document_id": doc.id, "url": doc.url, "content": (doc.content or doc.summary)[:50000]}
+                {
+                    "document_id": doc.id, "url": doc.url,
+                    "content": _clip_text(doc.content or doc.summary, max_chars),
+                }
                 for doc in documents
             ],
             "draft": draft.model_dump(mode="json"),

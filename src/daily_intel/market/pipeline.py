@@ -9,13 +9,7 @@ import pandas as pd
 
 from daily_intel.core.ports import MarketProvider
 from daily_intel.market.cache import CsvCache, Dataset
-from daily_intel.market.normalize import (
-    clean_text,
-    normalize_global_quotes,
-    normalize_indices,
-    normalize_industries,
-    normalize_news,
-)
+from daily_intel.market.normalize import clean_text, normalize_news
 from daily_intel.market.providers import AkShareProvider
 
 
@@ -169,7 +163,7 @@ def _status(dataset: Dataset) -> dict[str, Any]:
 
 
 class MarketPipeline:
-    """Deterministic market snapshot and news ranking; intelligence never enters this path."""
+    """Rank public market events; quote boards are not part of this path."""
 
     def __init__(
         self,
@@ -187,44 +181,17 @@ class MarketPipeline:
 
     def run(self) -> MarketRunResult:
         config = self.settings
-        industry_data = self.provider.industries()
-        index_data = self.provider.indices()
         news_data = self.provider.news()
         calendar_data = self.provider.trading_calendar()
-        global_index_data = self.provider.global_indices()
-        global_futures_data = self.provider.global_futures()
-
-        industries = normalize_industries(industry_data.frame)
-        indices = normalize_indices(index_data.frame)
         news = normalize_news(news_data.frame)
-        hot = industries.head(int(config["app"]["top_industries"]))
-        weak = industries.tail(int(config["app"]["weak_industries"])).sort_values("pct_change")
-        global_indices = normalize_global_quotes(global_index_data.frame)
-        commodities = normalize_global_quotes(global_futures_data.frame)
-
-        extra_keywords = [
-            "政策", "监管", "标准", "制裁",
-            *hot["name"].astype(str).tolist(),
-        ]
-        selected_news = rank_market_news(news, extra_keywords, int(config["app"]["top_news"]))
+        selected_news = rank_market_news(
+            news, ["政策", "监管", "标准", "制裁"], int(config["app"]["top_news"]),
+        )
         market_date, is_trading_day = _market_date(calendar_data.frame, self.now)
-        source_status = [
-            _status(item)
-            for item in (
-                industry_data, index_data, news_data, calendar_data,
-                global_index_data, global_futures_data,
-            )
-        ]
-
+        source_status = [_status(item) for item in (news_data, calendar_data)]
         context = {
             "market_date": market_date,
             "is_trading_day": is_trading_day,
-            "industry_records": _records(industries),
-            "hot_industry_records": _records(hot),
-            "weak_industry_records": _records(weak),
-            "index_records": _records(indices),
-            "global_index_records": _records(global_indices),
-            "commodity_records": _records(commodities),
             "news_records": _records(selected_news),
             "market_source_status": source_status,
         }

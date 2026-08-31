@@ -18,21 +18,44 @@ DEPTH_WORDS = {
     "architecture", "algorithm", "dataset", "evaluation", "method", "experiment",
     "framework", "模型", "算法", "数据集", "评测", "架构", "实验", "方法",
 }
+TOPIC_RANK_WEIGHTS = {
+    "biotech": 0.45,
+}
+
+
+def topic_rank_weight(topic_id: str) -> float:
+    return float(TOPIC_RANK_WEIGHTS.get(topic_id, 1.0))
 
 
 def is_obvious_build_title(value: str) -> bool:
-    title = value.strip().lower()
+    title = value.strip().lower().replace("%2f", "/")
     return bool(
         re.fullmatch(r"b\d{4,}", title)
-        or re.match(r"^(trunk|nightly|viable/strict)/[0-9a-f]{7,}", title)
+        or re.match(r"^(trunk|nightly|viable/strict|ciflow|ci)[/:\-]", title)
         or "pinned vllm hash" in title
         or re.match(r"^(deps?|dependencies):?\s+(bump|update)", title)
+        or "ciflow/" in title
     )
+
+
+def is_ci_release_ref(value: str) -> bool:
+    text = (value or "").lower().replace("%2f", "/")
+    return bool(re.search(r"/releases/tag/(?:ciflow|nightly|trunk|viable/strict|ci)(?:/|$)", text))
 
 
 def _routine_release(document: Document) -> bool:
     """Drop obvious nightly/build automation records before they consume AI slots."""
-    return document.content_type == "github_release" and is_obvious_build_title(document.title)
+    if document.content_type != "github_release":
+        return False
+    if is_obvious_build_title(document.title):
+        return True
+    return is_ci_release_ref(
+        " ".join(
+            part for part in (
+                document.title, document.url, document.canonical_url, document.external_id,
+            ) if part
+        )
+    )
 
 
 def assign_topic(document: Document, topics: list[dict]) -> tuple[str, str, float]:
@@ -96,6 +119,7 @@ def cluster_documents(
         recency = 100.0
         corroboration = min(10.0, (len({doc.source_id for doc in docs}) - 1) * 5.0)
         score = source_quality * .25 + relevance * .25 + recency * .20 + depth * .15 + impact * .15 + corroboration
+        score *= topic_rank_weight(topic_id)
         doc_ids = sorted(doc.id for doc in docs)
         event_id = hashlib.sha256("\0".join(doc_ids).encode()).hexdigest()[:24]
         events.append(

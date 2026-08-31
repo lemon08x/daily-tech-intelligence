@@ -1,5 +1,5 @@
 ﻿﻿# 计划任务入口：DeepSeek V4 Flash 生成日报 + 邮件发送
-# 由 Windows 任务计划程序每天 08:30 调用（含周末，见 install_agent_task.ps1）
+# 由 Windows 任务计划程序每天 06:00 调用（含周末，见 install_agent_task.ps1）
 $ErrorActionPreference = "Continue"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot

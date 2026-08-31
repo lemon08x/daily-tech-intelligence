@@ -33,7 +33,7 @@
     .sub-tabs button { min-height:38px; font-size:14px; }
     .tab-panel { margin-top:16px; }
     .lane-panel { margin-top:0; }
-    .section,.story,.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
+    .section,.story { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 18px #1720330a; }
     .section { padding:24px; margin-top:16px; overflow:hidden; }
     .section-intro { max-width:760px; margin-top:-10px; }
     .digest { border-left:4px solid var(--brand); }
@@ -48,11 +48,6 @@
     .trend-track { height:10px; border-radius:8px; background:#edf1f5; overflow:hidden; }
     .trend-fill { display:block; height:100%; border-radius:8px; }
     .trend-fill.up { background:var(--up); }
-    .trend-fill.down { background:var(--down); }
-    .chips { display:flex; flex-wrap:wrap; gap:8px; }
-    .chip { min-width:108px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:#f7f9fc; }
-    .chip small { display:block; color:var(--muted); font-size:11px; }
-    .chip strong { display:block; font-size:13px; }
     .takeaway { margin:8px 0 10px; font-size:16px; line-height:1.7; }
     .story { padding:26px 28px; margin:14px 0; }
     .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
@@ -76,13 +71,7 @@
     .subhead { margin:18px 0 8px; font-weight:800; }
     .evidence,.quality-alert { padding:10px 12px; margin:8px 0; color:#39445b; background:#f7f9fc; border-radius:8px; }
     .quality-alert { color:#744700; background:#fff6e5; }
-    .brief { padding:15px 0; border-bottom:1px solid var(--line); }
-    .brief:last-child { border-bottom:0; }
-    .brief h3 { font-size:17px; }
-    .brief-meta { font-size:13px; }
     .git-bars { margin-top:8px; }
-    .scenario { margin:12px 0 0; padding:12px 14px; border-left:4px solid #9bb5ef; border-radius:0 9px 9px 0; background:#f7f9fd; }
-    .scenario strong { display:block; margin-bottom:4px; }
     .runtime summary { cursor:pointer; font-size:18px; font-weight:800; }
     .up { color:var(--up); }
     .down { color:var(--down); }
@@ -112,7 +101,7 @@
       .report-tabs { display:none; }
       .tab-panel[hidden] { display:block !important; }
       details:not([open]) > *:not(summary) { display:block; }
-      .section,.story,.card { break-inside:avoid; box-shadow:none; }
+      .section,.story { break-inside:avoid; box-shadow:none; }
     }
   </style>
 </head>
@@ -239,7 +228,7 @@
   <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
     <section class="section">
       <h2>Git 热门项目 <span class="muted" style="font-size:13px;font-weight:400">{{ github_projects|default([])|length }} 项</span></h2>
-      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库，标明当前总星标。</p>
+      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库。一句话说清这个项目给谁、解决什么问题，并标明当前总星标。</p>
     </section>
     {% if github_projects|default([]) %}
       {% for item in github_projects %}
@@ -266,31 +255,15 @@
   </section>
 
   <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
-    <section class="section">
+    <section class="section digest">
       <h2>市场情报</h2>
-      <p class="muted section-intro">指标只保留当日涨幅前三和跌幅后三。热点给出影响与后果，以及推理依据。</p>
+      <p class="muted section-intro">只保留当天值得看的公开事件，一句话说清发生了什么。不是行情榜，也不是投资建议。</p>
+      {% if news_records %}
+      <div class="scan-list">{% for item in news_records %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan or item.title }}</a>{% else %}<span>{{ item.scan or item.title }}</span>{% endif %}</div>{% endfor %}</div>
+      {% else %}
+      <p class="muted">今日没有可展示的市场事件。</p>
+      {% endif %}
     </section>
-    {% if plain_digest and plain_digest.industry_bars %}
-    <section class="section">
-      <h2>产业风向</h2>
-      <p class="muted">当日涨幅前三、跌幅后三，不附原因。</p>
-      {% for item in plain_digest.industry_bars %}<div class="trend"><strong>{{ item.name }}</strong><span class="trend-track"><span class="trend-fill {{ item.direction }}" style="width:{{ item.width }}%"></span></span><span class="{{ item.direction }}">{{ item.label }}</span></div>{% endfor %}
-    </section>
-    {% endif %}
-    {% if plain_digest and plain_digest.board %}
-    <section class="section">
-      <h2>全球市场对照</h2>
-      <p class="muted">当日涨幅前三、跌幅后三，不附原因。</p>
-      <div class="chips">{% for item in plain_digest.board %}<div class="chip"><small>{{ item.region }}</small><strong>{{ item.label }}</strong><span class="{{ item.direction }}">{{ item.label_change }}</span></div>{% endfor %}</div>
-    </section>
-    {% endif %}
-    {% if news_records %}
-    <section class="section">
-      <h2>热点</h2>
-      <p class="muted">下面是当天值得看的市场新闻。影响与后果、依据只根据这条新闻能核对的内容来写，不是价格预测。</p>
-      {% for item in news_records %}<article class="brief"><h3>{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.title }} ↗</a>{% else %}{{ item.title }}{% endif %}</h3><p>{{ item.summary|text }}</p>{% if item.impact_text or item.impact %}<p><strong>影响与后果：</strong>{{ item.impact_text or item.impact }}</p>{% endif %}{% if item.basis_text or item.reasoning %}<div class="scenario"><strong>依据</strong>{{ item.basis_text or item.reasoning }}</div>{% endif %}<p class="muted brief-meta">{{ item.published_at }}{% if item.tags %} · {{ item.tags }}{% endif %}</p></article>{% endfor %}
-    </section>
-    {% endif %}
   </section>
 
   <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>

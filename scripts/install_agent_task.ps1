@@ -1,6 +1,6 @@
 ﻿param(
     [string]$TaskName = "科技情报日报",
-    [string]$At = "08:30"
+    [string]$At = "06:00"
 )
 
 $ErrorActionPreference = "Stop"

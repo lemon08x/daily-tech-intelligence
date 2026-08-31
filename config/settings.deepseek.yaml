@@ -1,8 +1,6 @@
 app:
   title: "科技产业情报日报 · DeepSeek V4 Flash"
   timezone: "Asia/Shanghai"
-  top_industries: 8
-  weak_industries: 5
   top_news: 10
 
 paths:
@@ -20,6 +18,7 @@ intelligence:
   max_general_events: 5
   max_hardcore_events: 5
   full_text_max_chars: 50000
+  scout_doc_chars: 4000
   title_similarity_threshold: 88
   source_fetch_timeout_seconds: 20
   selection_repeat_penalty: 0.4
@@ -58,6 +57,13 @@ llm:
       reasoning_effort: xhigh
     max_output_tokens: 32000
   digest_brief:
+    model: "deepseek-v4-flash-0731"
+    extra_body:
+      thinking:
+        type: enabled
+      reasoning_effort: xhigh
+    max_output_tokens: 32000
+  git_brief:
     model: "deepseek-v4-flash-0731"
     extra_body:
       thinking:

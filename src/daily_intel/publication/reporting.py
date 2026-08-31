@@ -4,7 +4,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from daily_intel.core.models import Analysis
@@ -32,25 +31,6 @@ def quality_issue_label(value: str) -> str:
     return QUALITY_ISSUE_LABELS.get(value, value)
 
 
-def format_money(value: Any) -> str:
-    if value is None or pd.isna(value):
-        return "—"
-    number = float(value)
-    if abs(number) >= 1_0000_0000_0000:
-        return f"{number / 1_0000_0000_0000:.2f}万亿"
-    if abs(number) >= 1_0000_0000:
-        return f"{number / 1_0000_0000:.1f}亿"
-    if abs(number) >= 1_0000:
-        return f"{number / 1_0000:.1f}万"
-    return f"{number:.0f}"
-
-
-def format_number(value: Any, digits: int = 2) -> str:
-    if value is None or pd.isna(value):
-        return "—"
-    return f"{float(value):,.{digits}f}"
-
-
 def publish(
     context: dict[str, Any], analyses: list[Analysis], metadata: dict[str, Any],
     output_dir: Path, now: datetime,
@@ -65,7 +45,7 @@ def publish(
         loader=PackageLoader("daily_intel", "publication/templates"),
         autoescape=select_autoescape(["html", "xml"]),
     )
-    env.filters.update(money=format_money, num=format_number, text=clean_text)
+    env.filters.update(text=clean_text)
     env.filters["quality_issue"] = quality_issue_label
     html_path = run_dir / "daily_digest.html"
     if html_path.exists():
@@ -75,7 +55,7 @@ def publish(
     news_records = apply_digest_brief(context.get("digest_brief"), context)
     digest = {
         **draft,
-        "has_content": bool(draft["tech_items"] or draft["industry_bars"] or draft["board"]),
+        "has_content": bool(draft["tech_items"]),
     }
     render_context = {
         "model_runtime": {},

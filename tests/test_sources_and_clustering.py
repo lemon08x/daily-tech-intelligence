@@ -4,8 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from daily_intel.core.models import Document
+from daily_intel.core.models import Document, Event
 from daily_intel.intelligence.clustering import cluster_documents
+from daily_intel.intelligence.discovery import take_scout_quota
+from daily_intel.intelligence.selection import EventSelector
+from daily_intel.intelligence.sources.common import event_lane
 from daily_intel.intelligence.extraction import enrich_document
 from daily_intel.intelligence.sources.curated import HuggingFaceDailyPapersSource
 from daily_intel.intelligence.sources.factory import build_sources, configured_source_count
@@ -254,12 +257,90 @@ def test_short_url_resolves_to_canonical_target(monkeypatch: pytest.MonkeyPatch)
     assert document_lane({"tier": 1}, "paper") == "hardcore"
 
 
+def test_take_scout_quota_keeps_general_when_papers_outrank_them() -> None:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+    def pair(identifier: str, title: str, *, paper: bool) -> tuple[Event, list[Document]]:
+        doc = _document(identifier, title, now).model_copy(update={
+            "content_type": "paper" if paper else "article",
+            "source_tier": 1 if paper else 2,
+            "metadata": {"lane": "hardcore" if paper else "general"},
+        })
+        return Event(
+            id=identifier, title=title, topic_id="compute", topic_name="芯片",
+            document_ids=[doc.id], first_seen=now, last_seen=now,
+            source_quality=90 if paper else 50, deterministic_score=90 if paper else 40,
+        ), [doc]
+
+    papers = [pair(f"p{index}", f"Paper {index} architecture", paper=True) for index in range(5)]
+    weekly = pair("w1", "Weekly AI tool roundup", paper=False)
+    selected = take_scout_quota([*papers, weekly], max_general=1, max_hardcore=2)
+    lanes = [event_lane(docs) for _, docs in selected]
+    assert lanes.count("general") == 1
+    assert lanes.count("hardcore") == 2
+    assert "w1" in {event.id for event, _ in selected}
+
+
+def test_cluster_downweights_biotech_against_compute_papers() -> None:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    bio = _document("bio", "AlphaFold protein language genome model", now).model_copy(update={
+        "content_type": "paper",
+        "summary": "protein language alphafold genome method experiment architecture",
+    })
+    chip = _document("chip", "New GPU accelerator inference benchmark", now).model_copy(update={
+        "content_type": "paper",
+        "summary": "accelerator benchmark architecture method experiment",
+    })
+    topics = [
+        {"id": "biotech", "name": "生物技术", "keywords": ["protein language", "alphafold", "genome"]},
+        {"id": "compute_chips", "name": "芯片算力", "keywords": ["gpu", "accelerator", "benchmark"]},
+    ]
+    events = cluster_documents([bio, chip], topics, 72, 80)
+    by_topic = {item.topic_id: item for item in events}
+    assert "biotech" in by_topic and "compute_chips" in by_topic
+    assert by_topic["compute_chips"].deterministic_score > by_topic["biotech"].deterministic_score
+
+
 def test_cluster_excludes_obvious_nightly_release_noise() -> None:
     now = datetime(2026, 8, 24, tzinfo=timezone.utc)
     noisy = _document("n", "trunk/68d20d4ee3956ceb: Disable CUDA arch", now).model_copy(
         update={"content_type": "github_release"}
     )
     topics = [{"id": "compute", "name": "芯片", "keywords": ["cuda"]}]
+    assert cluster_documents([noisy], topics, 72, 80) == []
+
+
+def test_selector_takes_first_of_each_lane_topic_before_repeats() -> None:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+    def paper(identifier: str, title: str) -> Document:
+        return _document(identifier, title, now).model_copy(update={"content_type": "paper"})
+
+    def pair(identifier: str, topic: str, doc: Document) -> tuple[Event, list[Document]]:
+        return Event(
+            id=identifier, title=doc.title, topic_id=topic, topic_name=topic,
+            document_ids=[doc.id], first_seen=now, last_seen=now,
+            source_quality=80, deterministic_score=80,
+        ), [doc]
+
+    bio1 = pair("b1", "biotech", paper("d1", "Genome paper one architecture"))
+    bio2 = pair("b2", "biotech", paper("d2", "Genome paper two method"))
+    chip = pair("c1", "compute", paper("d3", "GPU accelerator benchmark"))
+    ordered = EventSelector.balance([bio1, bio2, chip])
+    assert [item[0].id for item in ordered] == ["b1", "c1", "b2"]
+
+
+def test_cluster_excludes_ciflow_release_even_when_title_is_a_real_bugfix() -> None:
+    now = datetime(2026, 8, 24, tzinfo=timezone.utc)
+    noisy = _document("ci", "Fix dropout on complex MPS inputs", now).model_copy(update={
+        "content_type": "github_release",
+        "url": "https://github.com/pytorch/pytorch/releases/tag/ciflow%2Fmps%2F195373",
+        "canonical_url": "https://github.com/pytorch/pytorch/releases/tag/ciflow%2Fmps%2F195373",
+        "external_id": "ciflow/mps/195373",
+        "summary": "cuda dropout architecture",
+        "content": "cuda dropout architecture",
+    })
+    topics = [{"id": "compute", "name": "芯片", "keywords": ["cuda", "dropout"]}]
     assert cluster_documents([noisy], topics, 72, 80) == []
 
 

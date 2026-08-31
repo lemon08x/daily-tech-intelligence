@@ -1,1 +1,1 @@
-"""Deterministic market snapshot and event-cause news ranking."""
+"""Event-cause market news ranking for the digest."""

@@ -8,7 +8,7 @@ from time import struct_time
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-USER_AGENT = "DailyIntel/0.3 (+local research digest)"
+USER_AGENT = "DailyIntel/0.4 (+local research digest)"
 
 
 def as_datetime(value: struct_time | None, fallback: datetime) -> datetime:

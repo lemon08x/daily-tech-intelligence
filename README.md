@@ -128,10 +128,10 @@ src/daily_intel/
 
 ## 自动运行与测试
 
-每天 08:30（含周末）用局域网 DeepSeek V4 Flash 生成日报并发送邮件：
+每天 06:00（含周末）用局域网 DeepSeek V4 Flash 生成日报并发送邮件：
 
 ```powershell
-.\scripts\install_agent_task.ps1 -At "08:30"
+.\scripts\install_agent_task.ps1 -At "06:00"
 ```
 
 该任务读取 `config/settings.deepseek.yaml`，密钥变量为 `OMLX_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报。

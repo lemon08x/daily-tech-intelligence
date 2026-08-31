@@ -117,14 +117,22 @@ class ScoutBatch(StrictModel):
 
 class MarketNewsAnalysis(StrictModel):
     title: str
-    impact: str = Field(min_length=8, max_length=700)
-    consequences: str = Field(default="", max_length=400)
-    reasoning: str = Field(min_length=8, max_length=800)
-    quotes: list[str] = Field(default_factory=list, max_length=4)
+    kicker: str = Field(default="", max_length=8)
+    scan: str = Field(min_length=8, max_length=160)
 
 
 class DigestBrief(StrictModel):
     market_news: list[MarketNewsAnalysis] = Field(default_factory=list, max_length=12)
+
+
+class GitProjectBrief(StrictModel):
+    full_name: str
+    kicker: str = Field(default="", max_length=8)
+    function: str = Field(min_length=8, max_length=200)
+
+
+class GitBriefingBatch(StrictModel):
+    items: list[GitProjectBrief] = Field(default_factory=list, max_length=12)
 
 
 class AnalysisDraft(StrictModel):

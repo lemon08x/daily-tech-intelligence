@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import os
 import re
 from typing import Any
 
@@ -132,13 +134,119 @@ def merge_trending(
     return picked
 
 
+def _github_headers(accept: str = "application/vnd.github+json") -> dict[str, str]:
+    headers = {
+        "User-Agent": TRENDING_HEADERS["User-Agent"],
+        "Accept": accept,
+    }
+    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or ""
+    if token.strip():
+        headers["Authorization"] = f"Bearer {token.strip()}"
+    return headers
+
+
 def fetch_github_stars(full_name: str, timeout: int = 12) -> int:
     response = http_get(
         f"https://api.github.com/repos/{full_name}",
         timeout=timeout,
-        headers={"User-Agent": TRENDING_HEADERS["User-Agent"], "Accept": "application/json"},
+        headers=_github_headers("application/json"),
     )
     response.raise_for_status()
     payload = response.json()
     return int((payload or {}).get("stargazers_count") or 0)
+
+
+_README_BADGE = re.compile(r"!\[[^\]]*]\([^)]+\)")
+MANIFEST_NAMES = (
+    "package.json", "pyproject.toml", "Cargo.toml", "go.mod",
+    "composer.json", "setup.cfg", "setup.py", "Gemfile",
+)
+
+
+def _clip_block(text: str, max_chars: int) -> str:
+    cleaned = re.sub(r"<!--.*?-->", " ", text or "", flags=re.S)
+    cleaned = _README_BADGE.sub("", cleaned)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    if max_chars <= 0 or len(cleaned) <= max_chars:
+        return cleaned
+    cut = cleaned[:max_chars]
+    if "\n" in cut:
+        cut = cut.rsplit("\n", 1)[0]
+    return cut.strip()
+
+
+def _decode_contents_payload(payload: Any) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    if payload.get("encoding") == "base64" and payload.get("content"):
+        try:
+            return base64.b64decode(payload["content"]).decode("utf-8", errors="replace")
+        except (ValueError, TypeError):
+            return ""
+    return str(payload.get("content") or "")
+
+
+def fetch_github_readme(full_name: str, timeout: int = 12, max_chars: int = 4500) -> str:
+    identity = str(full_name or "").strip("/")
+    if not identity or identity.count("/") != 1:
+        return ""
+    response = http_get(
+        f"https://api.github.com/repos/{identity}/readme",
+        timeout=timeout,
+        headers=_github_headers("application/vnd.github.raw"),
+    )
+    if response.status_code == 404:
+        return ""
+    response.raise_for_status()
+    return _clip_block(response.text, max_chars)
+
+
+def _fetch_github_file(full_name: str, path: str, timeout: int, max_chars: int) -> str:
+    response = http_get(
+        f"https://api.github.com/repos/{full_name}/contents/{path}",
+        timeout=timeout,
+        headers=_github_headers(),
+    )
+    if response.status_code == 404:
+        return ""
+    response.raise_for_status()
+    return _clip_block(_decode_contents_payload(response.json()), max_chars)
+
+
+def fetch_github_project_context(full_name: str, timeout: int = 12) -> dict[str, str]:
+    """README first; if that is thin, also pull root listing and a manifest."""
+    identity = str(full_name or "").strip("/")
+    empty = {"readme": "", "root_files": "", "manifest": ""}
+    if not identity or identity.count("/") != 1:
+        return empty
+    readme = ""
+    try:
+        readme = fetch_github_readme(identity, timeout=timeout)
+    except Exception:
+        readme = ""
+    root_files = ""
+    manifest = ""
+    try:
+        response = http_get(
+            f"https://api.github.com/repos/{identity}/contents/",
+            timeout=timeout,
+            headers=_github_headers(),
+        )
+        if response.status_code != 404:
+            response.raise_for_status()
+            entries = response.json()
+            names = [
+                str(item.get("name") or "")
+                for item in entries
+                if isinstance(item, dict) and item.get("name")
+            ]
+            root_files = " ".join(names[:40])
+            if len(readme) < 600:
+                chosen = next((name for name in MANIFEST_NAMES if name in names), "")
+                if chosen:
+                    manifest = _fetch_github_file(identity, chosen, timeout, 1500)
+    except Exception:
+        pass
+    return {"readme": readme, "root_files": root_files, "manifest": manifest}
 

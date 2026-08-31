@@ -109,7 +109,9 @@ class IntelligencePipeline:
         max_general = int(self.config.get("max_general_events", 5))
         max_hardcore = int(self.config.get("max_hardcore_events", 5))
         overall = int(self.config.get("max_deep_events", max_general + max_hardcore))
+        max_per_topic = int(self.config.get("selection_max_per_topic", 2))
         lane_counts = {"general": 0, "hardcore": 0}
+        topic_lane_counts: dict[tuple[str, str], int] = {}
         for event, event_documents in selected:
             lane = event_lane(event_documents)
             lane_limit = max_general if lane == "general" else max_hardcore
@@ -118,6 +120,9 @@ class IntelligencePipeline:
                     break
                 if len(analyses) >= overall:
                     break
+                continue
+            topic_key = (lane, event.topic_id or event.id)
+            if topic_lane_counts.get(topic_key, 0) >= max_per_topic:
                 continue
             cached = (
                 None
@@ -131,6 +136,7 @@ class IntelligencePipeline:
                 cached = cached.model_copy(update={"lane": lane})
                 analyses.append(cached)
                 lane_counts[lane] += 1
+                topic_lane_counts[topic_key] = topic_lane_counts.get(topic_key, 0) + 1
                 continue
             cache_misses += 1
             progress(f"当前：深研 {lane} · {title}")
@@ -151,6 +157,7 @@ class IntelligencePipeline:
             self.repository.save_analysis(analysis, cache_scope)
             analyses.append(analysis)
             lane_counts[analysis.lane] += 1
+            topic_lane_counts[topic_key] = topic_lane_counts.get(topic_key, 0) + 1
 
         return self._result(
             analyses=analyses,

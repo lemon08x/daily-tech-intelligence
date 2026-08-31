@@ -15,7 +15,7 @@ from daily_intel.core.ports import (
 from daily_intel.core.progress import progress
 from daily_intel.core.settings import resolve_path
 from daily_intel.core.runs import sanitize_run_identifier
-from daily_intel.github.pipeline import GitHubTrendingPipeline
+from daily_intel.github.pipeline import GitHubTrendingPipeline, apply_git_brief
 from daily_intel.publication.briefing import digest_brief_payload
 from daily_intel.infrastructure.http import install_proxy_fallback
 from daily_intel.infrastructure.llm.openai_compatible import OpenAICompatibleLLM
@@ -97,8 +97,14 @@ def run_application(
         digest_errors: list[str] = []
         stages = getattr(intelligence_runner, "stages", None)
         if intelligence.ai_status == "enabled" and stages is not None:
+            if github.projects:
+                try:
+                    progress("当前：撰写开源项目功能说明…")
+                    apply_git_brief(stages.brief_github(github.projects), github.projects)
+                except Exception as exc:
+                    digest_errors.append(f"git_brief: {type(exc).__name__}: {exc}")
             try:
-                progress("当前：撰写市场热点分析…")
+                progress("当前：撰写市场热点速读…")
                 digest_brief = stages.brief_digest(digest_brief_payload(market.context))
             except Exception as exc:
                 digest_errors.append(f"digest_brief: {type(exc).__name__}: {exc}")

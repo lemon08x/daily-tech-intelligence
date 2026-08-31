@@ -34,6 +34,10 @@ INTELLIGENCE_DEFAULTS = {
     "selection_repeat_hours": 36,
     "max_general_events": 5,
     "max_hardcore_events": 5,
+    "selection_max_per_topic": 2,
+    "max_scout_general": 20,
+    "max_scout_hardcore": 20,
+    "scout_doc_chars": 4000,
 }
 GITHUB_DEFAULTS = {
     "enabled": True,

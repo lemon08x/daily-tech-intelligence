@@ -1,37 +1,7 @@
 import pandas as pd
 
-from daily_intel.market.normalize import combine_news_frames, normalize_global_quotes, normalize_news
+from daily_intel.market.normalize import combine_news_frames, normalize_news
 from daily_intel.market.pipeline import rank_market_news
-
-
-def test_normalize_global_quotes_from_eastmoney_columns() -> None:
-    raw = pd.DataFrame([
-        {"代码": "NDX", "名称": "纳斯达克", "最新价": 18000, "涨跌幅": 1.2},
-        {"代码": "GC", "名称": "COMEX黄金", "最新价": 4600, "涨跌幅": -0.4},
-    ])
-    result = normalize_global_quotes(raw)
-    assert list(result["name"]) == ["纳斯达克", "COMEX黄金"]
-    assert result.iloc[0]["pct_change"] == 1.2
-
-
-def test_sina_global_index_parser_reads_hq_payload(monkeypatch) -> None:
-    from daily_intel.market.providers import fetch_sina_global_indices
-
-    class Fake:
-        status_code = 200
-        text = (
-            'var hq_str_int_nasdaq="纳斯达克,22484.07,99.37,0.44";\n'
-            'var hq_str_int_dji="道琼斯,46247.29,299.97,0.65";\n'
-        )
-        encoding = "gb18030"
-
-        def raise_for_status(self) -> None:
-            return None
-
-    monkeypatch.setattr("daily_intel.market.providers.http_get", lambda *a, **k: Fake())
-    frame = fetch_sina_global_indices()
-    assert set(frame["名称"]) == {"纳斯达克", "道琼斯"}
-    assert float(frame.loc[frame["名称"].eq("纳斯达克"), "涨跌幅"].iloc[0]) == 0.44
 
 
 def test_rank_market_news_keeps_event_causes_and_drops_fund_news() -> None:

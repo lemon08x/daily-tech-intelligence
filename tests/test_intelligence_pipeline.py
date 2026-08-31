@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from daily_intel.core.models import (
-    AnalysisDraft, Document, Evidence, ScoutBatch, ScoutItem, VerificationResult,
+    AnalysisDraft, Document, Event, Evidence, ScoutBatch, ScoutItem, VerificationResult,
 )
 from daily_intel.core.ports import LLMClient, LLMResult
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -156,9 +156,66 @@ def test_no_ai_publishes_explicit_lead_and_offline_reuses_it(tmp_path, monkeypat
     assert offline.analyses[0].event_id == live.analyses[0].event_id
 
 
+def test_hardcore_lane_caps_repeat_topics_and_keeps_other_topics(tmp_path, monkeypatch) -> None:
+    def paper(identifier: str, title: str, summary: str) -> Document:
+        return Document(
+            id=identifier, source_id="primary", source_name="Primary",
+            external_id=identifier, title=title,
+            url=f"https://example.com/{identifier}",
+            canonical_url=f"https://example.com/{identifier}",
+            published_at=NOW, fetched_at=NOW, summary=summary, content=summary,
+            content_hash=identifier * 8, source_tier=1, content_type="paper",
+            metadata={"source_name": "Primary", "lane": "hardcore"},
+        )
+
+    docs = [
+        paper("b1", "CARP pangenome genome reconstruction", "genome method experiment"),
+        paper("b2", "Perturb-seq hematopoietic genome screen", "genome dataset evaluation"),
+        paper("b3", "Drosophila mutation genome fertility", "genome architecture method"),
+        paper("c1", "New GPU accelerator inference benchmark", "accelerator benchmark architecture"),
+    ]
+    cfg = settings()
+    cfg["intelligence"].update({
+        "max_general_events": 0, "max_hardcore_events": 4, "max_deep_events": 4,
+        "selection_max_per_topic": 2,
+    })
+    cfg["topics"] = [
+        {"id": "biotech", "name": "生物技术", "keywords": ["genome"]},
+        {"id": "compute_chips", "name": "芯片算力", "keywords": ["accelerator", "gpu"]},
+    ]
+    repository = SQLiteIntelligenceRepository(tmp_path / "intel.db")
+    pipeline = IntelligencePipeline(cfg, repository, UnavailableLLM())
+    monkeypatch.setattr(
+        pipeline.collector, "collect_sources",
+        lambda now: (docs, [{"name": "primary", "source": "Primary", "fetched_at": now.isoformat(), "stale": False, "count": len(docs), "error": ""}]),
+    )
+    result = pipeline.run(NOW, pd.DataFrame())
+    headlines = [item.headline for item in result.analyses]
+    assert len(headlines) == 3
+    assert "New GPU accelerator inference benchmark" in headlines
+    assert sum("genome" in title.lower() for title in headlines) == 2
+
+
 def test_require_ai_rejects_missing_key_and_offline(tmp_path, monkeypatch) -> None:
     pipeline = _pipeline(tmp_path, UnavailableLLM(), monkeypatch)
     with pytest.raises(RuntimeError, match="require-ai"):
         pipeline.run(NOW, pd.DataFrame(), require_ai=True)
     with pytest.raises(RuntimeError, match="require-ai"):
         pipeline.run(NOW, pd.DataFrame(), offline=True, require_ai=True)
+
+
+def test_scout_user_sends_body_excerpt_not_a_short_summary_only() -> None:
+    from daily_intel.intelligence.prompts import scout_user
+
+    body = ("mechanism and benchmark result. " * 80).strip()
+    doc = document().model_copy(update={"summary": "short rss blurb", "content": body})
+    event = Event(
+        id="e1", title=doc.title, topic_id="compute", topic_name="芯片",
+        document_ids=[doc.id], first_seen=NOW, last_seen=NOW,
+        source_quality=80, deterministic_score=80,
+    )
+    payload = json.loads(scout_user([(event, [doc])], [{"id": "compute", "name": "芯片"}], doc_chars=4000))
+    excerpt = payload["events"][0]["sources"][0]["excerpt"]
+    assert "short rss blurb" not in excerpt
+    assert excerpt.startswith("mechanism and benchmark result.")
+    assert len(excerpt) > 1500

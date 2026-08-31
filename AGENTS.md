@@ -15,7 +15,7 @@ reimplementing collection, analysis, or publication.
 
 ## Daily run
 
-Production is LAN DeepSeek V4 Flash at 08:30 (including weekends):
+Production is LAN DeepSeek V4 Flash at 06:00 (including weekends):
 
 ```powershell
 .\scripts\run_daily.ps1 -RequireAI -Open

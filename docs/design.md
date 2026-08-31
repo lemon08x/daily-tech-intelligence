@@ -35,7 +35,7 @@
 
 **意见 vs 证据。** 合法后端是 OpenAI 兼容 API（局域网 DeepSeek / Qwen，或云端示例）。生产早间任务走局域网 API。不要在应用外重做采集、分析或发布。
 
-**双模型实验曾经存在，日常调度按配置是单模型。** Qwen 与 DeepSeek 用不同 SQLite（`data/intelligence_qwen.db` vs `data/intelligence_deepseek.db`）、不同 `experiment_id`、不同分析/Scout 缓存。`config/settings.deepseek.yaml` 把 `scout` / `analyst` / `verifier` / `digest_brief` 全部写成 `deepseek-v4-flash-0731`，base_url 为 `http://192.168.31.236:8000/v1`（**配置如此；本仓库测试不验证该主机可达，也不验证 08:30 现场一定连上 Flash**）。`config/settings.yaml` 里的云端 flash+pro 双模型只是示例。Qwen 3.8-27B（`启动日报-qwen.cmd`，`http://192.168.31.235:8317/v1`）是更快的本地改动验证后端，不覆盖 DeepSeek 缓存。局域网模型质量优先于省 token：思考开启；DeepSeek YAML 显式 `reasoning_effort: xhigh`；Qwen YAML **不**写 xhigh——注释称该端点显式传 xhigh 会被改写成 high 并 400（**端点行为，observed / configured，本仓库无自动化证明**）。两侧 `max_output_tokens: 32000`。
+**双模型实验曾经存在，日常调度按配置是单模型。** Qwen 与 DeepSeek 用不同 SQLite（`data/intelligence_qwen.db` vs `data/intelligence_deepseek.db`）、不同 `experiment_id`、不同分析/Scout 缓存。`config/settings.deepseek.yaml` 把 `scout` / `analyst` / `verifier` / `digest_brief` 全部写成 `deepseek-v4-flash-0731`，base_url 为 `http://192.168.31.236:8000/v1`（**配置如此；本仓库测试不验证该主机可达，也不验证 06:00 现场一定连上 Flash**）。`config/settings.yaml` 里的云端 flash+pro 双模型只是示例。Qwen 3.8-27B（`启动日报-qwen.cmd`，`http://192.168.31.235:8317/v1`）是更快的本地改动验证后端，不覆盖 DeepSeek 缓存。局域网模型质量优先于省 token：思考开启；DeepSeek YAML 显式 `reasoning_effort: xhigh`；Qwen YAML **不**写 xhigh——注释称该端点显式传 xhigh 会被改写成 high 并 400（**端点行为，observed / configured，本仓库无自动化证明**）。两侧 `max_output_tokens: 32000`。
 
 **今日速读（对外）。** `plain_digest.general_items` / `hardcore_items`：每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要「深/线索」徽章埋在速读里；产业/全球行情不进该列表。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。
 
@@ -702,7 +702,7 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 | 文件 | 角色 |
 | --- | --- |
 | `config/settings.yaml` | 云端 DeepSeek 示例：scout=flash、analyst/verifier=pro，库 `data/intelligence.db`。**不是早间任务配置。** 未配置 `git_brief`/`digest_brief` 时客户端回退到 `scout` 段 |
-| `config/settings.deepseek.yaml` | **日常定时任务配置。** LAN `http://192.168.31.236:8000/v1`，`OMLX_API_KEY`，库 `intelligence_deepseek.db`，五阶段同一 `deepseek-v4-flash-0731`，thinking + xhigh，32000 tokens。主机可达性 / 现场是否 08:30 跑 Flash：**configured，非本仓库测试** |
+| `config/settings.deepseek.yaml` | **日常定时任务配置。** LAN `http://192.168.31.236:8000/v1`，`OMLX_API_KEY`，库 `intelligence_deepseek.db`，五阶段同一 `deepseek-v4-flash-0731`，thinking + xhigh，32000 tokens。主机可达性 / 现场是否 06:00 跑 Flash：**configured，非本仓库测试** |
 | `config/settings.qwen.yaml` | 本地验证。LAN `http://192.168.31.235:8317/v1`，`QWEN_LAN_API_KEY`，库 `intelligence_qwen.db`。thinking enabled，**不**显式传 xhigh（YAML 注释：端点会 400；observed，非测试） |
 | `config/topics.yaml` | 八个主题 id/name：大模型与Agent、芯片算力、**机器人与具身智能**、云与开发工具、网络安全、智能汽车、能源科技、生物技术 |
 | `config/sources.yaml` | 分层白名单 + lane + publisher_id + 关键词预过滤 |
@@ -717,7 +717,7 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 | `启动日报-qwen.cmd` | 同上，强制 qwen yaml + `qwen3.8-27b` |
 | `scripts/run_daily.ps1` | 生产入口。Banner 打后端/配置/实验 id。UTF-8 `StreamWriter` 写 `logs/latest.log`，不用 `Tee-Object`。`PSNativeCommandUseErrorActionPreference=$false` 避免 pypdf stderr 变成 native 失败 |
 | `scripts/run_daily_agent.ps1` | 调度：生成 + `send_report.py` 邮件 |
-| `scripts/install_agent_task.ps1` | 每天（含周末）08:30，任务名「科技情报日报」，错过补跑，上限 **90** 分钟。Description 仍含「科技产业情报与A股观察日报」 |
+| `scripts/install_agent_task.ps1` | 每天（含周末）06:00，任务名「科技情报日报」，错过补跑，上限 **90** 分钟。Description 仍含「科技产业情报与A股观察日报」 |
 | `scripts/install_scheduled_task.ps1` | 可选工作日 18:10。默认**任务名**仍是 `A股每日信息精选`；Description「工作日生成科技产业情报与 A 股观察统一日报」；时限 **60** 分钟；已存在则抛错、不覆盖 |
 | `scripts/daily_agent_prompt.txt` | 无头 Harness 提示，第 1 行仍是「生成今日科技产业情报与A股观察日报」 |
 | `scripts/send_report.py` | 取当日 `runs/` 下最新含 `daily_digest.html` 的运行，SMTP 附件 HTML+MD |
@@ -835,7 +835,7 @@ Skill 路径曾被讨论（Harness 日常跑过 `qwen-code-agent`）。否决原
 
 ### B. 仅 Harness vs 仅 API vs 双后端端口（已选端口）
 
-仅 Harness：审计好，但早间 08:30 无人值守等待 `.response.json` 不现实。仅云端 API：简单，但密钥出网、双模型 A/B 成本高、局域网 Flash 用不上。本设计把二者都挂在 `LLMClient`：生产 LAN API，需要复盘时走文件桥。`run_meta` 记录实际 provider，禁止把每次运行都标成 Qwen Code。
+仅 Harness：审计好，但早间 06:00 无人值守等待 `.response.json` 不现实。仅云端 API：简单，但密钥出网、双模型 A/B 成本高、局域网 Flash 用不上。本设计把二者都挂在 `LLMClient`：生产 LAN API，需要复盘时走文件桥。`run_meta` 记录实际 provider，禁止把每次运行都标成 Qwen Code。
 
 ### C. 市场与情报耦合打分 vs 独立流水线（已选独立）
 
@@ -899,7 +899,7 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 
 已经在生产使用的「发布开关」就是配置文件和 CLI flag，没有 feature flag 服务。
 
-1. **日常：** `启动日报.cmd` 或计划任务 08:30 → `settings.deepseek.yaml` + `--require-ai`（按配置；现场连通性不在测试网内）。
+1. **日常：** `启动日报.cmd` 或计划任务 06:00 → `settings.deepseek.yaml` + `--require-ai`（按配置；现场连通性不在测试网内）。
 2. **改代码后的快速验证：** `启动日报-qwen.cmd`（独立库，不污染早间缓存）。
 3. **契约变更：** 先改 `tests/`，跑 `pytest`，再改 `policy_version` / `prompt_version`。
 4. **回滚：** 不覆盖历史 `runs/`；改回 YAML 或换回上一份配置再跑即可。`--force-analysis` 只影响当前 scope。

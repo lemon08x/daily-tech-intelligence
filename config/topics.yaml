@@ -22,4 +22,4 @@ topics:
     keywords: ["battery", "solar", "fusion", "grid", "energy storage", "hydrogen", "clean energy", "renewable", "heat pump", "nuclear", "geothermal", "electricity", "电池", "储能", "光伏", "核聚变", "核能", "电网", "氢能", "可再生能源", "地热"]
   - id: biotech
     name: "生物技术"
-    keywords: ["biotechnology", "drug discovery", "drug design", "protein", "molecule", "molecular", "genome", "genomics", "crispr", "bioinformatics", "ai4science", "alphafold", "生物技术", "药物发现", "药物设计", "蛋白质", "分子", "基因组", "生物信息学"]
+    keywords: ["biotechnology", "drug discovery", "drug design", "protein language", "genome language", "genomics model", "crispr", "bioinformatics", "ai4science", "alphafold", "生物技术", "药物发现", "药物设计", "蛋白质语言模型"]

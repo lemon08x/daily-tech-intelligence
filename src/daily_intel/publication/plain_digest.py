@@ -1,44 +1,20 @@
 from __future__ import annotations
 
-from typing import Any
-
 from daily_intel.core.models import Analysis
 from daily_intel.market.normalize import clean_text
 
 
-RANK_KEEP = 3
-
-INDEX_BOARD = (
-    (("sh000001", "000001"), "A股", "上证", ("上证",)),
-    (("sz399001", "399001"), "A股", "深证成指", ("深证成指", "深成指")),
-    (("sz399006", "399006"), "A股", "创业板", ("创业板",)),
-    (("sh000300", "000300"), "A股", "沪深300", ("沪深300",)),
-    (("ndx", "nasdaq"), "美欧", "纳斯达克", ("纳斯达克", "纳指")),
-    (("spx", "sp500"), "美欧", "标普500", ("标普",)),
-    (("djia", "dji"), "美欧", "道琼斯", ("道琼斯", "道指")),
-    (("hsi", "hangseng"), "亚太", "恒生", ("恒生",)),
-    (("n225", "nikkei"), "亚太", "日经225", ("日经",)),
-    (("ks11", "kospi"), "亚太", "韩国综指", ("韩国", "kospi")),
-    (("gdaxi", "dax"), "美欧", "德国DAX", ("dax", "德国")),
-    (("ftse",), "美欧", "英国富时", ("富时", "ftse", "伦敦")),
-)
-
-COMMODITY_BOARD = (
-    ("黄金", "商品", "黄金"),
-    ("原油", "商品", "原油"),
-    ("铜", "商品", "铜"),
-)
-
 TOPIC_KICKERS = (
+    ("政策", ("政策", "监管", "制裁", "关税", "管制", "禁令", "出口管制")),
     ("机器人", ("robot", "robotics", "embodied", "humanoid", "具身", "机械臂", "机器人", "vla")),
     ("生物", ("protein", "phage", "molecule", "molecular", "smiles", "crispr", "alphafold", "基因组", "蛋白质", "药物", "生物", "分子")),
     ("航天", ("nasa", "rocket", "spacecraft", "mars", "火箭", "航天", "火星", "核热")),
     ("能源", ("battery", "nuclear", "solar", "fusion", "储能", "光伏", "氢能", "核电", "电网")),
-    ("安全", ("security", "cyber", "vulnerability", "malware", "安全", "漏洞", "入侵")),
+    ("安全", ("security", "cyber", "vulnerability", "malware", "网络安全", "信息安全", "漏洞", "入侵", "设备指纹")),
     ("汽车", ("autonomous", "self-driving", "lidar", "adas", "自动驾驶", "智能汽车")),
-    ("芯片", ("gpu", "hbm", "semiconductor", "cuda", "nvfp4", "芯片", "算力", "光刻", "晶圆")),
+    ("模型", ("language model", "llm", "moe", "attention", "agent", "qwen", "大模型", "语言模型", "智能体", "注意力", "ai代理")),
     ("软件", ("compiler", "framework", "transformers", "pytorch", "github", "runtime", "开源库")),
-    ("模型", ("language model", "llm", "moe", "attention", "agent", "qwen", "大模型", "智能体", "注意力")),
+    ("芯片", ("gpu", "hbm", "semiconductor", "cuda", "nvfp4", "芯片", "算力", "光刻", "晶圆")),
 )
 
 
@@ -64,7 +40,7 @@ def _scan_line(analysis: Analysis) -> str:
     return _one_sentence(_takeaway(analysis)) or clean_text(analysis.headline, 80)
 
 
-def _match_kicker(text: str) -> str:
+def match_kicker(text: str) -> str:
     haystack = text.lower()
     for label, keywords in TOPIC_KICKERS:
         if any(keyword.lower() in haystack for keyword in keywords):
@@ -75,118 +51,16 @@ def _match_kicker(text: str) -> str:
 def _topic_kicker(analysis: Analysis) -> str:
     # Match the scan line first. Key facts can mention side topics (e.g. a
     # Transformers release that also ships a protein model) and must not win.
-    primary = _match_kicker(f"{analysis.headline} {_scan_line(analysis)}")
+    primary = match_kicker(f"{analysis.headline} {_scan_line(analysis)}")
     if primary:
         return primary
-    return _match_kicker(" ".join(analysis.key_facts)) or "科技"
-
-
-def _signed_percent(value: Any) -> str:
-    from daily_intel.publication.reporting import format_number
-
-    number = format_number(value)
-    if number == "—":
-        return number
-    prefix = "+" if float(value) > 0 else ""
-    return f"{prefix}{number}%"
-
-
-def _bare_code(value: Any) -> str:
-    return str(value or "").lower().replace("sh", "").replace("sz", "").replace("bj", "")
-
-
-def _match_quote(rows: list[dict[str, Any]], codes: tuple[str, ...], hints: tuple[str, ...]) -> dict[str, Any] | None:
-    wanted = {_bare_code(item) for item in codes}
-    for row in rows:
-        if _bare_code(row.get("code")) in wanted:
-            return row
-    for row in rows:
-        name = str(row.get("name") or "")
-        if any(hint.lower() in name.lower() for hint in hints if hint):
-            return row
-    return None
-
-
-def _ranked_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    valid = [row for row in rows if row.get("pct_change") is not None]
-    return sorted(valid, key=lambda row: float(row["pct_change"]), reverse=True)
-
-
-def _top_and_bottom(ranked: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
-    if not ranked:
-        return []
-    keep = RANK_KEEP
-    picked: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for row in [*ranked[:keep], *ranked[-keep:]]:
-        name = str(row.get(key) or "").strip()
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        picked.append(row)
-    return sorted(picked, key=lambda row: float(row["pct_change"]), reverse=True)
-
-
-def _industry_bars(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    ranked = _ranked_rows(rows)
-    slim: list[dict[str, Any]] = []
-    for row in ranked:
-        name = str(row.get("name") or "").strip()
-        if not name:
-            continue
-        slim.append({
-            "name": name,
-            "pct_change": float(row["pct_change"]),
-            "leader": str(row.get("leader") or "").strip(),
-        })
-    picked = _top_and_bottom(slim, "name")
-    peak = max((abs(item["pct_change"]) for item in picked), default=1.0) or 1.0
-    for item in picked:
-        item["width"] = round(min(100.0, abs(item["pct_change"]) / peak * 100), 1)
-        item["direction"] = "up" if item["pct_change"] >= 0 else "down"
-        item["label"] = _signed_percent(item["pct_change"])
-        filled = max(1, int(round(item["width"] / 12.5)))
-        item["spark"] = "█" * filled + "░" * (8 - filled)
-    return picked
-
-
-def _board_item(region: str, label: str, row: dict[str, Any]) -> dict[str, Any]:
-    change = row.get("pct_change")
-    return {
-        "region": region,
-        "label": label,
-        "price": row.get("price"),
-        "pct_change": None if change is None else float(change),
-        "direction": "up" if change is not None and float(change) >= 0 else "down",
-        "label_change": _signed_percent(change),
-    }
-
-
-def build_market_board(context: dict[str, Any]) -> list[dict[str, Any]]:
-    quotes = list(context.get("index_records") or []) + list(context.get("global_index_records") or [])
-    candidates: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for codes, region, label, hints in INDEX_BOARD:
-        row = _match_quote(quotes, codes, hints)
-        if row is None or label in seen or row.get("pct_change") is None:
-            continue
-        seen.add(label)
-        candidates.append(_board_item(region, label, row))
-    commodities = list(context.get("commodity_records") or [])
-    for hint, region, label in COMMODITY_BOARD:
-        row = _match_quote(commodities, (), (hint,))
-        if row is None or label in seen or row.get("pct_change") is None:
-            continue
-        seen.add(label)
-        candidates.append(_board_item(region, label, row))
-    ranked = sorted(candidates, key=lambda item: float(item["pct_change"]), reverse=True)
-    return _top_and_bottom(ranked, "label")
+    return match_kicker(" ".join(analysis.key_facts)) or "科技"
 
 
 def build_plain_digest(
-    analyses: list[Analysis], context: dict[str, Any],
+    analyses: list[Analysis], context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Scan paragraph plus lane lists for the 科技 tab. Market lists stay on 市场情报."""
+    """Lane scan lists for 今日速读. Market news is assembled separately."""
     tech_items = []
     general_items = []
     hardcore_items = []
@@ -206,18 +80,9 @@ def build_plain_digest(
             general_items.append(item)
         else:
             hardcore_items.append(item)
-    industries = list(context.get("industry_records") or [])
-    if not industries:
-        industries = list(context.get("hot_industry_records") or []) + list(
-            context.get("weak_industry_records") or []
-        )
-    industry_bars = _industry_bars(industries)
-    board = build_market_board(context)
     return {
         "tech_items": tech_items,
         "general_items": general_items,
         "hardcore_items": hardcore_items,
-        "industry_bars": industry_bars,
-        "board": board,
-        "has_content": bool(tech_items or industry_bars or board),
+        "has_content": bool(tech_items),
     }

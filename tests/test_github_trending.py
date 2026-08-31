@@ -5,8 +5,15 @@ from datetime import datetime, timedelta, timezone
 from daily_intel.core.models import (
     Analysis, AnalysisQuality, AnalysisStatus, Document, Event, Evidence,
 )
-from daily_intel.github.pipeline import annotate_github_visuals
-from daily_intel.github.trending import merge_trending, parse_trending_html
+from daily_intel.core.models import GitProjectBrief, GitBriefingBatch
+from daily_intel.github.pipeline import annotate_github_visuals, apply_git_brief
+from daily_intel.github.trending import (
+    fetch_github_project_context,
+    fetch_github_readme,
+    merge_trending,
+    parse_trending_html,
+)
+from daily_intel.intelligence.prompts import git_brief_user
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.selection import EventSelector
 
@@ -61,6 +68,68 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
     assert annotated[0]["today_width"] == 100
     assert annotated[0]["week_width"] == 100
     assert annotated[0]["stars_total_label"] == "15万"
+    assert annotated[0]["plain"].startswith("State-of-the-art")
+    assert "这是一个" not in annotated[0]["plain"]
+    apply_git_brief(
+        GitBriefingBatch(items=[GitProjectBrief(
+            full_name="huggingface/transformers",
+            kicker="模型",
+            function="给开发者提供现成的模型接口，用来加载和运行各种大模型。",
+        )]),
+        annotated,
+    )
+    assert annotated[0]["kicker"] == "模型"
+    assert "加载和运行" in annotated[0]["plain"]
+
+
+class _FakeResponse:
+    def __init__(self, text: str = "", payload: object | None = None, status_code: int = 200) -> None:
+        self.text = text
+        self.status_code = status_code
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"http {self.status_code}")
+
+    def json(self) -> object:
+        return self._payload
+
+
+def test_fetch_github_readme_and_manifest_when_readme_is_thin(monkeypatch) -> None:
+    def fake_get(url, timeout=0, headers=None, **kwargs):
+        if url.endswith("/readme"):
+            return _FakeResponse("# tiny\n")
+        if url.endswith("/contents/"):
+            return _FakeResponse(payload=[
+                {"name": "README.md"},
+                {"name": "package.json"},
+                {"name": "src"},
+            ])
+        if url.endswith("/contents/package.json"):
+            return _FakeResponse(payload={
+                "encoding": "utf-8",
+                "content": '{"name":"demo","description":"Load models for apps"}',
+            })
+        raise AssertionError(url)
+
+    monkeypatch.setattr("daily_intel.github.trending.http_get", fake_get)
+    context = fetch_github_project_context("acme/demo")
+    assert context["readme"].startswith("# tiny")
+    assert "package.json" in context["root_files"]
+    assert "Load models for apps" in context["manifest"]
+
+    long_readme = fetch_github_readme("acme/demo")
+    assert long_readme.startswith("# tiny")
+    payload = git_brief_user([{
+        "full_name": "acme/demo",
+        "description": "demo",
+        "language": "Python",
+        "readme": "# Load and run language models\n",
+        "root_files": "README.md src",
+        "manifest": "",
+    }])
+    assert "Load and run language models" in payload
 
 
 def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:

@@ -41,14 +41,15 @@ feeds:
   - {id: nature_biotech, name: Nature Biotechnology, url: "https://www.nature.com/nbt.rss", tier: 1, fetch_full_text: true}
   - {id: us_doe, name: U.S. Department of Energy, url: "https://www.energy.gov/rss.xml", tier: 1, fetch_full_text: true}
 
-  # AI4Science 预印本。先做主题过滤，入选后再提取原文。
+  # AI4Science 预印本。必须提到计算/模型方法，不能只因为基因组或蛋白质就入选。
   - id: biorxiv_ai4science
     name: bioRxiv（AI4Science过滤）
     url: "https://connect.biorxiv.org/biorxiv_xml.php?subject=all"
     tier: 1
     content_type: paper
     fetch_full_text: true
-    include_keywords: [machine learning, artificial intelligence, foundation model, deep learning, protein, genome, genomic, CRISPR, drug, molecule, biotechnology, bioinformatics]
+    max_items: 8
+    include_keywords: [machine learning, artificial intelligence, foundation model, deep learning, neural network, language model, alphafold, protein language, diffusion model, ai4science]
 
   # 有编辑筛选的行业源，只作为第二来源或产业动态线索。
   - {id: ieee_spectrum, name: IEEE Spectrum, url: "https://spectrum.ieee.org/feeds/feed.rss", tier: 2, fetch_full_text: true}
@@ -152,7 +153,7 @@ feeds:
     url: "https://feeds.arstechnica.com/arstechnica/index"
     tier: 2
     lane: general
-    fetch_full_text: false
+    fetch_full_text: true
     max_items: 10
     include_keywords: [AI, chip, GPU, software, security, linux, cloud, open source, semiconductor, robot, model]
   - id: phoronix
@@ -161,7 +162,7 @@ feeds:
     url: "https://www.phoronix.com/rss.php"
     tier: 2
     lane: general
-    fetch_full_text: false
+    fetch_full_text: true
     max_items: 8
   - id: infoq_en
     publisher_id: infoq
@@ -169,7 +170,7 @@ feeds:
     url: "https://feed.infoq.com"
     tier: 2
     lane: general
-    fetch_full_text: false
+    fetch_full_text: true
     max_items: 8
     include_keywords: [AI, architecture, cloud, kubernetes, database, java, python, rust, javascript, security, devops]
   - id: solidot
@@ -178,7 +179,7 @@ feeds:
     url: "https://www.solidot.org/index.rss"
     tier: 2
     lane: general
-    fetch_full_text: false
+    fetch_full_text: true
     max_items: 10
     include_keywords: [AI, Linux, 开源, 安全, 芯片, 软件, 微软, 谷歌, 苹果, 机器人, 数据库, 编程]
 
