@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import datetime, timedelta, timezone
 
 from daily_intel.core.models import (
@@ -47,6 +48,17 @@ WEEKLY_HTML = """
 </article>
 """
 
+SPONSORED_BUTTON_HTML = """
+<article class="Box-row">
+  <div class="float-right"><a href="/sponsors/DietrichGebert">Sponsor</a></div>
+  <h2><a href="/DietrichGebert/ponytail">DietrichGebert / ponytail</a></h2>
+  <p>Makes agents careful &amp; concise.</p>
+  <span itemprop="programmingLanguage">JavaScript</span>
+  <a href="/DietrichGebert/ponytail/stargazers">121,914</a>
+  <span>1,354 stars today</span>
+</article>
+"""
+
 
 def test_parse_and_merge_hottest_and_fastest() -> None:
     daily = parse_trending_html(DAILY_HTML, "daily")
@@ -65,21 +77,35 @@ def test_parse_and_merge_hottest_and_fastest() -> None:
     assert "vercel/next.js" in names
     annotated = annotate_github_visuals(merged)
     assert len(annotated) == 3
-    assert annotated[0]["today_width"] == 100
-    assert annotated[0]["week_width"] == 100
+    assert "today_width" not in annotated[0]
+    assert "week_width" not in annotated[0]
     assert annotated[0]["stars_total_label"] == "15万"
     assert annotated[0]["plain"].startswith("State-of-the-art")
     assert "这是一个" not in annotated[0]["plain"]
     apply_git_brief(
         GitBriefingBatch(items=[GitProjectBrief(
             full_name="huggingface/transformers",
-            kicker="模型",
+            kicker="YouTube替代",
             function="给开发者提供现成的模型接口，用来加载和运行各种大模型。",
+            use_cases=[
+                "应用开发者在服务中加载预训练模型，直接完成文本分类或生成任务。",
+                "研究人员替换模型配置，对比不同架构在同一数据集上的效果。",
+            ],
         )]),
         annotated,
     )
-    assert annotated[0]["kicker"] == "模型"
+    assert annotated[0]["kicker"] == "YouTube替代"
     assert "加载和运行" in annotated[0]["plain"]
+    assert len(annotated[0]["use_cases"]) == 2
+
+
+def test_trending_parser_uses_repository_heading_not_sponsor_button() -> None:
+    rows = parse_trending_html(SPONSORED_BUTTON_HTML, "daily")
+    assert len(rows) == 1
+    assert rows[0]["full_name"] == "DietrichGebert/ponytail"
+    assert rows[0]["url"] == "https://github.com/DietrichGebert/ponytail"
+    assert rows[0]["description"] == "Makes agents careful & concise."
+    assert rows[0]["stars_total"] == 121914
 
 
 class _FakeResponse:
@@ -130,6 +156,59 @@ def test_fetch_github_readme_and_manifest_when_readme_is_thin(monkeypatch) -> No
         "manifest": "",
     }])
     assert "Load and run language models" in payload
+
+
+def test_fetch_github_readme_falls_back_to_raw_when_api_is_rate_limited(monkeypatch) -> None:
+    requested: list[str] = []
+
+    def fake_get(url, timeout=0, headers=None, **kwargs):
+        requested.append(url)
+        if url == "https://api.github.com/repos/acme/demo/readme":
+            return _FakeResponse(status_code=403)
+        if url == "https://raw.githubusercontent.com/acme/demo/HEAD/README.md":
+            return _FakeResponse("# Demo\nRun a local task server for a development team.\n")
+        return _FakeResponse(status_code=404)
+
+    monkeypatch.setattr("daily_intel.github.trending.http_get", fake_get)
+    readme = fetch_github_readme("acme/demo")
+    assert readme.startswith("# Demo")
+    assert requested[:2] == [
+        "https://api.github.com/repos/acme/demo/readme",
+        "https://raw.githubusercontent.com/acme/demo/HEAD/README.md",
+    ]
+
+
+def test_fetch_github_context_includes_bounded_source_entry(monkeypatch) -> None:
+    def encoded(text: str) -> dict[str, str]:
+        return {
+            "encoding": "base64",
+            "content": base64.b64encode(text.encode()).decode(),
+        }
+
+    def fake_get(url, timeout=0, headers=None, **kwargs):
+        if url.endswith("/readme"):
+            return _FakeResponse("# Demo\nBuild a local task server for teams.\n")
+        if url.endswith("/contents/"):
+            return _FakeResponse(payload=[
+                {"name": "README.md", "path": "README.md", "type": "file"},
+                {"name": "pyproject.toml", "path": "pyproject.toml", "type": "file"},
+                {"name": "src", "path": "src", "type": "dir"},
+            ])
+        if url.endswith("/contents/pyproject.toml"):
+            return _FakeResponse(payload=encoded('[project]\nname = "demo"'))
+        if url.endswith("/contents/src"):
+            return _FakeResponse(payload=[
+                {"name": "main.py", "path": "src/main.py", "type": "file"},
+            ])
+        if url.endswith("/contents/src/main.py"):
+            return _FakeResponse(payload=encoded("def serve_tasks():\n    return TaskServer()\n"))
+        raise AssertionError(url)
+
+    monkeypatch.setattr("daily_intel.github.trending.http_get", fake_get)
+    context = fetch_github_project_context("acme/demo")
+    assert "name = \"demo\"" in context["manifest"]
+    assert context["source_excerpt"].startswith("src/main.py:")
+    assert "TaskServer" in context["source_excerpt"]
 
 
 def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:

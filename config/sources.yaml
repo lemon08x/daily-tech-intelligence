@@ -69,22 +69,14 @@ feeds:
     max_items: 15
     include_keywords: [battery, energy storage, grid, solar, fusion, hydrogen, heat pump, renewable, clean energy, nuclear, electricity]
 
-  # 泛读：科技周刊与投稿池。Tier 2/3 不能单独支撑深度结论。
-  - id: ruanyf_weekly_issues
-    publisher_id: ruanyf_weekly
-    name: "阮一峰周刊投稿池"
-    url: "https://github.com/ruanyf/weekly/issues.atom"
-    tier: 3
-    lane: general
-    content_type: weekly_issue
-    unshorten: true
-    fetch_full_text: false
-    max_items: 15
-    include_keywords: [AI, LLM, GPU, GitHub, open source, model, agent, 开源, 大模型, 工具, 芯片, 机器人, 数据库, 安全, python, rust]
+  # 泛读：科技周刊。Tier 2/3 不能单独支撑深度结论。
   - id: hacker_newsletter
     publisher_id: hacker_newsletter
     name: Hacker Newsletter
     url: "https://hackernewsletter.com/rss.xml"
+    # 2026-09-02：官方端点持续返回 404，官网未声明替代 Feed。
+    # 保留配置用于后续复查，但不再让固定失败污染每日来源状态。
+    enabled: false
     tier: 2
     lane: general
     unshorten: true
@@ -114,6 +106,9 @@ feeds:
     publisher_id: tldr
     name: TLDR AI
     url: "https://tldr.tech/ai/rss"
+    # 2026-09-02：AI 专栏端点持续返回 404，页面未声明替代 Feed。
+    # TLDR Tech 的正常 RSS 内容不同，不能冒充 TLDR AI。
+    enabled: false
     tier: 2
     lane: general
     unshorten: true
@@ -192,7 +187,8 @@ sitemaps:
     fetch_full_text: true
     fetch_page_metadata: true
     max_items: 15
-    include_paths: [/news/, /research/, /engineering/]
+    include_paths: [/news/, /research/, /engineering/, /claude-]
+    path_topic_hints: {/claude-: foundation_models}
     exclude_paths: [/research/team/]
   - id: isomorphic_labs_articles
     name: Isomorphic Labs Articles
@@ -203,7 +199,7 @@ sitemaps:
     max_items: 10
     include_paths: [/articles/]
 
-# 社区排序只负责发现；文档身份、链接和证据仍归属原始 arXiv 论文。
+# API 来源：社区论文排序和逐条 Issue 投稿发现。
 apis:
   - id: huggingface_daily_papers
     type: huggingface_daily_papers
@@ -212,6 +208,15 @@ apis:
     url: "https://huggingface.co/api/daily_papers"
     tier: 1
     max_items: 15
+  - id: ruanyf_weekly_issues
+    type: github_issues
+    repo: ruanyf/weekly
+    publisher_id: ruanyf_weekly
+    name: "阮一峰周刊投稿池"
+    tier: 3
+    lane: general
+    content_type: weekly_issue
+    max_items: 30
 
 github_releases:
   # 国际关键开源基础设施。

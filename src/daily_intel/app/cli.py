@@ -64,7 +64,19 @@ def run_doctor(config_path: Path) -> int:
     return 0
 
 
+def _configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (OSError, ValueError, AttributeError):
+            continue
+
+
 def main(argv: list[str] | None = None) -> int:
+    _configure_stdio()
     args = build_parser().parse_args(argv)
     try:
         if args.command == "doctor":
@@ -81,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
             webbrowser.open(outputs["html"].resolve().as_uri())
         return 0
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        if isinstance(exc, UnicodeError):
+            raise
         print(f"失败：{exc}", file=sys.stderr)
         return 2
 

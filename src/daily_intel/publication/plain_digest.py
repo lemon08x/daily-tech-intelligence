@@ -57,6 +57,14 @@ def _topic_kicker(analysis: Analysis) -> str:
     return match_kicker(" ".join(analysis.key_facts)) or "科技"
 
 
+def group_analyses_by_topic(analyses: list[Analysis]) -> list[Analysis]:
+    """Keep first-seen topic order and original Scout order inside each topic."""
+    groups: dict[str, list[Analysis]] = {}
+    for analysis in analyses:
+        groups.setdefault(_topic_kicker(analysis), []).append(analysis)
+    return [analysis for group in groups.values() for analysis in group]
+
+
 def build_plain_digest(
     analyses: list[Analysis], context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:

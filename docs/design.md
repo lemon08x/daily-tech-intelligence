@@ -19,11 +19,11 @@
 
 ## Overview
 
-本仓库是一份可每日运行的**模块化单体应用**，不是 Skill、不是对话代理、也不是选股系统。一次安装、一个 CLI（`daily-intel`）、一份 HTML 日报：从权威白名单采集科技前沿信息，经 72 小时**库内**聚类、65/35 受限选题、按需全文增强、深研、独立校验和确定性质量门，再并入 GitHub 热门项目与产业/全球市场作为**信息源**，发布到 `output/YYYY-MM-DD/runs/<run-name>/daily_digest.html`。
+本仓库是一份可每日运行的**模块化单体应用**，不是 Skill、不是对话代理、也不是选股系统。一次安装、一个 CLI（`daily-intel`）、一份 HTML 日报：科技白名单与 AkShare 市场快讯统一经过 72 小时**库内**聚类、35/65 融合 Scout、全文增强、逐事件深研、独立校验和确定性质量门，再与 GitHub 热门项目一起发布到 `output/YYYY-MM-DD/runs/<run-name>/daily_digest.html`。
 
-总的设计思路可以压成一句话：**模型只生成候选结构，程序拥有去重、裁剪、证据核验、质量裁决和发布规格。** 换模型不能改变“什么可以作为深度结论”。市场（A 股 / 全球）解释的是会引发交易的事件，不是观察名单。产品标题已是「科技产业情报日报」；用户可见的启动器、YAML `app.title` 和 HTML 模板已去掉「A股观察」，但计划任务描述、旧发行名、部分脚本仍有残留（见 Open Question 4 / PR 2）。科技页不展示个股扫描。
+总的设计思路可以压成一句话：**模型只生成候选结构，程序拥有去重、证据核验、质量裁决和发布规格。** 换模型不能改变“什么可以作为深度结论”。AkShare 是 Tier 3 雷达，不是独立选题或观察名单；它与其他内容使用同一个 Scout。产品标题已是「科技产业情报日报」，日报不展示个股扫描。
 
-对外「今日速读」是按分析条目列出的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。市场热点文案来自 `digest_brief.market_news`。
+对外「今日速读」是精读结果的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。主页面按 Scout 顺序从材料达到门槛的结果中补足最多十条“精读”，材料过短及其余结果进入“泛读”；`digest_brief` 不再参与日常发布。
 
 ---
 
@@ -37,15 +37,15 @@
 
 **双模型实验曾经存在，日常调度按配置是单模型。** Qwen 与 DeepSeek 用不同 SQLite（`data/intelligence_qwen.db` vs `data/intelligence_deepseek.db`）、不同 `experiment_id`、不同分析/Scout 缓存。`config/settings.deepseek.yaml` 把 `scout` / `analyst` / `verifier` / `digest_brief` 全部写成 `deepseek-v4-flash-0731`，base_url 为 `http://192.168.31.236:8000/v1`（**配置如此；本仓库测试不验证该主机可达，也不验证 06:00 现场一定连上 Flash**）。`config/settings.yaml` 里的云端 flash+pro 双模型只是示例。Qwen 3.8-27B（`启动日报-qwen.cmd`，`http://192.168.31.235:8317/v1`）是更快的本地改动验证后端，不覆盖 DeepSeek 缓存。局域网模型质量优先于省 token：思考开启；DeepSeek YAML 显式 `reasoning_effort: xhigh`；Qwen YAML **不**写 xhigh——注释称该端点显式传 xhigh 会被改写成 high 并 400（**端点行为，observed / configured，本仓库无自动化证明**）。两侧 `max_output_tokens: 32000`。
 
-**今日速读（对外）。** `plain_digest.general_items` / `hardcore_items`：每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要「深/线索」徽章埋在速读里；产业/全球行情不进该列表。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。
+**今日速读（对外）。** `plain_digest.tech_items`：精读条目的每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要把「深/线索」徽章埋在速读里。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。精读卡和速读共享同一份按首次出现主题稳定分组的列表，同主题相邻，组内仍是 Scout 顺序。
 
-**市场。** 事件成因情报，不是资金流向。过滤 ST/股票简称变更、中报营收噪音、北向净流入一类 FLOW。事件过少时用重要非噪音新闻填满。指标只留涨幅前三、跌幅后三，不分析涨跌原因。热点合并「影响与后果」+「依据」。日报不展示个股扫描。`market/scoring.py` 只计算涨跌家数等 breadth。`plain_digest.INDEX_BOARD` 里的「A股 上证」是地理标签，不是旧产品名。
+**AkShare 市场雷达。** `MarketPipeline` 只负责合并、标准化快讯以及交易日/来源状态；`market.radar_news` 由编排器传入 `DocumentCollector.radar_documents`，以 Tier 3 `news_radar` 文档进入统一 Scout。旧的关键词 `rank_market_news` 和独立市场发布链已移除。
 
 **重复发表惩罚。** 前一天已经发布过的科技事件，第二天入选权重乘 `0.4`（`selection_repeat_penalty`，窗口 36 小时，跨日且有新文档时略回升）。同库多实验时该查询**不**按 `cache_scope` 过滤，见 §5 与 PR 4。
 
-**Git 页。** 只抓 GitHub 今日最热 + 本周增长最快。卡片展示当前总星标和一句话说明。不要 Hugging Face / GitLab、不要使用场景、不要语言热度看板、不要「此为推演」。
+**Git 页。** 只抓 GitHub 今日最热 + 本周增长最快。仓库身份只取 Trending 卡片标题链接，不能把前置 Sponsor 按钮当成仓库。AI 逐仓库对照 README、清单和源码入口生成中文功能说明与具体使用场景；API 匿名额度耗尽时 README 回退到 `raw.githubusercontent.com`。卡片展示当前总星标，日/周增量只在副标题出现，不绘制相对峰值进度条。不要 Hugging Face / GitLab、不要语言热度看板、不要「此为推演」。
 
-**科技分栏。** 泛读（周刊、IT 热点、社区精选）vs 硬核（论文、官方发布、基础设施 Release）。周刊包括 ruanyf、Hacker Newsletter、Import AI、TLDR、Golang/JS Weekly；IT 热点包括 HN、Ars Technica、Phoronix、InfoQ、Solidot。短链必须还原。Tier 2/3 缺少一手来源时不能升成深度结论。
+**精读与泛读。** `preferred_general_events` / `preferred_hardcore_events` 仍用于排序覆盖，但不再形成用户可见的子栏目，也不限制深研。Scout 保留项全部研究；AI 结果至少要有 2 条有效证据，且去除重复与包含关系后的可定位引文总量不少于 160 字，才有资格按 Scout 顺位补足最多 10 个完整精读卡。材料不足及名额外结果按主题词聚类显示泛读短句，组内保留 Scout 顺序。Tier 2/3 缺少一手来源时不能升成深度结论。
 
 **Windows。** `pypdf` 往 stderr 打警告不得中断运行；PowerShell `Tee-Object` 编码会弄坏中文；`cmd.exe` 的 UTF-8 中文解析不稳定，所以根启动器是 ASCII-safe `.cmd`。
 
@@ -69,7 +69,7 @@
 - 不是 Skill / 对话代理 / Harness 文件桥。
 - 不在应用内调用 Qlib / RD-Agent（二者只作为 GitHub Release 信源）。
 - 不在日期根目录写报告副本或 `latest_run.json`（历史目录里的旧副本保留不删）。
-- 不把市场快照写成 AI 分析，也不让科技分析改写市场热点排序。
+- 不让 AkShare 快讯绕过统一 Scout 和质量门直接发布。
 - 测试不替代读日报，不调用真实模型和外网。
 - 不把 `INDEX_BOARD` 的「A股」地理标签当成旧产品名清掉。
 
@@ -85,7 +85,7 @@
 | --- | --- |
 | `core` | 契约变了才动 |
 | `intelligence` | 信源、选题、深研、质量规则 |
-| `market` | 行情适配与规则评分 |
+| `market` | AkShare 快讯、交易日与缓存适配 |
 | `github` | 开源热门榜 |
 | `infrastructure` | SQLite、HTTP、某个模型厂商 |
 | `publication` | 模板和推送 |
@@ -130,13 +130,9 @@
 
 换模型、换 Harness、换提示词，都不能绕过这扇门直接构造 `AnalysisStatus.DEEP`。
 
-### 3. 科技产业情报，市场只是雷达
+### 3. AkShare 是统一情报链的 Tier 3 雷达
 
-市场流水线回答「今天产业和全球发生了什么、哪些公开事件可能成为交易原因」。它不回答「买哪只股票」。因此：
-
-- 日报 UI 只有涨跌前三/后三 + 热点（影响与后果、依据）。
-- `rank_market_news` 把新闻分成 CAUSE / FLOW / EARNINGS / TICKER_ADMIN，只让 CAUSE 进热点，不够再填重要非噪音。
-- 市场快讯转成 `Document` 时 `source_tier=3`、`content_type=news_radar`，不能单独支撑深度结论。
+市场流水线不再拥有独立的选题或发布列表。它只合并同花顺/新浪快讯、标准化字段并记录交易日与来源状态。完整 `radar_news` 在编排器中交给 `IntelligencePipeline`，再由 `DocumentCollector.radar_documents` 转成 `source_tier=3`、`content_type=news_radar` 的文档。此后与科技白名单一样聚类、进入 Scout、深研和质量门；Tier 3 快讯不能单独支撑深度结论。
 
 ### 4. 证据身份与采集身份分离
 
@@ -169,24 +165,19 @@
 ## Proposed Design（现况运行流）
 
 ```text
-SourceAdapter[] ──> DocumentCollector ──> EventCatalog ──> EventSelector
-     本批 Document              upsert 后对 recent_documents(72h) 聚类
-                                                       │
-                                                       v
-                         AnalysisQualityGate <── EventResearcher <── ModelStageRunner
-                                  │
-                                  v
-MarketWorkflow ──┐
-GitHubTrending ──┼──> app/orchestrator ──> digest_brief（热点文案 + 内部 scan_paragraph）
-                 │                              │
-                 │                              v
-                 │                         DigestPublisher
-                 │                              │
-                 │                              └── process_trace（process.html / process.json）
-                 └── 不进入彼此的分数路径
+SourceAdapter[] ────────────────> DocumentCollector ──> EventCatalog ──> EventSelector
+                                      ^                                  │
+                                      │ AkShare radar_news               v
+MarketWorkflow ───────────────────────┘       AnalysisQualityGate <── EventResearcher
+                                                      │
+GitHubTrending ────────────────> app/orchestrator <────┘
+                                      │
+                                      v
+                              DigestPublisher
+                         精读合格前十 / 泛读其余 / Git
 ```
 
-对外「今日速读」列表在 `[2/6]` 之后由 `build_plain_digest(analyses)` 从 `Analysis` 生成，不经过 `digest_brief`。
+对外「今日速读」由精读合格项生成；泛读短句由剩余 `Analysis` 生成，两者都不经过 `digest_brief`。
 
 编排器实际顺序（`run_application()`，带 `[1/6]…[6/6]`）：
 
@@ -197,25 +188,23 @@ sequenceDiagram
     participant Mkt as MarketPipeline
     participant Intel as IntelligencePipeline
     participant Git as GitHubTrendingPipeline
-    participant Brief as digest_brief
     participant Pub as FileDigestPublisher
     participant Repo as SQLiteIntelligenceRepository
 
     CLI->>Orch: load_settings + flags
     Orch->>Repo: start_run
     Orch->>Mkt: [1/6] 运行市场数据
-    Mkt-->>Orch: snapshot, radar_news, context
-    Orch->>Intel: [2/6] 采集、去重并聚类；选题；深研与质量门
+    Mkt-->>Orch: radar_news, trading-day/source status
+    Orch->>Intel: [2/6] radar_news + 科技源；全量Scout；全量深研与质量门
     Intel-->>Orch: analyses, quality, process
-    Orch->>Git: [3/6] trending + HF + GitLab + git_brief
+    Orch->>Git: [3/6] GitHub Trending + git_brief
     Git-->>Orch: projects
-    Note over Orch: build_plain_digest：对外今日速读列表
-    Orch->>Brief: [4/6] digest_brief + apply_digest_brief（热点文案；scan_paragraph 仅过程页）
-    Orch->>Pub: [5/6] HTML/MD/JSON/CSV/process
+    Note over Orch: [4/6] 材料门 + 顺位补足精读 / 泛读其余
+    Orch->>Pub: [5/6] 只写 daily_digest.html
     Orch->>Repo: [6/6] finish_run(success)
 ```
 
-现场进度字符串：`[4/6] 汇总分析、质量门与页签数据…`（质量门其实已在 `[2/6]` 的 `EventResearcher` 内完成）。`当前：撰写今日速读和市场事件分析…` 指的是 `digest_brief` 模型调用，其中对外读者看到的「今日速读」列表并不来自这段模型输出。
+现场进度字符串：`[4/6] 汇总分析、质量门与页签数据…`；质量门实际已在 `[2/6]` 的 `EventResearcher` 内逐事件完成。该阶段只补 Git 说明并切分展示层，不再调用独立市场摘要模型。
 
 一次运行由 `experiment_id`、唯一 `run_name`（默认 `{HHMMSS}-{run_id:04d}-{experiment_id}`）和模型指纹共同标识。产物只写 `output/YYYY-MM-DD/runs/<run-name>/`。若该目录已有日报文件，`publish()` 抛 `FileExistsError`，拒绝覆盖。
 
@@ -247,7 +236,7 @@ sequenceDiagram
 
 ### `app/orchestrator.py` — 唯一汇合点
 
-**理念。** 市场、情报、Git 三条流水线在这里才第一次见面。编排器组装发布上下文和 `process` 载荷，但不实现抓取、提示词或证据判断。
+**理念。** AkShare、情报、Git 三条采集路径在这里汇合。编排器把 `market.radar_news` 明确传给情报流水线，并组装发布上下文，但不实现抓取、提示词或证据判断。
 
 **需求。**
 
@@ -256,12 +245,13 @@ sequenceDiagram
 - 先 `install_proxy_fallback()`，再跑市场。
 - `require_ai and (offline or no_ai)` 立即 `RuntimeError`。
 - 进度行：`[1/6] 运行市场数据` → `[2/6] 采集、去重并聚类` → `[3/6] 采集开源热门项目` → `[4/6] 汇总分析、质量门与页签数据` → `[5/6] 生成 HTML` → `[6/6] 保存运行状态`。细项用 `当前：…`。
-- `[4/6]` 调用 `stages.brief_digest` + `apply_digest_brief`：写**市场热点**的 impact/reasoning，以及过程页用的 `scan_paragraph`。对外今日速读列表已由 `build_plain_digest` 从 analyses 生成。
+- `[1/6]` 的 AkShare 标准化结果不直接发布；`radar_news` 在 `[2/6]` 进入统一 EventCatalog 和 Scout。
+- `[4/6]` 按 `intensive_reading_events` 和精读材料门从成功分析中顺位补足精读，其余进入泛读，并可调用 `git_brief`；不再调用独立 `digest_brief`。
 - AI 状态文案：`enabled` / `disabled` / `cached` / `unavailable` 映射到中文标签。
-- `digest_brief` 失败记入 `pipeline_errors`，发布层用确定性 fallback，不中断运行。
+- `git_brief` 失败记入 `pipeline_errors`，Git 卡使用已有描述降级，不中断运行。
 - `run_meta` 必须记录真实客户端元数据（`intelligence.model_runtime`），不能把静态 YAML 当运行结果。
 
-**禁止。** 让情报分数进入市场评分；在编排器里做质量裁决；把报告写到日期根目录；用 `scan_paragraph` 冒充对外今日速读。
+**禁止。** 为 AkShare 恢复一条绕过 Scout 的发布链；在编排器里做质量裁决；把报告写到日期根目录。
 
 ---
 
@@ -322,14 +312,14 @@ sequenceDiagram
 **需求。代码缺省（`setdefault`）：**
 
 - `QUALITY_DEFAULTS`：整段可缺，`policy_version=evidence-gate-v2` 及事实/证据/风险上下限。
-- `INTELLIGENCE_DEFAULTS` **仅**：`selection_deterministic_weight` 0.65、`selection_model_weight` 0.35、`selection_model_reject_floor` 55、`selection_repeat_penalty` 0.4、`selection_repeat_hours` 36、`max_general_events` 5、`max_hardcore_events` 5。
+- `INTELLIGENCE_DEFAULTS` **仅**：`selection_deterministic_weight` 0.35、`selection_model_weight` 0.65、`selection_model_reject_floor` 55、`selection_repeat_penalty` 0.4、`selection_repeat_hours` 36、`preferred_general_events` 5、`preferred_hardcore_events` 5、`preferred_max_per_topic` 2、`preferred_official_release_events` 3、`scout_batch_size` 30、`scout_doc_chars` 4000。
 - `GITHUB_DEFAULTS`：enabled、daily/weekly 8、publish 10、HF 4、GitLab 3。
 
-**YAML 必需、无代码缺省**（缺则 `KeyError`）：`intelligence.first_run_lookback_hours`、`resume_overlap_hours`、`cluster_window_hours`、`max_items_per_source`、`max_scout_events`、`max_deep_events`（pipeline 仅在 `max_deep_events` 缺失时回退到 general+hardcore 之和，但 `load_settings` 不补）、`full_text_max_chars`、`title_similarity_threshold`、`source_fetch_timeout_seconds`、`market.*` 筛窗、`llm.base_url` / `api_key_env` / 各 stage 的 `model`。
+**YAML 运行键：** `intelligence.first_run_lookback_hours`、`resume_overlap_hours`、`cluster_window_hours`、`max_items_per_source`、`intensive_reading_events`（默认 10）、`offline_analysis_events`（默认 500）、`full_text_max_chars`、`title_similarity_threshold`、`source_fetch_timeout_seconds`，以及 `llm.base_url` / `api_key_env` / 各 stage 的 `model`。在线运行不再有深研条数上限；`offline_analysis_events` 只限制离线读取历史缓存的数量。
 
 `publish_leads_when_ai_unavailable: true` 写在三份 YAML 和一个测试 fixture 里，**`src/` 从不读取**。现况视为死字段；删或接上是产品/工程后续，不是当前行为。
 
-校验：`market.factor_weights` 必须六因子且和为 1；选题两权非负且和为 1；来源 `id` 唯一、`tier` ∈ {1,2,3}、feed/sitemap 必须 HTTPS、API 类型仅 `huggingface_daily_papers`。修改质量阈值必须同时改 `quality.policy_version`；修改提示词必须改 `llm.prompt_version`。否则历史分析会被错误复用。
+校验：`market.factor_weights` 必须六因子且和为 1；选题两权非负且和为 1；来源 `id` 唯一、`tier` ∈ {1,2,3}、feed/sitemap 必须 HTTPS、API 类型仅 `huggingface_daily_papers` / `github_issues`，后者还必须有 `owner/repo` 格式的 `repo`。修改质量阈值必须同时改 `quality.policy_version`；修改提示词必须改 `llm.prompt_version`。否则历史分析会被错误复用。
 
 **禁止。** 把「缺省写在代码里」理解成所有 intelligence 键都有默认；在不 bump `policy_version` 的情况下改质量数字。
 
@@ -362,12 +352,12 @@ sequenceDiagram
 **需求。**
 
 - 无 AI：Scout 跳过，按确定性分 + 重复惩罚排序。
-- 深研按 `event_lane()` 分栏，泛读/硬核各最多 5，总数 `max_deep_events`（YAML，缺则 general+hardcore）。
+- Scout 保留的全部事件都进入缓存检查和深研，不再由固定数量提前截断。泛读/硬核各 5 条、每主题 2 条与官方发布位只是 Scout 排序偏好；`intensive_reading_events` 控制材料合格的精读展示上限，其余成功结果进入泛读。
 - 缓存命中条件：`researcher.can_reuse` —— 模型不是 `none`，且 `prompt_version`、`policy_version` 与当前一致。`--force-analysis` 跳过读取。
-- 离线：`get_latest_analyses(limit * 4)` **不传 cache_scope**，再过滤 nightly 标题、截断。来源状态标 stale。
-- `process` 载荷记录 documents / events / selection / research / limits / cache_scope，供 `process.html`。
+- 离线：`get_latest_analyses(offline_analysis_events)` **不传 cache_scope**，再过滤 nightly 标题。来源状态标 stale。
+- `processing_funnel` 记录采集、去重、硬过滤、Scout、深研和发布数量；`processing_trace` 为每个事件记录入选、淘汰或失败原因，二者进入 SQLite 运行元数据。
 
-**禁止。** 栏位已满时硬塞；把失败事件合成伪 `Analysis`。
+**禁止。** 把精读展示数量当成深研上限；把失败事件合成伪 `Analysis`。
 
 ### `intelligence/collection.py` — 只采集
 
@@ -386,7 +376,7 @@ sequenceDiagram
 
 **理念。** 只负责「文档落库 + 把窗口内文档交给 clusterer」。选择策略可替换，目录本身不决定发布名单。
 
-**需求。** `index_and_discover`：对**本批** `upsert_document`，然后 `recent_documents(now - cluster_window_hours)`。聚类输入是该 SQLite **过去 72 小时已持久化语料**（含昨日同一 `intelligence_*.db` 里的论文），不是「仅本批 HTTP 结果」。返回前 `max_scout_events`（40）个事件。昨日仍在库里的文档会占用今天的 40 个 Scout 名额。
+**需求。** `index_and_discover`：对**本批** `upsert_document`，然后 `recent_documents(now - cluster_window_hours)`。聚类输入是该 SQLite **过去 72 小时已持久化语料**（含昨日同一 `intelligence_*.db` 里的论文），不是「仅本批 HTTP 结果」。除明确的构建噪音外，全部事件都交给 Scout；目录层不再截取前 40 个，也不按泛读/硬核预分配 Scout 名额。
 
 **禁止。** 在目录层调模型；只对本批内存列表聚类却声称覆盖 72h 去重。
 
@@ -397,16 +387,16 @@ sequenceDiagram
 **需求。**
 
 - 丢弃 `is_obvious_build_title`（`b1234`、`trunk/abc`、`deps: bump`、pinned vllm hash）。
-- 必须能匹配 `topics.yaml` 至少一个主题，否则不进事件。
-- 同窗口内合并条件：`project_identity_keys(canonical_url)` ∩ `project_identity_keys(leader)` 非空（GitHub 键格式为 `github:{owner}/{repo}`，并并入 `metadata.target_url`），**或** 同 `topic_id` 且标题 `token_set_ratio ≥ title_similarity_threshold`（88）。
+- 关键词主题只提供确定性提示；未命中时标为 `other` 并继续进入事件和 Scout，禁止静默丢弃。来源可提供 `topic_hint`，sitemap 可按路径提供 `path_topic_hints`。
+- 同窗口内合并条件：canonical URL 相同，或 `project_identity_keys(canonical_url)` ∩ `project_identity_keys(leader)` 非空（GitHub 键格式为 `github:{owner}/{repo}`，并并入 `metadata.target_url`），**或** 同 `topic_id` 且标题 `token_set_ratio ≥ title_similarity_threshold`（88）。
 - 确定性分（现码）：`source_quality*0.25 + relevance*0.25 + recency*0.20 + depth*0.15 + impact*0.15 + corroboration`，其中 **`recency` 恒为 `100.0`，没有衰减函数**。`corroboration = min(10, (distinct source_id - 1) * 5)`。不要发明「越新越高」的实现——当前系统没有。
 - `event_id` = 文档 id 列表的 sha256 前 24 位。
 
 **禁止。** 把 20% 项理解成时间衰减；用模型聚类。
 
-### `intelligence/selection.py` — 模型不能独占选题
+### `intelligence/selection.py` — 全量 Scout 与软平衡
 
-**理念。** `rank-fusion-v1`：最终分 = 确定性 65% + 模型 35%。模型说不相关且确定性分 &lt; 55 才丢弃；模型漏项回退确定性分。主题平衡：每个 topic 先出一条，再追加剩余，避免一天全是大模型。
+**理念。** `rank-fusion-v3`：全部有效事件分批交给本地 Scout，由 Scout 返回主题和评分；最终分 = 确定性 35% + 模型 65%。模型说不相关且确定性分 &lt; 55 才丢弃；模型漏项回退确定性分。主题和栏目是排序偏好，不是硬淘汰门。最多 3 个由 Scout 判断为高影响、且标题呈现正式发布语义的 Tier 1 官方文章优先进入深研，避免论文关键词密度压过产品发布。
 
 **需求。**
 
@@ -417,7 +407,7 @@ sequenceDiagram
 - 完全重复：×0.4。
 - 上次发布后 2 小时以上又有新 `last_seen`：× min(1.0, 0.4+0.35)=0.75。
 
-Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_version` 和 `cache_scope`。`last_trace` 进入 process 页。
+Scout 每批最多 `scout_batch_size`（默认 30）个事件，必须逐一返回；主题必须是配置主题或 `other`。结果按完整事件集合签名缓存在 `pipeline_state`，键含 `prompt_version` 和 `cache_scope`，并保存模型主题、评分和处理轨迹。
 
 **禁止。** 让模型分数 100% 决定入选；跨实验复用 Scout 缓存键。不要假设次日惩罚已按实验隔离（同库未隔离）。
 
@@ -445,7 +435,7 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 **禁止。** 用 verifier `pass` 覆盖 `unsupported_claims`；为凑最低条数保留重复事实或伪造引文；把降级结果继续展示技术推断。
 
-### `intelligence/prompts.py` — `tech-intel-v3`
+### `intelligence/prompts.py` — `tech-intel-v5`
 
 **理念。** 提示词只约束「角色 + 禁止编造 + JSON 形状」。数量边界由 `quality_contract` 注入 analyst user，由质量门再裁一次。改中文措辞不应导致测试红。
 
@@ -521,6 +511,14 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 **禁止。** 用 HF 页面 URL 当 `Document.url` 以致质量门找不到原文。
 
+#### `sources/github_issues.py`
+
+**理念。** GitHub Issues 列表没有可用 Atom Feed；通过官方 REST API 把投稿池中的每个新 Issue 建成独立 Tier 3 文档。
+
+**需求。** 查询 `state=all` 并按创建时间倒序；用 `created_at` 对增量窗口做最终过滤；排除 Pull Request；保留正文、标签、作者、评论数及首个外部目标链接；匿名额度耗尽时明确提示配置 `GITHUB_TOKEN` / `GH_TOKEN`。
+
+**禁止。** 抓取 Issues HTML 冒充稳定接口，或把整个 Issue 列表合并为一条文档。
+
 #### `sources/weekly_catalog.py`
 
 **理念。** 离线维护工具，不是每日 `SourceAdapter`。解析 ruanyf weekly Markdown 的「资源 / 工具 / 文摘」栏，探测域名 RSS，写入 `weekly_blog_feeds.json`。
@@ -533,7 +531,7 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 ## 模块设计：market/
 
-包级理念：完全独立的标准化 + 规则评分路径。情报输出永不进入该分数。日报展示已经从「可归因事件 + 个股扫描」收成「指标条 + 热点」。评分仍运行，是为了 `candidates.csv` 备查和可能的后续信号，不是给读者的产品。`market/__init__.py` 模块字符串仍是 `Deterministic A-share market pipeline.`（内部 docstring，PR 2 可改，不影响 UI）。
+包级理念：独立完成 AkShare 获取、CSV 降级、快讯标准化和交易日判断；不做发布选题。标准化后的完整快讯通过 `MarketRunResult.radar_news` 交给统一情报链，来源状态则直接进入运行审计。
 
 ### `market/providers.py`
 
@@ -559,23 +557,13 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 **禁止。** 在发布模板里直接读「涨跌幅」中文列。
 
-### `market/pipeline.py` — 市场工作流 + `rank_market_news`
+### `market/pipeline.py` — AkShare 雷达工作流
 
-**理念。** 编排市场侧：拉数 → 标准化 →（仍）打分 → 筛新闻。新闻排序是产品规则，不是模型。
+**理念。** 编排市场侧：拉取快讯和交易日历 → 标准化 → 返回完整 `radar_news`。不在这里做关键词排名，也不生成独立可发布列表。
 
-**需求。** 分类（title+summary 小写子串）：
+**需求。** `MarketRunResult.radar_news` 保留 `normalize_news` 后的完整 DataFrame；`context` 只给出 `market_date`、`is_trading_day` 和 `market_source_status`；`metadata` 记录交易日与来源降级。`app/orchestrator.py` 必须把 `radar_news` 传入 `IntelligenceWorkflow.run()`。
 
-| 类 | 处理 |
-| --- | --- |
-| `TICKER_ADMIN` | 股票简称/风险警示/戴帽摘帽 → 丢弃 |
-| `EARNINGS` | 净利润/营收/中报/年报/分红 → 丢弃 |
-| `FLOW` | 北向/成交额/涨停/资金面，且不是 CAUSE → 丢弃 |
-| `CAUSE` | 政策/制裁/获批/量产/加息等 → 优先入选 |
-| 其他非噪音 | 事件不足 `min_fill=5` 时按主题/A股/全球词填入 |
-
-输出 `context`：breadth、行业、指数、全球、商品、selected news、source_status。`process.news_dropped` 最多 50 条。仍调用 `screen_and_score` 并返回 `candidates`。
-
-**禁止。** AI 改写这些分数；把 FLOW/财报/简称变更当热点；在指标条上写涨跌原因。
+**禁止。** 在市场层先截出一个绕过 Scout 的前十列表；把 Tier 3 快讯直接渲染进 HTML。
 
 ### `market/scoring.py`
 
@@ -593,19 +581,19 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 ### `github/trending.py`
 
-**理念。** 无官方稳定 Trending API，就解析公开 HTML + 补 HF/GitLab JSON；合并规则必须可测。
+**理念。** 无官方稳定 Trending API，就解析公开 HTML；合并规则和仓库身份提取必须可测。
 
-**需求。** 解析 `github.com/trending?since=daily|weekly` 的 `article.Box-row`（**选择器是现码假设；GitHub 改版不在本仓库测试范围内**）。`merge_trending`：今日最热 ∪ 本周最快，按 reasons 数量和 delta 排序，截断 `publish_limit`。HF：`/api/models?sort=trending`，`likes` 写入 `stars_week`，`stars_total=0`。GitLab：`/api/v4/projects?order_by=star_count`，`star_count` 作为 `stars_total`。GitHub 总星不足时补 `api.github.com/repos/{full_name}`。`format_stars`：≥10000 显示「x万」。
+**需求。** 解析 `github.com/trending?since=daily|weekly` 的 `article.Box-row`（**选择器是现码假设；GitHub 改版不在本仓库测试范围内**）。仓库路径必须取 `h2` 标题内的链接，不能取卡片顶部 `/sponsors/...` 操作链接；简介的 `<p>` 匹配必须使用标签边界，不能误把 SVG `<path>` 当段落。`merge_trending`：今日最热 ∪ 本周最快，按 reasons 数量和 delta 排序，截断 `publish_limit`。GitHub 总星不足时补 `api.github.com/repos/{full_name}`。README API 遇到匿名限流时尝试 raw 内容地址。`format_stars`：≥10000 显示「x万」。
 
-**禁止。** 为 HF 调用 GitHub stargazers；把 Trending 项目写进科技 `Document`。
+**禁止。** 把 Sponsor 用户页当成仓库；把 Trending 项目写进科技 `Document`。
 
 ### `github/pipeline.py`
 
 **理念。** 热度抓取与「人话解说」分开：抓取可降级到 JSON 缓存；解说失败用 description fallback，并程序侧剥「此为推演」。
 
-**需求。** 缓存 `data/cache/github_trending_{daily,weekly,huggingface,gitlab}.json`。AI 可用时 `stages.brief_github`。模板：GitHub/GitLab 显示 `共 {{ stars_total_label }} 星`；HF 回退 `喜欢 {{ stars_week }}`。`annotate_github_visuals` 计算热度条和 `chart.language_bars`；**语言条不在 `report.html.j2` 渲染**。产品方向已定为**删掉 `language_bars` 计算**（不要语言热度看板）；本轮只记文档，不改代码，见 PR 6。
+**需求。** 缓存 `data/cache/github_trending_{daily,weekly}.json`。AI 可用且未显式 `--no-ai` 时逐仓库调用 `stages.brief_github`，不以科技分析状态判断是否执行；场景为空时最多再聚焦重试两次。模板显示 `共 {{ stars_total_label }} 星`、中文功能说明和具体使用场景；部分失败时明确标注降级，不能声称全部已经 AI 解读。
 
-**禁止。** 用 Trending/HF/GitLab 替代科技页的 Release/论文证据；编造星标；每行免责声明。
+**禁止。** 用 Trending 替代科技页的 Release/论文证据；编造星标；每行免责声明。
 
 ---
 
@@ -641,39 +629,36 @@ Scout 结果按事件集合签名缓存在 `pipeline_state`，键含 `prompt_ver
 
 包级理念：只渲染。不采集、不调模型、不改 `Analysis.quality`。
 
-编排器已经调用 `apply_digest_brief(digest_brief, …)` 并把 `scan_paragraph` / `news_records` 放进 context。`reporting.publish()` **再**调 `apply_digest_brief(None, …)`：**发布器看不到 `DigestBrief` 对象**；它从 context 字段重建展示。`fallback_market_news` 使用 `item.get("impact") or <默认>`，模型写过的 impact/reasoning 通常被保留，不会按 `DigestBrief` 再跑一轮。第二次调用是为了测试/注入的 publisher 在没有编排器 brief 时仍能得到 fallback + `plain_digest`。不是第二次模型调用。
+编排器向发布层显式提供 `intensive_analyses` 和 `extensive_analyses`。`intelligence/reading.py` 负责材料门和顺位补位；发布层把前者按主题稳定分组后同时渲染成完整证据卡和今日速读，把后者转换成缩略 scan list。历史 `briefing.py` / `digest_brief` 契约仍可加载旧调用方，但日常主流程不再调用，也不能直接发布 AkShare 条目。
 
 ### `publication/plain_digest.py`
 
-**理念。** 把 `Analysis` 与市场 context 收成「人一眼能扫完」的结构。对外今日速读和市场条在这里分家。
+**理念。** 把已通过研究流程的 `Analysis` 收成「人一眼能扫完」的结构，供精读摘要与泛读列表复用。
 
 **需求。**
 
-- 对外今日速读：`general_items` / `hardcore_items`。`_scan_line` = takeaway 第一句（优先 `plain_takeaway`）。`_topic_kicker`：**先匹配 headline+scan**，匹配不到才看 key_facts，再默认「科技」。
-- 市场条：行业与全球/商品各取涨幅前 3 + 跌幅后 3（`RANK_KEEP=3`），不附原因。`INDEX_BOARD` 含「A股」地理标签。产业/全球**不**进入今日速读列表。
-- `scan_paragraph` 若已在 context 则原样放入 digest，供过程页；`report.html.j2` 的今日速读区块**不渲染**该段。
+- `_scan_line` = takeaway 第一句（优先 `plain_takeaway`）。`_topic_kicker`：**先匹配 headline+scan**，匹配不到才看 key_facts，再默认「科技」。
+- 同一个 `tech_items` 结构既用于精读的“今日速读”，也用于其余分析的“泛读”缩略展示；`group_analyses_by_topic` 让精读卡和速读中的同主题条目相邻。
 
-**禁止。** 用 key_facts 的边主题覆盖 kicker；把行业条塞进今日速读。
+**禁止。** 用 key_facts 的边主题覆盖 kicker；把未经研究流程的原始快讯塞进 scan list。
 
 ### `publication/briefing.py`
 
-**理念。** 热点文案要可核对：影响与后果合并、依据合并原文引语；模型缺席时给诚实 fallback。
+**现状。** 保留旧 `DigestBrief` 数据契约和 fallback 辅助函数，以便读取旧测试/调用方；`run_application()` 与 `reporting.publish()` 均不再调用它。AkShare 内容必须先成为 `Analysis`，不能通过本模块直接进入日报。
 
-**需求。** `digest_brief_payload` 给模型科技 takeaway + movers + 新闻 title/summary。`present_market_news`：`impact`+`consequences` → `impact_text`；`reasoning`+逐字 quotes → `basis_text`。quotes 必须是 title/summary 连续子串。`fallback_scan_paragraph` 可含「市场上，…」，只给过程页。`apply_digest_brief(None, …)` 仅在 impact/段落为空时填默认句。
-
-**禁止。** 预测个股涨跌；把过程页段落当对外今日速读。
+**禁止。** 把该兼容模块重新接成独立市场发布链。
 
 ### `publication/reporting.py` + `templates/report.html.j2`
 
-**理念。** 默认人读形态：先扫列表，再按需打开三个主 Tab。Markdown 是同一信息的推送面。
+**理念。** 默认人读形态：先扫精读摘要，再按需打开三个主 Tab。
 
 **需求。** 页结构：
 
-1. 今日速读（泛读 / 硬核：kicker + 一句话链接）——来自 `plain_digest.*_items`
-2. 主 Tab：**科技**（子 Tab 泛读/硬核）| **Git** | **市场情报**
-3. 页脚免责声明 + 链到 `process.html`
+1. 今日速读（精读合格项的 kicker + 一句话链接）
+2. 主 Tab：**精读**（完整卡片）| **泛读**（其余分析的缩略列表）| **Git**
+3. 页脚免责声明
 
-科技卡片常显大白话要点，深度段可展开。不展示「深/线索」徽章在速读区。市场热点标题是「热点」不是「可归因事件」。无个股扫描表。Git 卡：GitHub/GitLab `共 N 星`，HF `喜欢 N`。同目录写 md / `intelligence.json` / CSV / `run_meta.json` / process。目录已有文件则 `FileExistsError`。
+精读卡常显大白话要点，深度段可展开；泛读只显示主题词和一句话，不显示展开详情，并使用双栏瀑布流避免相邻主题高度差留下整行空白。不在速读或泛读区显示「深/线索」徽章。Git 卡展示 GitHub 总星标、日/周增量副标题和具体使用场景，不显示增量进度条。运行目录只写 `daily_digest.html`；目录已有文件则 `FileExistsError`。
 
 **禁止。** invent 事实；重裁 `quality`；写日期根副本或 latest-run manifest。
 
@@ -841,7 +826,7 @@ Skill 路径曾被讨论（Harness 日常跑过 `qwen-code-agent`）。否决原
 
 早期产品是 A 股观察，科技事件直接映射到个股分数很有诱惑。否决：AI 幻觉会污染交易相关数字；市场 API 失败不该让科技日报停更；产品后来明确「不做个股扫描」。独立流水线让市场展示可以收成 top3/bottom3，而不必拆掉 `scoring.py` 的备查路径。
 
-### D. 模型 100% 选题 vs 纯规则 vs 65/35 融合（已选融合）
+### D. 模型 100% 选题 vs 纯规则 vs 35/65 融合（已选融合）
 
 纯模型会把一天写成同一主题营销稿，且 Scout 失败即空报。纯规则会漏「看起来像常规 release、其实是架构变更」的事件。融合 + 拒绝地板 55 + 主题轮转 + 次日惩罚，是可测试的折中。
 
@@ -889,7 +874,7 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 - **过程级：** `process.html` / `process.json` —— 作者主观测面（漏选、栏位已满、Scout 剔除、新闻噪音过滤、内部 `scan_paragraph`）。
 - **告警：** 早间任务依赖 `--require-ai` 非零退出 + 邮件失败通知（无成功 HTML 时 `send_report.py` 发日志尾）。没有独立 metrics daemon。
 
-延迟量级（本机 LAN 模型、思考开启、32k 上限）：市场数十秒；采集并发约 1–3 分钟（视墙与源）；深研最多 10 个事件 ×（分析+校验），是主耗时，单阶段最多 4 次 HTTP；Git brief 一次批处理。主调度 `ExecutionTimeLimit` 90 分钟；可选 18:10 任务是 60 分钟。
+延迟量级（本机 LAN 模型、思考开启、32k 上限）：AkShare 数十秒；采集并发约 1–3 分钟（视墙与源）；全量 Scout 后，每个未命中缓存的保留事件各调用一次 Analyst 和 Verifier，是主耗时。以 298 个冷缓存事件计约 9–10 小时；稳定运行后按新增/变化事件数下降。主调度 `ExecutionTimeLimit` 为 18 小时并设置 `MultipleInstances=IgnoreNew`，避免次日并行重入。
 
 存储：每份 HTML 约数百 KB；SQLite 随文档增长，按实验分库避免 Qwen 写爆 DeepSeek 库。
 
@@ -935,7 +920,7 @@ Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Obje
 1. **模块化单体 + 端口。** 一份日报、可替换来源/模型/发布器。避免微服务运维，也避免 Skill 把契约吞进提示词。
 2. **质量门在模型之外。** `evidence-gate-v2` 用完整 issue taxonomy 定义深度结论（证据、一手来源、unsupported、verifier pass、事实/风险/反面/必填段/plain_takeaway）。换模型不能放宽其中任何一项。
 3. **科技情报为主，市场为雷达。** 产品标题去掉 A 股观察；无个股扫描；热点讲事件成因。地理标签「A股」保留。
-4. **65/35 选题 + 次日 0.4 惩罚 + 泛读/硬核分栏。** 模型辅助但不专政；昨天发过的新闻今天让路；周刊与论文分开展示。
+4. **35/65 融合选题 + 次日 0.4 惩罚 + 精读/泛读展示。** Scout 主导语义判断但不独占选题；昨天发过的新闻今天让路；所有 Scout 保留项研究后，经材料门顺位补足精读上限，其余进入泛读。
 5. **实验隔离用库文件 + cache_scope 指纹。** Qwen/DeepSeek 物理分库；同库内 `analysis_variants` 与 Scout 键按指纹隔离，旁表与 latest-analyses 查询尚未。
 6. **LAN Flash 生产，Qwen 验证，Harness 审计。** 三套后端同一 `LLMClient`；早间无人值守必须是 API。
 7. **产物只进 unique run 目录。** 同日多次、可对比、不可覆盖；过程页与日报成对出现。

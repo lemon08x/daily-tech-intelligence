@@ -7,13 +7,13 @@
 ## 运行流
 
 ```text
-SourceAdapter[] ──> DocumentCollector ──> EventCatalog ──> EventSelector
-                                                       │
-                                                       v
-                         AnalysisQualityGate <── EventResearcher <── ModelStageRunner
-                                  │
-                                  v
-MarketWorkflow ─────────────────> app/orchestrator ─────────────────> DigestPublisher
+SourceAdapter[] ────────────────> DocumentCollector ──> EventCatalog ──> EventSelector
+                                      ^                                  │
+                                      │ radar_news                       v
+MarketWorkflow(AkShare) ──────────────┘       AnalysisQualityGate <── EventResearcher
+              │                                      │
+              └── trading-day/source status          v
+                                             app/orchestrator ──> DigestPublisher
 ```
 
 - `DocumentCollector`：只负责来源游标、并发采集与低权重市场雷达转换。
@@ -22,14 +22,14 @@ MarketWorkflow ─────────────────> app/orchestr
 - `ModelStageRunner`：统一模型调用、重试、用量和实际运行时审计。
 - `EventResearcher`：全文增强、分析、独立校验，再交给质量门。
 - `AnalysisQualityGate`：模型无关的发布裁决；模型的 `verdict` 不是最终决定。
-- `MarketProvider` / `MarketWorkflow`：可注入的数据适配器，以及独立的标准化和市场新闻排序。
+- `MarketProvider` / `MarketWorkflow`：可注入的 AkShare 适配器，只负责标准化快讯、交易日和来源状态；快讯通过 `radar_news` 进入统一 Scout，不再独立选题。
 - `DigestPublisher`：把统一上下文交给默认 HTML 渲染器，或替换成其他展示/推送实现。
 
 ## 依赖规则
 
 1. `core` 不依赖业务实现，只保存稳定数据契约和端口。
-2. `intelligence` 与 `market` 互不调用；二者只在 `app/orchestrator.py` 汇合。
-3. 科技分析不得写入市场快照或热点排序。
+2. `intelligence` 与 `market` 互不调用；`app/orchestrator.py` 把 `market.radar_news` 显式交给 `IntelligenceWorkflow`。
+3. AkShare 快讯不得绕过 EventCatalog、Scout、Analyst、Verifier 或质量门直接发布。
 4. `infrastructure` 实现端口，但业务阶段不依赖 SQLite、AkShare 或某个模型厂商的具体类。
 5. `publication` 只消费标准化结果，不采集数据、不调用模型、不重新裁决质量。
 6. 新阶段失败应返回局部错误或降级状态，不能补造事实。
@@ -46,9 +46,9 @@ MarketWorkflow ─────────────────> app/orchestr
 - 校验结果含实质性 `unsupported_claims` 时强制降级，即使模型返回 `pass`。
 - 单一来源置信度最高 0.85，深度结论最高 0.90，线索最高 0.49。
 - 降级结果隐藏技术推断与产业影响，只保留大白话要点、可核验事实、证据和原因。
-- 发布层用泛读/硬核短句拼“今日速读”；科技页再分成泛读、硬核两个分页。主题词只看标题和速读句。
-- 前一天已经发布过的事件，第二天入选权重降低。Git 页只展示 GitHub 今日最热和本周增长最快，并标明仓库当前总星标。
-- 市场指标只列当日涨幅前三、跌幅后三，不分析涨跌原因。热点给出影响与后果，以及推理依据；过滤资金流向、财报噪音和股票简称/风险警示变更；日报不展示个股扫描。
+- Scout 保留项全部尝试深研；按 Scout 顺序从至少有 2 条有效证据、去重引文不少于 160 字的结果中补足最多 10 条“精读”，材料过短及其余结果只在“泛读”显示主题词和一句话。主题词只看标题和速读句；精读与今日速读按首次出现主题稳定分组，同主题相邻且组内保留 Scout 顺序。
+- 前一天已经发布过的事件，第二天入选权重降低。泛读按主题聚类且组内保留 Scout 顺序。Git 页只展示 GitHub 今日最热和本周增长最快，并逐仓库读取 README、清单与源码入口，生成具体使用场景并标明当前总星标；日/周增量只在副标题显示。
+- AkShare 只作为 Tier 3 市场雷达来源，不单独支撑深度结论；是否保留和排在哪里由统一 Scout 与质量门决定。日报不展示个股扫描。
 
 修改阈值时应更新 `quality.policy_version`，使历史分析不会被错误复用。修改提示词时应更新 `llm.prompt_version`。
 
@@ -82,6 +82,6 @@ HTML 模板、静态站点或消息推送，不需要改采集和分析流程。
 完整测试流程、每个文件锁住什么、以及故意不测什么，见 [`testing.md`](testing.md)。
 
 - 任何模型或提示词变更都要运行固定响应集，比较通过率、降级原因、证据有效率和输出长度，而不只比较文字观感。
-- 市场 fixture 的标准化、可归因新闻排序和关键报告区块必须保持回归。
+- 市场 fixture 的标准化、AkShare→Scout 传递和精读/泛读关键报告区块必须保持回归。
 - 运行元数据必须记录实际客户端信息；无法读取真实用量时标记 `usage_reporting=estimated`。
 - `Analysis` 必须显式包含质量字段；不符合当前契约的旧数据不会进入现行发布流程。

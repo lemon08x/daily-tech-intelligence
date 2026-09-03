@@ -9,8 +9,10 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 from daily_intel.core.models import Analysis
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.market.normalize import clean_text
-from daily_intel.publication.briefing import apply_digest_brief
-from daily_intel.publication.plain_digest import build_plain_digest
+from daily_intel.publication.plain_digest import (
+    build_plain_digest,
+    group_analyses_by_topic,
+)
 
 
 QUALITY_ISSUE_LABELS = {
@@ -29,6 +31,16 @@ QUALITY_ISSUE_LABELS = {
 
 def quality_issue_label(value: str) -> str:
     return QUALITY_ISSUE_LABELS.get(value, value)
+
+
+def group_scan_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Group scan lines by topic while preserving Scout order within each group."""
+    groups: dict[str, dict[str, Any]] = {}
+    for item in items:
+        label = str(item.get("kicker") or "其他科技").strip() or "其他科技"
+        group = groups.setdefault(label, {"label": label, "items": []})
+        group["items"].append(item)
+    return list(groups.values())
 
 
 def publish(
@@ -51,18 +63,25 @@ def publish(
     if html_path.exists():
         raise FileExistsError(f"运行目录已包含日报文件，拒绝覆盖: {run_dir}")
 
-    draft = build_plain_digest(analyses, context)
-    news_records = apply_digest_brief(context.get("digest_brief"), context)
+    intensive_analyses = group_analyses_by_topic(list(
+        context["intensive_analyses"] if "intensive_analyses" in context else analyses
+    ))
+    extensive_analyses = list(context.get("extensive_analyses") or [])
+    draft = build_plain_digest(intensive_analyses, context)
+    extensive_digest = build_plain_digest(extensive_analyses, context)
+    extensive_items = extensive_digest["tech_items"]
     digest = {
         **draft,
-        "has_content": bool(draft["tech_items"]),
+        "has_content": bool(draft["tech_items"] or extensive_digest["tech_items"]),
     }
     render_context = {
         "model_runtime": {},
         "quality_summary": {},
         "github_projects": [],
         **context,
-        "news_records": news_records,
+        "intensive_analyses": intensive_analyses,
+        "extensive_items": extensive_items,
+        "extensive_groups": group_scan_items(extensive_items),
         "plain_digest": digest,
     }
     html_path.write_text(

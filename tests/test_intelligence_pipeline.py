@@ -23,7 +23,10 @@ def settings() -> dict:
         "intelligence": {
             "first_run_lookback_hours": 48, "resume_overlap_hours": 6,
             "cluster_window_hours": 72, "max_items_per_source": 30,
-            "max_scout_events": 40, "max_deep_events": 5,
+            "scout_batch_size": 30, "intensive_reading_events": 2,
+            "offline_analysis_events": 50,
+            "preferred_general_events": 2, "preferred_hardcore_events": 3,
+            "preferred_max_per_topic": 2,
             "full_text_max_chars": 50000,
             "title_similarity_threshold": 88, "source_fetch_timeout_seconds": 1,
         },
@@ -50,6 +53,7 @@ def document() -> Document:
 class FakeLLM(LLMClient):
     def __init__(self, fail_analyst: bool = False) -> None:
         self.calls: list[str] = []
+        self.scout_payloads: list[dict] = []
         self.fail_analyst = fail_analyst
 
     @property
@@ -59,11 +63,16 @@ class FakeLLM(LLMClient):
     def generate(self, stage, system, user, schema):
         self.calls.append(stage)
         if stage == "scout":
-            event_id = json.loads(user)["events"][0]["event_id"]
-            value = ScoutBatch(items=[ScoutItem(
-                event_id=event_id, relevant=True, topic_id="compute", relevance=95,
-                novelty=90, technical_depth=90, industry_impact=80, reason="material",
-            )])
+            payload = json.loads(user)
+            self.scout_payloads.append(payload)
+            value = ScoutBatch(items=[
+                ScoutItem(
+                    event_id=item["event_id"], relevant=True, topic_id="compute",
+                    relevance=95, novelty=90, technical_depth=90,
+                    industry_impact=80, reason="material",
+                )
+                for item in payload["events"]
+            ])
         elif stage == "analyst":
             if self.fail_analyst:
                 raise ValueError("invalid model JSON")
@@ -156,7 +165,7 @@ def test_no_ai_publishes_explicit_lead_and_offline_reuses_it(tmp_path, monkeypat
     assert offline.analyses[0].event_id == live.analyses[0].event_id
 
 
-def test_hardcore_lane_caps_repeat_topics_and_keeps_other_topics(tmp_path, monkeypatch) -> None:
+def test_soft_lane_and_topic_preferences_backfill_open_slots(tmp_path, monkeypatch) -> None:
     def paper(identifier: str, title: str, summary: str) -> Document:
         return Document(
             id=identifier, source_id="primary", source_name="Primary",
@@ -176,8 +185,8 @@ def test_hardcore_lane_caps_repeat_topics_and_keeps_other_topics(tmp_path, monke
     ]
     cfg = settings()
     cfg["intelligence"].update({
-        "max_general_events": 0, "max_hardcore_events": 4, "max_deep_events": 4,
-        "selection_max_per_topic": 2,
+        "preferred_general_events": 0, "preferred_hardcore_events": 4,
+        "intensive_reading_events": 2, "preferred_max_per_topic": 2,
     })
     cfg["topics"] = [
         {"id": "biotech", "name": "生物技术", "keywords": ["genome"]},
@@ -191,9 +200,70 @@ def test_hardcore_lane_caps_repeat_topics_and_keeps_other_topics(tmp_path, monke
     )
     result = pipeline.run(NOW, pd.DataFrame())
     headlines = [item.headline for item in result.analyses]
-    assert len(headlines) == 3
+    assert len(headlines) == 4
     assert "New GPU accelerator inference benchmark" in headlines
-    assert sum("genome" in title.lower() for title in headlines) == 2
+    assert sum("genome" in title.lower() for title in headlines) == 3
+    assert result.processing_funnel["research_target_events"] == 4
+    assert result.processing_funnel["research_attempted_events"] == 4
+    assert result.processing_funnel["intensive_reading_events"] == 2
+    assert result.processing_funnel["extensive_reading_events"] == 2
+    published = [
+        item for item in result.processing_trace if item.get("status") == "published"
+    ]
+    assert {item["publication_tier"] for item in published} == {
+        "intensive", "extensive",
+    }
+
+
+def test_akshare_radar_news_joins_the_same_scout_and_research_path(
+    tmp_path, monkeypatch,
+) -> None:
+    llm = FakeLLM()
+    pipeline = _pipeline(tmp_path, llm, monkeypatch)
+    radar = pd.DataFrame([{
+        "title": "半导体设备出口政策发生变化",
+        "summary": CONTENT,
+        "published_at": NOW.isoformat(),
+        "url": "https://example.com/market-radar",
+    }])
+
+    result = pipeline.run(NOW, radar)
+
+    scout_titles = {
+        event["title"]
+        for payload in llm.scout_payloads
+        for event in payload["events"]
+    }
+    assert "半导体设备出口政策发生变化" in scout_titles
+    assert len(result.analyses) == 2
+    assert llm.calls.count("analyst") == 2
+    assert llm.calls.count("verifier") == 2
+
+
+def test_unclassified_official_release_reaches_scout_and_trace(tmp_path, monkeypatch) -> None:
+    cfg = settings()
+    cfg["topics"] = [{"id": "compute", "name": "芯片算力", "keywords": ["never-match"]}]
+    repository = SQLiteIntelligenceRepository(tmp_path / "intel.db")
+    llm = FakeLLM()
+    pipeline = IntelligencePipeline(cfg, repository, llm)
+    fable = document().model_copy(update={
+        "title": "Introducing Claude Fable 5.1 and Claude Mythos 5.1",
+        "summary": "First supported technical fact in the source. Second supported benchmark result in the source.",
+    })
+    monkeypatch.setattr(
+        pipeline.collector, "collect_sources",
+        lambda now: ([fable], [{
+            "name": "anthropic_official", "source": "Anthropic", "fetched_at": now.isoformat(),
+            "stale": False, "count": 1, "error": "",
+        }]),
+    )
+    result = pipeline.run(NOW, pd.DataFrame())
+    assert result.analyses[0].headline == "加速器基准更新"
+    assert result.processing_funnel["unclassified_documents"] == 1
+    trace = next(item for item in result.processing_trace if item.get("event_id"))
+    assert trace["topic_id"] == "compute"
+    assert trace["official_release_priority"] is True
+    assert trace["status"] == "published"
 
 
 def test_require_ai_rejects_missing_key_and_offline(tmp_path, monkeypatch) -> None:

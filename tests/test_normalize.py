@@ -1,62 +1,46 @@
 import pandas as pd
 
 from daily_intel.market.normalize import combine_news_frames, normalize_news
-from daily_intel.market.pipeline import rank_market_news
 
 
-def test_rank_market_news_keeps_event_causes_and_drops_fund_news() -> None:
+def test_market_pipeline_exposes_full_akshare_feed_to_scout_without_a_second_selection(
+    tmp_path,
+) -> None:
+    from datetime import datetime, timezone
+
+    from daily_intel.market.cache import Dataset
+    from daily_intel.market.pipeline import MarketPipeline
+
     news = pd.DataFrame([
-        {"title": "北向资金净流入超百亿", "summary": "成交额放大", "published_at": "2026-08-27", "url": "https://example.com/flow"},
-        {"title": "券商中报净利润大增", "summary": "中信半年利润超230亿", "published_at": "2026-08-27", "url": "https://example.com/earnings"},
-        {"title": "美联储宣布维持利率不变", "summary": "声明偏鹰", "published_at": "2026-08-27", "url": "https://example.com/fed"},
-        {"title": "商务部对半导体设备实施出口管制", "summary": "A股相关产业链受政策影响", "published_at": "2026-08-27", "url": "https://example.com/ashare"},
-        {"title": "某地文旅节开幕", "summary": "与市场无关", "published_at": "2026-08-27", "url": "https://example.com/tour"},
-    ])
-    ranked = rank_market_news(news, ["半导体"], 5)
-    titles = ranked["title"].tolist()
-    assert titles[0].startswith("商务部")
-    assert "美联储" in titles[1]
-    assert all("北向" not in title and "中报" not in title and "文旅" not in title for title in titles)
-
-
-def test_rank_market_news_fills_when_event_causes_are_few() -> None:
-    news = pd.DataFrame([
-        {"title": "北向资金净流入超百亿", "summary": "成交额放大", "published_at": "2026-08-27", "url": "https://example.com/flow"},
-        {"title": "美联储宣布维持利率不变", "summary": "声明偏鹰", "published_at": "2026-08-27", "url": "https://example.com/fed"},
-        {"title": "英伟达称算力短缺将持续到2028年", "summary": "GPU供给仍然紧张", "published_at": "2026-08-27", "url": "https://example.com/nvda"},
-        {"title": "某地文旅节开幕", "summary": "与市场无关", "published_at": "2026-08-27", "url": "https://example.com/tour"},
-        {"title": "运机集团：2026年上半年净利润3771.6万元，同比下降48.60%", "summary": "中报披露", "published_at": "2026-08-27", "url": "https://example.com/earn"},
-        {"title": "沪指盘中回踩后有色金属走强", "summary": "有色金属板块活跃", "published_at": "2026-08-27", "url": "https://example.com/metal"},
-    ])
-    ranked = rank_market_news(news, ["有色金属"], 5, min_fill=3)
-    titles = ranked["title"].tolist()
-    assert any("美联储" in title for title in titles)
-    assert any("英伟达" in title for title in titles)
-    assert any("沪指" in title for title in titles)
-    assert all(
-        "北向" not in title and "文旅" not in title and "净利润" not in title
-        for title in titles
-    )
-    assert len(titles) >= 3
-
-
-def test_rank_market_news_does_not_go_empty_on_earnings_heavy_feed() -> None:
-    news = pd.DataFrame([
-        {"title": "运机集团：2026年上半年净利润3771.6万元，同比下降48.60%", "summary": "中报", "published_at": "2026-08-27", "url": "https://example.com/a"},
-        {"title": "尼泊尔北部山洪遇难人数升至289人", "summary": "救援", "published_at": "2026-08-27", "url": "https://example.com/b"},
-        {"title": "美国司法部拟重启捕获法庭以便扣押伊朗油轮", "summary": "加强对伊朗的海上封锁", "published_at": "2026-08-27", "url": "https://example.com/c"},
-        {"title": "众诚科技全资子公司签订2.92亿元合同", "summary": "信息化建设采购", "published_at": "2026-08-27", "url": "https://example.com/d"},
         {
-            "title": "ST围海：8月31日起撤销其他风险警示 股票简称变更为围海股份",
-            "summary": "证券简称由ST围海变更为围海股份，证券代码不变，日涨跌幅限制为10%。",
-            "published_at": "2026-08-27", "url": "https://example.com/st",
+            "title": "美联储宣布维持利率不变", "summary": "声明偏鹰",
+            "published_at": "2026-08-27 10:00", "url": "https://example.com/fed",
+        },
+        {
+            "title": "普通市场线索也交给 Scout 判断", "summary": "不在这里预先删掉",
+            "published_at": "2026-08-27 11:00", "url": "https://example.com/raw",
         },
     ])
-    ranked = rank_market_news(news, [], 5, min_fill=3)
-    titles = ranked["title"].tolist()
-    assert any("扣押" in title for title in titles)
-    assert any("合同" in title for title in titles)
-    assert all("净利润" not in title and "山洪" not in title and "围海" not in title for title in titles)
+    calendar = pd.DataFrame([{"trade_date": "2026-08-27"}])
+
+    class Provider:
+        def news(self):
+            return Dataset("news", news, "AkShare", "2026-08-27T12:00:00+00:00")
+
+        def trading_calendar(self):
+            return Dataset(
+                "trading_calendar", calendar, "AkShare",
+                "2026-08-27T12:00:00+00:00",
+            )
+
+    result = MarketPipeline(
+        {}, tmp_path, datetime(2026, 8, 27, 12, tzinfo=timezone.utc), False,
+        provider=Provider(),
+    ).run()
+
+    assert result.radar_news["title"].tolist() == news["title"].tolist()
+    assert "news_records" not in result.context
+    assert result.context["market_source_status"][0]["name"] == "news"
 
 
 def test_news_provider_merges_both_feeds(tmp_path, monkeypatch) -> None:
@@ -98,3 +82,34 @@ def test_combine_news_frames_merges_ths_and_sina_schemas() -> None:
     assert list(combined.columns) == ["title", "summary", "published_at", "url"]
     roundtrip = normalize_news(combined)
     assert list(roundtrip["title"]) == titles
+    assert combined.loc[combined["title"].eq("商务部对半导体设备实施出口管制"), "url"].iloc[0] == "https://example.com/ths"
+
+
+def test_combine_news_prefers_tonghuashun_url_for_similar_sina_duplicate() -> None:
+    ths = pd.DataFrame([
+        {
+            "标题": "江河集团：全资子公司中标沙特幕墙工程 中标金额折合人民币约2.23亿元",
+            "内容": "中标金额约2.23亿元",
+            "发布时间": "2026-08-31 15:50:00",
+            "链接": "https://news.10jqka.com.cn/20260831/c679444232.shtml",
+        },
+        {
+            "标题": "外交部：中方从不刻意追求贸易顺差",
+            "内容": "反对单边关税",
+            "发布时间": "2026-08-31 15:32:00",
+            "链接": "https://news.10jqka.com.cn/20260831/c679443440.shtml",
+        },
+    ])
+    sina = pd.DataFrame([
+        {"时间": "2026-08-31 15:48:00", "内容": "【江河集团：中标沙特幕墙工程 金额约2.23亿元】尚未签正式合同"},
+        {"时间": "2026-08-31 15:44:00", "内容": "【外交部：中方愿推动中俄新时代全面战略协作伙伴关系高水平发展】丁薛祥将出席论坛"},
+    ])
+    combined = combine_news_frames([ths, sina])
+    titles = combined["title"].tolist()
+    jianghe = combined[combined["title"].str.contains("江河集团")]
+    assert len(jianghe) == 1
+    assert jianghe["url"].iloc[0].startswith("https://news.10jqka.com.cn/")
+    assert any("贸易顺差" in title for title in titles)
+    assert any("中俄" in title for title in titles)
+    russia = combined[combined["title"].str.contains("中俄")]
+    assert russia["url"].iloc[0] == ""

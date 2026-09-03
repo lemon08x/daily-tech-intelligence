@@ -75,6 +75,8 @@ class SitemapSource:
         for modified, url in sorted(candidates, reverse=True):
             title = _slug_title(url)
             summary = ""
+            content = ""
+            extraction_quality = "metadata"
             metadata_error = ""
             if self.config.get("fetch_page_metadata", False):
                 try:
@@ -86,6 +88,17 @@ class SitemapSource:
                     if extracted is not None:
                         title = plain_text(extracted.title or title)
                         summary = plain_text(extracted.description or "")
+                    if self.config.get("fetch_full_text", True):
+                        full_text = trafilatura.extract(
+                            page.text,
+                            include_links=False,
+                            include_images=False,
+                            include_comments=False,
+                        ) or ""
+                        full_text = full_text.strip()
+                        if len(full_text) >= 200:
+                            content = full_text
+                            extraction_quality = "full"
                 except Exception as exc:
                     metadata_error = f"{type(exc).__name__}: {exc}"[:300]
             if not passes_keyword_filters(title, summary, self.config):
@@ -96,6 +109,11 @@ class SitemapSource:
                 "sitemap_url": self.config["url"],
                 "fetch_full_text": bool(self.config.get("fetch_full_text", True)),
             }
+            path_topic_hints = self.config.get("path_topic_hints") or {}
+            for prefix, topic_id in path_topic_hints.items():
+                if urlsplit(url).path.startswith(str(prefix)):
+                    metadata["topic_hint"] = str(topic_id)
+                    break
             if metadata_error:
                 metadata["metadata_error"] = metadata_error
             documents.append(
@@ -110,11 +128,11 @@ class SitemapSource:
                     published_at=modified,
                     fetched_at=now,
                     summary=summary or title,
-                    content=summary or title,
+                    content=content or summary or title,
                     content_hash=content_hash(title, summary or canonical),
                     source_tier=int(self.config["tier"]),
                     content_type="article",
-                    extraction_quality="metadata",
+                    extraction_quality=extraction_quality,
                     metadata=metadata,
                 )
             )

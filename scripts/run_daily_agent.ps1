@@ -31,6 +31,7 @@ $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $Config = Join-Path $ProjectRoot "config\settings.deepseek.yaml"
 
 Write-Host "[$Stamp] 启动 DeepSeek V4 Flash 生成日报"
+$env:PYTHONUTF8 = "1"
 $env:PYTHONUNBUFFERED = "1"
 $lanBypass = "localhost,127.0.0.1,::1,192.168.31.235,192.168.31.236"
 if ($env:NO_PROXY) {
@@ -41,11 +42,14 @@ if ($env:NO_PROXY) {
 $env:no_proxy = $env:NO_PROXY
 & $Python -m daily_intel run --config $Config --require-ai --experiment-id deepseek-v4-flash *>> $RunLog
 $RunExit = $LASTEXITCODE
+if ($null -eq $RunExit) { $RunExit = 1 }
 Write-Host "[$(Get-Date -Format HHmmss)] 日报生成退出码: $RunExit"
 
 & $Python (Join-Path $PSScriptRoot "send_report.py") *>> $SendLog
 $SendExit = $LASTEXITCODE
+if ($null -eq $SendExit) { $SendExit = 1 }
 Write-Host "[$(Get-Date -Format HHmmss)] 邮件发送退出码: $SendExit"
 Get-Content $SendLog -ErrorAction SilentlyContinue
 
-exit 0
+if ($RunExit -ne 0) { exit $RunExit }
+exit $SendExit

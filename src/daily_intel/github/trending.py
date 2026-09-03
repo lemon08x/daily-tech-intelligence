@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 import base64
+import html as html_lib
 import os
 import re
 from typing import Any
+from urllib.parse import quote
 
 from daily_intel.infrastructure.http import http_get
 from daily_intel.market.normalize import clean_text
 
 
 ARTICLE_RE = re.compile(r"<article class=\"Box-row\"[\s\S]*?</article>", re.I)
-REPO_RE = re.compile(r'href="(/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"')
-DESC_RE = re.compile(r"<p[^>]*>([\s\S]*?)</p>", re.I)
+REPO_HEADING_RE = re.compile(
+    r'<h2\b[^>]*>[\s\S]*?<a\b[^>]*href="(/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"',
+    re.I,
+)
+DESC_RE = re.compile(r"<p\b[^>]*>([\s\S]*?)</p>", re.I)
 LANG_RE = re.compile(r'itemprop="programmingLanguage">([^<]+)', re.I)
 STARS_TODAY_RE = re.compile(r"([\d,]+)\s+stars today", re.I)
 STARS_WEEK_RE = re.compile(r"([\d,]+)\s+stars this week", re.I)
@@ -51,15 +56,21 @@ def parse_trending_html(html: str, period: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for article in ARTICLE_RE.findall(html or ""):
-        hrefs = [item for item in REPO_RE.findall(article) if item.count("/") == 2]
-        if not hrefs:
+        repository = REPO_HEADING_RE.search(article)
+        if repository is None:
             continue
-        full_name = hrefs[0].lstrip("/")
-        if full_name in seen or full_name.startswith("topics/"):
+        full_name = repository.group(1).lstrip("/")
+        if full_name in seen:
             continue
         seen.add(full_name)
-        description = TAG_RE.sub("", DESC_RE.search(article).group(1) if DESC_RE.search(article) else "")
-        language = (LANG_RE.search(article).group(1) if LANG_RE.search(article) else "").strip()
+        description_match = DESC_RE.search(article)
+        description = html_lib.unescape(
+            TAG_RE.sub("", description_match.group(1) if description_match else "")
+        )
+        language_match = LANG_RE.search(article)
+        language = html_lib.unescape(
+            language_match.group(1) if language_match else ""
+        ).strip()
         stars_today = _count(STARS_TODAY_RE.search(article))
         stars_week = _count(STARS_WEEK_RE.search(article))
         stars_total = _stars_total_from_article(article)
@@ -161,6 +172,16 @@ MANIFEST_NAMES = (
     "package.json", "pyproject.toml", "Cargo.toml", "go.mod",
     "composer.json", "setup.cfg", "setup.py", "Gemfile",
 )
+SOURCE_DIR_NAMES = ("src", "app", "lib", "cmd", "packages", "scripts")
+SOURCE_SUFFIXES = (
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".rs", ".go", ".rb",
+    ".php", ".java", ".kt", ".cs", ".sh",
+)
+SOURCE_ENTRY_NAMES = (
+    "main.py", "app.py", "cli.py", "server.py", "index.js", "index.ts",
+    "index.tsx", "main.rs", "main.go",
+)
+README_NAMES = ("README.md", "README.rst", "README.txt", "README")
 
 
 def _clip_block(text: str, max_chars: int) -> str:
@@ -191,20 +212,44 @@ def fetch_github_readme(full_name: str, timeout: int = 12, max_chars: int = 4500
     identity = str(full_name or "").strip("/")
     if not identity or identity.count("/") != 1:
         return ""
-    response = http_get(
-        f"https://api.github.com/repos/{identity}/readme",
-        timeout=timeout,
-        headers=_github_headers("application/vnd.github.raw"),
-    )
-    if response.status_code == 404:
-        return ""
-    response.raise_for_status()
-    return _clip_block(response.text, max_chars)
+    api_response = None
+    api_error: Exception | None = None
+    try:
+        api_response = http_get(
+            f"https://api.github.com/repos/{identity}/readme",
+            timeout=timeout,
+            headers=_github_headers("application/vnd.github.raw"),
+        )
+        if api_response.status_code == 200:
+            return _clip_block(api_response.text, max_chars)
+    except Exception as exc:
+        api_error = exc
+
+    # Anonymous GitHub API quotas are shared by proxy egress IPs and can be
+    # exhausted even when the public repository itself is reachable. Raw
+    # content is the stable read-only fallback and does not need API quota.
+    encoded_identity = quote(identity, safe="/")
+    for name in README_NAMES:
+        try:
+            response = http_get(
+                f"https://raw.githubusercontent.com/{encoded_identity}/HEAD/{name}",
+                timeout=timeout,
+                headers=TRENDING_HEADERS,
+            )
+            if response.status_code == 200 and response.text.strip():
+                return _clip_block(response.text, max_chars)
+        except Exception:
+            continue
+    if api_response is not None and api_response.status_code != 404:
+        api_response.raise_for_status()
+    if api_error is not None:
+        raise api_error
+    return ""
 
 
 def _fetch_github_file(full_name: str, path: str, timeout: int, max_chars: int) -> str:
     response = http_get(
-        f"https://api.github.com/repos/{full_name}/contents/{path}",
+        f"https://api.github.com/repos/{full_name}/contents/{quote(path, safe='/')}",
         timeout=timeout,
         headers=_github_headers(),
     )
@@ -214,10 +259,67 @@ def _fetch_github_file(full_name: str, path: str, timeout: int, max_chars: int) 
     return _clip_block(_decode_contents_payload(response.json()), max_chars)
 
 
+def _source_candidate(entries: Any) -> tuple[str, str]:
+    if not isinstance(entries, list):
+        return "", ""
+    files = [
+        item for item in entries
+        if isinstance(item, dict)
+        and str(item.get("type") or "") == "file"
+        and str(item.get("name") or "").lower().endswith(SOURCE_SUFFIXES)
+        and str(item.get("name") or "").lower() not in {
+            name.lower() for name in MANIFEST_NAMES
+        }
+    ]
+    files.sort(key=lambda item: (
+        str(item.get("name") or "").lower() not in SOURCE_ENTRY_NAMES,
+        len(str(item.get("path") or item.get("name") or "")),
+        str(item.get("path") or item.get("name") or "").lower(),
+    ))
+    entry_files = [
+        item for item in files
+        if str(item.get("name") or "").lower() in SOURCE_ENTRY_NAMES
+    ]
+    if entry_files:
+        chosen = entry_files[0]
+        return str(chosen.get("path") or chosen.get("name") or ""), ""
+    directories = {
+        str(item.get("name") or "").lower(): str(item.get("path") or item.get("name") or "")
+        for item in entries
+        if isinstance(item, dict) and str(item.get("type") or "") == "dir"
+    }
+    for name in SOURCE_DIR_NAMES:
+        if name in directories:
+            return "", directories[name]
+    if files:
+        chosen = files[0]
+        return str(chosen.get("path") or chosen.get("name") or ""), ""
+    return "", ""
+
+
+def _fetch_source_excerpt(
+    full_name: str, root_entries: Any, timeout: int, max_chars: int = 1800,
+) -> str:
+    path, directory = _source_candidate(root_entries)
+    if not path and directory:
+        response = http_get(
+            f"https://api.github.com/repos/{full_name}/contents/{quote(directory, safe='/')}",
+            timeout=timeout,
+            headers=_github_headers(),
+        )
+        if response.status_code != 404:
+            response.raise_for_status()
+            path, _ = _source_candidate(response.json())
+    if not path:
+        return ""
+    content = _fetch_github_file(full_name, path, timeout, max_chars)
+    return f"{path}:\n{content}" if content else ""
+
+
 def fetch_github_project_context(full_name: str, timeout: int = 12) -> dict[str, str]:
-    """README first; if that is thin, also pull root listing and a manifest."""
+    """Collect bounded README, manifest, directory and source-entry evidence."""
     identity = str(full_name or "").strip("/")
-    empty = {"readme": "", "root_files": "", "manifest": ""}
+    empty = {"readme": "", "root_files": "", "manifest": "", "source_excerpt": ""}
     if not identity or identity.count("/") != 1:
         return empty
     readme = ""
@@ -227,6 +329,7 @@ def fetch_github_project_context(full_name: str, timeout: int = 12) -> dict[str,
         readme = ""
     root_files = ""
     manifest = ""
+    source_excerpt = ""
     try:
         response = http_get(
             f"https://api.github.com/repos/{identity}/contents/",
@@ -242,11 +345,15 @@ def fetch_github_project_context(full_name: str, timeout: int = 12) -> dict[str,
                 if isinstance(item, dict) and item.get("name")
             ]
             root_files = " ".join(names[:40])
-            if len(readme) < 600:
-                chosen = next((name for name in MANIFEST_NAMES if name in names), "")
-                if chosen:
-                    manifest = _fetch_github_file(identity, chosen, timeout, 1500)
+            chosen = next((name for name in MANIFEST_NAMES if name in names), "")
+            if chosen:
+                manifest = _fetch_github_file(identity, chosen, timeout, 1500)
+            source_excerpt = _fetch_source_excerpt(identity, entries, timeout)
     except Exception:
         pass
-    return {"readme": readme, "root_files": root_files, "manifest": manifest}
-
+    return {
+        "readme": readme,
+        "root_files": root_files,
+        "manifest": manifest,
+        "source_excerpt": source_excerpt,
+    }

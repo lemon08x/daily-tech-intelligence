@@ -9,10 +9,12 @@ from daily_intel.core.models import (
 from daily_intel.intelligence.sources.common import event_lane
 
 
-SCOUT_SYSTEM = """你是科技产业情报编辑。只依据用户提供的事件摘要评分，不使用未提供的事实。
+SCOUT_SYSTEM = """你是科技产业情报编辑。只依据用户提供的事件材料评分，不使用未提供的事实。
+必须为输入中的每一个 event_id 返回且只返回一个结果，不得因为主题不明确或价值较低而省略。
+为每个事件选择一个 allowed_topics 中的 topic_id；无法归类时使用 other。rule_topic_hint 只供参考，你必须独立判断。
 识别真正具有技术新颖性、工程深度或未来6至24个月产业影响的事件。输出严格JSON，字段必须符合给定结构。
 相关性、创新性、技术深度和产业影响均使用0到100分。营销软文和常规版本更新应低分。
-lane=general 的周刊、IT 热点和社区精选也要保留名额，不要把初筛名额全部给论文。
+lane=general 的周刊、IT 热点和社区精选也应得到公允判断，不要把高分全部给论文。
 生物技术应用如果只是常规实验、没有新的计算方法或产业节点，应明显低于大模型、芯片、机器人和开发工具。"""
 
 
@@ -44,10 +46,11 @@ DIGEST_BRIEF_SYSTEM = """你是科技与市场日报编辑。只依据用户提�
 不要写影响分析、不要写依据段落、不要预测涨跌，不要编造未出现的公司、数字或政策细节。输出严格JSON。"""
 
 
-GIT_BRIEF_SYSTEM = """你是开源产品编辑。只依据用户提供的仓库名称、简介、README 和源码线索，用一句话说清这个项目的业务功能：给什么人解决什么问题。
-优先读 README；README 太短或像徽章堆砌时，再用目录和清单文件（package.json / pyproject.toml 等）判断它是库、工具还是应用。
+GIT_BRIEF_SYSTEM = """你是开源产品编辑。只依据用户提供的仓库名称、简介、README、清单文件和源码片段，说明项目给谁、解决什么问题，并给出具体使用场景。
+优先读 README，并用清单文件、目录和源码入口交叉核对它是库、工具还是应用。function 用一到两句简体中文讲清核心功能，不要照抄英文简介。
+use_cases 给出 2 到 3 个由材料直接支持的具体场景；每条写清“谁在什么任务中如何使用、得到什么结果”，不要写“提高效率”“用于开发”等空泛套话。材料不足时宁可少写，不得凭常识补齐。
 不要复述星标或热度，不要罗列技术栈，不要编造未给出的用户量、融资或公司采用。
-kicker 用 2 到 4 字中文主题词。输出严格JSON。"""
+kicker 用 2 到 4 个中文字符概括项目类型，不要中英混写。输出严格JSON。"""
 
 
 def digest_brief_user(payload: dict) -> str:
@@ -80,7 +83,7 @@ def scout_user(
         payload.append(
             {
                 "event_id": event.id, "title": event.title,
-                "topic_hint": event.topic_id, "lane": event_lane(documents),
+                "rule_topic_hint": event.topic_id, "lane": event_lane(documents),
                 "deterministic_score": event.deterministic_score,
                 "sources": [
                     {
@@ -93,7 +96,11 @@ def scout_user(
             }
         )
     return json.dumps(
-        {"allowed_topics": [{"id": t["id"], "name": t["name"]} for t in topics], "events": payload,
+        {"allowed_topics": [
+             *[{"id": t["id"], "name": t["name"]} for t in topics],
+             {"id": "other", "name": "其他科技"},
+         ], "events": payload,
+         "requirements": "必须逐一返回全部 event_id；主题不确定时 topic_id=other，不得省略。",
          "output": "JSON object matching this schema: "
                    + json.dumps(ScoutBatch.model_json_schema(), ensure_ascii=False)},
         ensure_ascii=False,
@@ -133,6 +140,7 @@ def git_brief_user(projects: list[dict]) -> str:
             "readme": _clip_text(str(item.get("readme") or ""), 4500),
             "root_files": _clip_text(str(item.get("root_files") or ""), 400),
             "manifest": _clip_text(str(item.get("manifest") or ""), 1500),
+            "source_excerpt": _clip_text(str(item.get("source_excerpt") or ""), 1800),
         }
         for item in projects[:12]
     ]
@@ -141,8 +149,8 @@ def git_brief_user(projects: list[dict]) -> str:
             "projects": payload,
             "requirements": {
                 "language": "简体中文",
-                "focus": "业务功能：给谁、解决什么问题",
-                "prefer": "README，其次清单文件和目录",
+                "focus": "业务功能与具体使用场景：谁在什么任务中如何使用、得到什么结果",
+                "prefer": "README 为主，清单文件、目录和源码片段交叉核对",
                 "schema": GitBriefingBatch.model_json_schema(),
             },
         },

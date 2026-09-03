@@ -177,9 +177,12 @@ def passes_keyword_filters(title: str, summary: str, config: dict) -> bool:
 
 def source_metadata(config: dict) -> dict[str, str]:
     content_type = str(config.get("content_type") or "article")
-    return {
+    metadata = {
         "source_name": str(config["name"]),
         "collector_id": str(config["id"]),
         "publisher_id": document_source_id(config),
         "lane": document_lane(config, content_type),
     }
+    if config.get("topic_hint"):
+        metadata["topic_hint"] = str(config["topic_hint"])
+    return metadata

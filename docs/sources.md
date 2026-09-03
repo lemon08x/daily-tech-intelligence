@@ -4,7 +4,7 @@
 
 - Tier 1：原始论文、政府和研究机构、企业官方发布、项目官方 Release。可作为深度结论的一手来源。
 - Tier 2：有编辑筛选和技术深度的行业媒体。用于补充产业影响或交叉验证，不能单独支撑深度结论。
-- Tier 3：市场快讯和聚合线索。只进入雷达，不得用于深度结论。
+- Tier 3：市场快讯和聚合线索。进入统一 Scout 和研究流程，但不得单独支撑深度结论。
 
 来源等级描述的是证据身份，不等于文章一定正确。所有深度结果仍需通过逐字引文、独立校验和确定性质量门。
 
@@ -12,22 +12,24 @@
 
 - arXiv 拆为 AI/软件、芯片/系统/应用物理、计算生物三组独立查询，避免不同领域争用同一个 30 条结果窗口。新增 `cs.AR`、`cs.SE`、`eess.SP`、`physics.app-ph` 和 `cond-mat.mes-hall`。
 - 官方 RSS 包括 OpenAI、DeepMind、Microsoft Research、NVIDIA、Hugging Face、Mistral、Meta、MIT、Nature 和美国能源部。
-- Anthropic 与 Isomorphic Labs 没有可用 RSS，通过官方 sitemap 的 `lastmod` 增量发现文章；入选后仍走统一全文提取。
+- Anthropic 与 Isomorphic Labs 没有可用 RSS，通过官方 sitemap 的 `lastmod` 增量发现文章；抓页面元数据时会复用同一响应提取正文。Anthropic `/claude-` 路径提供 `foundation_models` 主题提示，但最终分类仍由 Scout 判断。
 - Hugging Face Daily Papers API 只提供社区精选入口；存储身份、正文链接和证据仍归属原始 arXiv 论文，不能被计算成第二个独立来源。
 - bioRxiv 全量源先做 AI4Science/生物技术关键词过滤，入选后提取原文。
 - IEEE Spectrum、Tom's Hardware 和 CleanTechnica 为 Tier 2，并在采集层过滤促销和非目标内容。
 - 国内机构网站暂未发现稳定 RSS，使用智源 FlagOpen、上海 AI Lab 的 InternLM/OpenMMLab 官方 Release。
+- AkShare 合并同花顺与新浪快讯，标准化后作为 `market_radar` Tier 3 文档进入与科技来源相同的聚类、Scout、Analyst、Verifier 和质量门；市场层不再另做关键词前十或直接发布。
 - 巨潮资讯已在公司映射阶段核验近 365 天官方公告；它不是泛化新闻源。无公告证据的公司只能显示为待核验假设。
 
 ## 未启用的候选
 
 - 用户建议的 Anthropic RSS URL 当前返回 404，因此使用官方 sitemap。
+- Hacker Newsletter 的 `https://hackernewsletter.com/rss.xml` 与 TLDR AI 的 `https://tldr.tech/ai/rss` 持续返回 404，且官网没有声明替代 Feed；配置保留为 `enabled: false` 以便日后复查。TLDR Tech RSS 不能替代内容不同的 TLDR AI。
 - NREL 当前在项目默认 TLS 客户端中握手失败，不写入启用列表，避免每天产生固定失败；恢复稳定后可按 RSS/Feed 方式加入。
 - 智源和上海 AI Lab 官网当前没有可解析的 RSS/Atom，禁止把普通 HTML 首页伪装成 Feed。
 - AnandTech 已不适合作为持续更新来源；硬件产业动态由官方源、IEEE 和带过滤的 Tom's Hardware 补充。
 - GitHub Commits、Pull Requests、Discussions 和 Trending 暂不启用。它们噪声高、公共 API 限流明显，后续应作为独立 Radar 适配器实现高信号规则，不能混入正式 Release。
-- 科技周刊进入泛读栏：阮一峰周刊 Issue 投稿池为 Tier 3 线索；Hacker Newsletter、Import AI、TLDR、Golang/JavaScript Weekly 为 Tier 2。泛读另外收 IT 热点：Hacker News 首页、Ars Technica、Phoronix、InfoQ、Solidot。缺少 Tier 1 一手来源时质量门会降为线索，不会单独变成深度结论。
-- Git 页除 GitHub Trending 外，还拉取 Hugging Face 热门模型和 GitLab 按星标排序的公开项目；它们只进入 Git 卡片，不替代科技页的 Release/论文证据。
+- 科技周刊进入泛读栏：阮一峰周刊 Issue 投稿池通过 GitHub Issues REST API 逐条增量采集，作为 Tier 3 线索；Import AI、TLDR Tech、Golang/JavaScript Weekly 为 Tier 2。泛读另外收 IT 热点：Hacker News 首页、Ars Technica、Phoronix、InfoQ、Solidot。缺少 Tier 1 一手来源时质量门会降为线索，不会单独变成深度结论。
+- Git 页只使用 GitHub Trending；它独立于精读/泛读情报，不替代 Release、论文或 AkShare 雷达证据。
 - 阮一峰周刊历史 `docs/` 外链不在每日主流程里 git pull。用 `scripts/refresh_weekly_catalog.py` 解析栏目并探测 RSS，写入 `data/cache/weekly_blog_feeds.json` 后作为 Tier 3 泛读补充源。
 - 周刊短链会还原成最终 URL，再按 canonical_url / GitHub owner/repo 去重，避免同一项目被多个周刊重复深研。
 

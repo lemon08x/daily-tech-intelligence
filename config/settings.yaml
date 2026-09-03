@@ -1,7 +1,6 @@
 app:
   title: "科技产业情报日报"
   timezone: "Asia/Shanghai"
-  top_news: 10
 
 paths:
   cache_dir: "../data/cache"
@@ -13,15 +12,18 @@ intelligence:
   resume_overlap_hours: 6
   cluster_window_hours: 72
   max_items_per_source: 30
-  max_scout_events: 40
-  max_deep_events: 10
-  max_general_events: 5
-  max_hardcore_events: 5
+  scout_batch_size: 30
+  intensive_reading_events: 10
+  offline_analysis_events: 500
+  preferred_general_events: 5
+  preferred_hardcore_events: 5
+  preferred_max_per_topic: 2
+  preferred_official_release_events: 3
   full_text_max_chars: 50000
   title_similarity_threshold: 88
   source_fetch_timeout_seconds: 20
-  selection_deterministic_weight: 0.65
-  selection_model_weight: 0.35
+  selection_deterministic_weight: 0.35
+  selection_model_weight: 0.65
   selection_model_reject_floor: 55
   selection_repeat_penalty: 0.4
   selection_repeat_hours: 36
@@ -56,7 +58,7 @@ llm:
   provider: "openai_compatible"
   base_url: "https://api.deepseek.com"
   api_key_env: "DEEPSEEK_API_KEY"
-  prompt_version: "tech-intel-v3"
+  prompt_version: "tech-intel-v5"
   scout:
     model: "deepseek-v4-flash"
     max_output_tokens: 6000

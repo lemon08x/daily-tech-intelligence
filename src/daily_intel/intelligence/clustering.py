@@ -21,6 +21,8 @@ DEPTH_WORDS = {
 TOPIC_RANK_WEIGHTS = {
     "biotech": 0.45,
 }
+UNCLASSIFIED_TOPIC_ID = "other"
+UNCLASSIFIED_TOPIC_NAME = "其他科技"
 
 
 def topic_rank_weight(topic_id: str) -> float:
@@ -43,7 +45,7 @@ def is_ci_release_ref(value: str) -> bool:
     return bool(re.search(r"/releases/tag/(?:ciflow|nightly|trunk|viable/strict|ci)(?:/|$)", text))
 
 
-def _routine_release(document: Document) -> bool:
+def is_routine_release(document: Document) -> bool:
     """Drop obvious nightly/build automation records before they consume AI slots."""
     if document.content_type != "github_release":
         return False
@@ -61,6 +63,11 @@ def _routine_release(document: Document) -> bool:
 def assign_topic(document: Document, topics: list[dict]) -> tuple[str, str, float]:
     haystack = f"{document.title} {document.summary}".lower()
     best: tuple[str, str, float] = ("", "", 0.0)
+    hinted_topic = str((document.metadata or {}).get("topic_hint") or "")
+    for topic in topics:
+        if topic["id"] == hinted_topic:
+            best = (topic["id"], topic["name"], 25.0)
+            break
     for topic in topics:
         hits = sum(1 for keyword in topic["keywords"] if keyword.lower() in haystack)
         score = min(100.0, hits * 25.0)
@@ -78,11 +85,15 @@ def cluster_documents(
 ) -> list[Event]:
     assigned: list[tuple[Document, str, str, float]] = []
     for document in documents:
-        if _routine_release(document):
+        if is_routine_release(document):
             continue
         topic_id, topic_name, relevance = assign_topic(document, topics)
-        if topic_id:
-            assigned.append((document, topic_id, topic_name, relevance))
+        assigned.append((
+            document,
+            topic_id or UNCLASSIFIED_TOPIC_ID,
+            topic_name or UNCLASSIFIED_TOPIC_NAME,
+            relevance,
+        ))
     assigned.sort(key=lambda item: item[0].published_at, reverse=True)
 
     groups: list[list[tuple[Document, str, str, float]]] = []
@@ -94,7 +105,12 @@ def cluster_documents(
             if abs(document.published_at - leader.published_at) > timedelta(hours=window_hours):
                 continue
             same_project = bool(_project_keys(document) & _project_keys(leader))
-            if not same_project:
+            same_url = bool(
+                (document.canonical_url or document.url)
+                and (document.canonical_url or document.url).rstrip("/")
+                == (leader.canonical_url or leader.url).rstrip("/")
+            )
+            if not same_project and not same_url:
                 if topic_id != leader_topic:
                     continue
                 if token_set_ratio(
@@ -110,7 +126,8 @@ def cluster_documents(
     events: list[Event] = []
     for group in groups:
         docs = [item[0] for item in group]
-        topic_id, topic_name = group[0][1], group[0][2]
+        topic_source = max(group, key=lambda item: item[3])
+        topic_id, topic_name = topic_source[1], topic_source[2]
         source_quality = max(35.0, max(125.0 - doc.source_tier * 25.0 for doc in docs))
         relevance = max(item[3] for item in group)
         text = " ".join(f"{doc.title} {doc.summary}" for doc in docs).lower()

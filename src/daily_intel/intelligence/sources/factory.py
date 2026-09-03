@@ -8,6 +8,7 @@ from typing import Any
 from daily_intel.core.ports import SourceAdapter
 from daily_intel.intelligence.sources.curated import HuggingFaceDailyPapersSource
 from daily_intel.intelligence.sources.feeds import ArxivSource, FeedSource
+from daily_intel.intelligence.sources.github_issues import GitHubIssuesSource
 from daily_intel.intelligence.sources.sitemaps import SitemapSource
 
 
@@ -81,6 +82,8 @@ def build_sources(
             sources.append(SitemapSource(item, timeout))
         elif source_type == "huggingface_daily_papers":
             sources.append(HuggingFaceDailyPapersSource(item, timeout))
+        elif source_type == "github_issues":
+            sources.append(GitHubIssuesSource(item, timeout))
         elif source_type == "github_release":
             feed_config = {
                 **item,

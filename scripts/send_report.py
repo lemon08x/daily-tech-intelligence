@@ -33,6 +33,13 @@ def load_env() -> dict[str, str]:
     return env
 
 
+def _read_log_text(path: Path) -> str:
+    data = path.read_bytes()
+    if data.startswith(b"\xff\xfe") or data.startswith(b"\xfe\xff"):
+        return data.decode("utf-16", errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
 def find_today_run() -> tuple[Path | None, list[Path]]:
     day_dir = PROJECT_ROOT / "output" / date.today().isoformat()
     runs_dir = day_dir / "runs"
@@ -90,11 +97,11 @@ def main() -> int:
         tail = ""
         logs = sorted((PROJECT_ROOT / "logs").glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if logs:
-            tail = "\n".join(logs[0].read_text(encoding="utf-8", errors="replace").splitlines()[-15:])
+            tail = "\n".join(_read_log_text(logs[0]).splitlines()[-15:])
         body = f"今日日报生成失败或尚未完成（找到 {len(candidates)} 个运行目录，均无 daily_digest.html）。\n\n日志尾部：\n{tail}"
         send(env, f"【日报失败】{date.today().isoformat()} 科技情报日报未生成", body, [])
         print("已发送失败通知")
-        return 0
+        return 1
 
     summary = build_summary(run)
     attachments = [

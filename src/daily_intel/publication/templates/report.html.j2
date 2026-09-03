@@ -8,7 +8,7 @@
     :root {
       --bg:#f2f4f7; --panel:#fff; --ink:#18202f; --muted:#697386;
       --line:#e3e7ee; --brand:#2455b8; --brand-soft:#edf3ff;
-      --up:#c63f3a; --down:#117a57; --amber:#9a5b00;
+      --down:#117a57; --amber:#9a5b00;
     }
     * { box-sizing:border-box; }
     [hidden] { display:none !important; }
@@ -44,10 +44,13 @@
     .scan-item { display:flex; align-items:flex-start; gap:8px; padding:4px 0; line-height:1.5; }
     .scan-kicker { flex:none; min-width:3.2em; padding:1px 8px; border-radius:999px; color:#22449e; background:var(--brand-soft); font-size:12px; font-weight:750; text-align:center; }
     .scan-item a { color:var(--ink); font-weight:650; }
-    .trend { display:grid; grid-template-columns:92px 1fr 64px; gap:8px; align-items:center; padding:5px 0; }
-    .trend-track { height:10px; border-radius:8px; background:#edf1f5; overflow:hidden; }
-    .trend-fill { display:block; height:100%; border-radius:8px; }
-    .trend-fill.up { background:var(--up); }
+    .scan-clusters { columns:2; column-gap:14px; margin-top:18px; }
+    .scan-cluster { display:inline-block; width:100%; margin:0 0 14px; padding:17px 18px; break-inside:avoid; border:1px solid var(--line); border-radius:12px; background:#fbfcfe; }
+    .scan-cluster h3 { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; font-size:16px; }
+    .scan-count { color:var(--muted); font-size:12px; font-weight:500; }
+    .scan-cluster .scan-item { padding:6px 0 6px 15px; border-top:1px solid #edf0f5; position:relative; }
+    .scan-cluster .scan-item:first-child { border-top:0; }
+    .scan-cluster .scan-item::before { content:""; position:absolute; top:15px; left:1px; width:5px; height:5px; border-radius:50%; background:#8fa7dc; }
     .takeaway { margin:8px 0 10px; font-size:16px; line-height:1.7; }
     .story { padding:26px 28px; margin:14px 0; }
     .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
@@ -71,15 +74,14 @@
     .subhead { margin:18px 0 8px; font-weight:800; }
     .evidence,.quality-alert { padding:10px 12px; margin:8px 0; color:#39445b; background:#f7f9fc; border-radius:8px; }
     .quality-alert { color:#744700; background:#fff6e5; }
-    .git-bars { margin-top:8px; }
     .runtime summary { cursor:pointer; font-size:18px; font-weight:800; }
-    .up { color:var(--up); }
     .down { color:var(--down); }
     .status { display:flex; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); display:grid; grid-template-columns:1.1fr .8fr 1.5fr; }
     .stale { color:var(--amber); font-weight:750; }
     footer { padding:20px 4px; color:var(--muted); }
     @media (max-width:800px) {
       .analysis-grid { grid-template-columns:1fr 1fr; }
+      .scan-clusters { columns:1; }
       .status { grid-template-columns:1fr; }
     }
     @media (max-width:560px) {
@@ -88,8 +90,6 @@
       header,.section,.story { padding:18px; }
       h1 { font-size:25px; }
       .analysis-grid { grid-template-columns:1fr; }
-      .trend { grid-template-columns:1fr 64px; }
-      .trend-track { grid-column:1 / -1; }
       .report-tabs { position:sticky; top:0; z-index:5; }
       .story-kicker { align-items:flex-start; }
     }
@@ -110,56 +110,31 @@
   <header>
     <h1>{{ title }}</h1>
     <p class="muted">{{ report_date }} · 行情交易日 {{ market_date }} · 实验 {{ experiment_id|default('default') }} · 运行 {{ run_name|default('default') }} · 生成于 {{ generated_at }}{% if not is_trading_day %} · 非交易日，行情沿用最近交易日{% endif %}</p>
-    <p class="muted">先扫今日速读，再按需打开科技、Git 和市场情报。科技页可在泛读和硬核之间切换。</p>
+    <p class="muted">先扫今日速读，再按需打开精读、泛读和 Git。精读与泛读来自统一 Scout 选题链，Git 为独立热门仓库雷达。</p>
   </header>
 
-  {% if plain_digest and (plain_digest.general_items or plain_digest.hardcore_items or plain_digest.tech_items) %}
+  {% if plain_digest and plain_digest.tech_items %}
   <section class="section digest">
     <h2>今日速读</h2>
-    {% if plain_digest.general_items %}
     <div class="digest-block">
-      <h3>泛读</h3>
-      <div class="scan-list">{% for item in plain_digest.general_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
-    </div>
-    {% endif %}
-    {% if plain_digest.hardcore_items %}
-    <div class="digest-block">
-      <h3>硬核</h3>
-      <div class="scan-list">{% for item in plain_digest.hardcore_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
-    </div>
-    {% endif %}
-    {% if not plain_digest.general_items and not plain_digest.hardcore_items and plain_digest.tech_items %}
-    <div class="digest-block">
-      <h3>科技</h3>
+      <h3>精读摘要</h3>
       <div class="scan-list">{% for item in plain_digest.tech_items %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div>
     </div>
-    {% endif %}
   </section>
   {% endif %}
 
   <nav class="report-tabs" role="tablist" aria-label="日报内容">
-    <button id="news-tab" type="button" role="tab" aria-selected="true" aria-controls="news-panel" data-tab="news">科技</button>
+    <button id="intensive-tab" type="button" role="tab" aria-selected="true" aria-controls="intensive-panel" data-tab="intensive">精读</button>
+    <button id="extensive-tab" type="button" role="tab" aria-selected="false" aria-controls="extensive-panel" data-tab="extensive" tabindex="-1">泛读</button>
     <button id="git-tab" type="button" role="tab" aria-selected="false" aria-controls="git-panel" data-tab="git" tabindex="-1">Git</button>
-    <button id="market-tab" type="button" role="tab" aria-selected="false" aria-controls="market-panel" data-tab="market" tabindex="-1">市场情报</button>
   </nav>
 
-  <section id="news-panel" class="tab-panel" role="tabpanel" aria-labelledby="news-tab">
+  <section id="intensive-panel" class="tab-panel" role="tabpanel" aria-labelledby="intensive-tab">
     <section class="section">
-      <h2>科技 <span class="muted" style="font-size:13px;font-weight:400">{{ analyses|length }} 项 · {{ ai_status_label }}</span></h2>
-      <p class="muted section-intro">分成泛读和硬核。泛读覆盖周刊、IT 热点和社区精选；硬核来自论文、官方发布和基础设施 Release。周刊和热点源默认是线索，缺少一手来源时不会升成深度结论。</p>
+      <h2>精读 <span class="muted" style="font-size:13px;font-weight:400">{{ intensive_analyses|length }} 项 · {{ ai_status_label }}</span></h2>
+      <p class="muted section-intro">按统一 Scout 顺序选取材料达到精读门槛的前十。每条均经过 Analyst、独立 Verifier 和确定性质量门，并保留原文证据与展开分析。</p>
     </section>
 
-    {% set general_news = analyses | selectattr('lane', 'equalto', 'general') | list %}
-    {% set hardcore_news = analyses | rejectattr('lane', 'equalto', 'general') | list %}
-    {% if not analyses %}
-    <section class="section"><p class="muted">今日没有可发布的科技事件。请检查来源状态，或联网后重试。</p></section>
-    {% endif %}
-    {% if analyses %}
-    <nav class="report-tabs sub-tabs" role="tablist" aria-label="科技栏位" data-default="{{ 'general' if general_news else 'hardcore' }}">
-      <button id="general-lane-tab" type="button" role="tab" aria-selected="{{ 'true' if general_news else 'false' }}" aria-controls="general-lane" data-subtab="general" {% if not general_news %}tabindex="-1"{% endif %}>泛读 {{ general_news|length }}</button>
-      <button id="hardcore-lane-tab" type="button" role="tab" aria-selected="{{ 'false' if general_news else 'true' }}" aria-controls="hardcore-lane" data-subtab="hardcore" {% if general_news %}tabindex="-1"{% endif %}>硬核 {{ hardcore_news|length }}</button>
-    </nav>
-    {% endif %}
     {% macro story_card(analysis, lane_label, index) %}
     <article class="story">
       <div class="story-kicker">
@@ -192,43 +167,38 @@
       </details>
     </article>
     {% endmacro %}
-    <div id="general-lane" class="lane-panel" role="tabpanel" aria-labelledby="general-lane-tab" {% if not general_news %}hidden{% endif %}>
-    {% if general_news %}
-    <section class="section">
-      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ general_news|length }} 项</span></h2>
-      <p class="muted">适合快速扫一眼的工具、周刊、IT 热点和社区精选。</p>
-    </section>
-    {% for analysis in general_news %}{{ story_card(analysis, '泛读', loop.index) }}{% endfor %}
+    {% if intensive_analyses %}
+    {% for analysis in intensive_analyses %}{{ story_card(analysis, '精读', loop.index) }}{% endfor %}
     {% else %}
-    <section class="section"><p class="muted">今日没有泛读条目。</p></section>
+    <section class="section"><p class="muted">今日没有可发布的精读事件。请检查来源状态，或联网后重试。</p></section>
     {% endif %}
-    </div>
-    <div id="hardcore-lane" class="lane-panel" role="tabpanel" aria-labelledby="hardcore-lane-tab" {% if general_news %}hidden{% endif %}>
-    {% if hardcore_news %}
-    <section class="section">
-      <h2>硬核 <span class="muted" style="font-size:13px;font-weight:400">{{ hardcore_news|length }} 项</span></h2>
-      <p class="muted">论文、官方发布和基础设施更新，适合对照原文深读。</p>
-    </section>
-    {% for analysis in hardcore_news %}{{ story_card(analysis, '硬核', loop.index) }}{% endfor %}
-    {% else %}
-    <section class="section"><p class="muted">今日没有硬核条目。</p></section>
-    {% endif %}
-    </div>
 
     <details class="section runtime">
       <summary>运行、模型与来源状态</summary>
       <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.estimated %}（估算）{% endif %}。</p>
       <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('未产生分析', true) }}；平均质量分 {{ quality_summary.average_score|default(0) }}；通过 {{ quality_summary.passed|default(0) }} 项，降级 {{ quality_summary.downgraded|default(0) }} 项。</p>
       <h3>科技来源</h3>{% for item in intelligence_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '失败/缓存' if item.stale else '采集成功' }}</span><span class="muted">{{ item.count|default(0) }} 条{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
-      <h3 style="margin-top:16px">市场数据</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
+      <h3 style="margin-top:16px">AkShare 市场雷达</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
       {% if pipeline_errors %}<h3 style="margin-top:16px">独立降级记录</h3><ul class="muted">{% for item in pipeline_errors %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
     </details>
+  </section>
+
+  <section id="extensive-panel" class="tab-panel" role="tabpanel" aria-labelledby="extensive-tab" hidden>
+    <section class="section digest">
+      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ extensive_items|length }} 项</span></h2>
+      <p class="muted section-intro">Scout 保留、完成深研但未进入精读的事件，也包括原始材料过短的线索。这里沿用缩略展示，一句话说清发生了什么；AkShare 快讯与其他来源使用同一套 Scout 判断。</p>
+      {% if extensive_groups %}
+      <div class="scan-clusters">{% for group in extensive_groups %}<section class="scan-cluster"><h3><span>{{ group.label }}</span><span class="scan-count">{{ group['items']|length }} 项</span></h3><div class="scan-list">{% for item in group['items'] %}<div class="scan-item">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div></section>{% endfor %}</div>
+      {% else %}
+      <p class="muted">今日没有精读之外的泛读事件。</p>
+      {% endif %}
+    </section>
   </section>
 
   <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
     <section class="section">
       <h2>Git 热门项目 <span class="muted" style="font-size:13px;font-weight:400">{{ github_projects|default([])|length }} 项</span></h2>
-      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库。一句话说清这个项目给谁、解决什么问题，并标明当前总星标。</p>
+      <p class="muted section-intro">GitHub 今日最热和本周增长最快的仓库。{% if github_brief_status == 'generated' %}AI 已逐仓库对照 README、清单文件与源码入口，说明项目功能和具体使用场景。{% elif github_brief_status == 'partial' %}AI 已完成部分仓库解读；材料不足或解读缺失的项目保留原始简介。{% elif github_brief_status == 'failed' %}本次 AI 解读失败，以下暂用仓库原始简介。{% else %}本次未调用 AI 解读，以下暂用仓库原始简介。{% endif %}同时标明当前总星标。</p>
     </section>
     {% if github_projects|default([]) %}
       {% for item in github_projects %}
@@ -240,10 +210,7 @@
         <h3 class="story-title">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.full_name }}</a>{% else %}{{ item.full_name }}{% endif %}</h3>
         <p class="muted quality-line">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span> {% endif %}{% if item.stars_total_label %}<strong>共 {{ item.stars_total_label }} 星</strong>{% endif %}{% if item.language %} · {{ item.language }}{% endif %}{% if item.stars_today %} · 今日 +{{ item.stars_today }}{% endif %}{% if item.stars_week %} · 本周 +{{ item.stars_week }}{% endif %}</p>
         {% if item.plain %}<p class="takeaway">{{ item.plain }}</p>{% endif %}
-        <div class="git-bars">
-          {% if item.stars_today %}<div class="trend"><strong>今日星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.today_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_today }}</span></div>{% endif %}
-          {% if item.stars_week %}<div class="trend"><strong>本周星标</strong><span class="trend-track"><span class="trend-fill up" style="width:{{ item.week_width|default(0) }}%"></span></span><span class="up">+{{ item.stars_week }}</span></div>{% endif %}
-        </div>
+        {% if item.use_cases %}<div class="subhead">具体使用场景</div><ul>{% for use_case in item.use_cases %}<li>{{ use_case }}</li>{% endfor %}</ul>{% endif %}
         <div class="story-actions">
           {% if item.url %}<a class="source-link" href="{{ item.url }}" target="_blank" rel="noopener noreferrer">打开仓库 ↗</a><span class="muted">GitHub</span>{% else %}<span class="muted">本条暂无链接</span>{% endif %}
         </div>
@@ -254,38 +221,20 @@
     {% endif %}
   </section>
 
-  <section id="market-panel" class="tab-panel" role="tabpanel" aria-labelledby="market-tab" hidden>
-    <section class="section digest">
-      <h2>市场情报</h2>
-      <p class="muted section-intro">只保留当天值得看的公开事件，一句话说清发生了什么。不是行情榜，也不是投资建议。</p>
-      {% if news_records %}
-      <div class="scan-list">{% for item in news_records %}<div class="scan-item">{% if item.kicker %}<span class="scan-kicker">{{ item.kicker }}</span>{% endif %}{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan or item.title }}</a>{% else %}<span>{{ item.scan or item.title }}</span>{% endif %}</div>{% endfor %}</div>
-      {% else %}
-      <p class="muted">今日没有可展示的市场事件。</p>
-      {% endif %}
-    </section>
-  </section>
-
   <footer>免责声明：本报告仅做公开信息整理与研究观察，不构成投资建议。事实请以原始论文、发布说明、公告和交易所披露为准。</footer>
 </main>
 <script>
   (() => {
-    const tabs = Array.from(document.querySelectorAll('.report-tabs:not(.sub-tabs) [role="tab"]'));
-    const panels = {news: document.getElementById('news-panel'), git: document.getElementById('git-panel'), market: document.getElementById('market-panel')};
-    const subNav = document.querySelector('.sub-tabs');
-    const subTabs = subNav ? Array.from(subNav.querySelectorAll('[role="tab"]')) : [];
-    const lanes = {general: document.getElementById('general-lane'), hardcore: document.getElementById('hardcore-lane')};
-    const activateLane = (name) => {
-      if (!lanes[name]) name = (subNav && subNav.dataset.default) || 'general';
-      subTabs.forEach((tab) => {
-        const selected = tab.dataset.subtab === name;
-        tab.setAttribute('aria-selected', String(selected));
-        tab.tabIndex = selected ? 0 : -1;
-      });
-      Object.entries(lanes).forEach(([key, panel]) => { if (panel) panel.hidden = key !== name; });
+    const tabs = Array.from(document.querySelectorAll('.report-tabs [role="tab"]'));
+    const panels = {
+      intensive: document.getElementById('intensive-panel'),
+      extensive: document.getElementById('extensive-panel'),
+      git: document.getElementById('git-panel')
     };
+    const aliases = {news: 'intensive', market: 'extensive'};
     const activate = (name, updateHistory = false) => {
-      if (!panels[name]) name = 'news';
+      name = aliases[name] || name;
+      if (!panels[name]) name = 'intensive';
       tabs.forEach((tab) => {
         const selected = tab.dataset.tab === name;
         tab.setAttribute('aria-selected', String(selected));
@@ -305,20 +254,8 @@
         next.focus();
       });
     });
-    subTabs.forEach((tab, index) => {
-      tab.addEventListener('click', () => activateLane(tab.dataset.subtab));
-      tab.addEventListener('keydown', (event) => {
-        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-        event.preventDefault();
-        const delta = event.key === 'ArrowRight' ? 1 : -1;
-        const next = subTabs[(index + delta + subTabs.length) % subTabs.length];
-        activateLane(next.dataset.subtab);
-        next.focus();
-      });
-    });
     window.addEventListener('popstate', () => activate(location.hash.slice(1), false));
-    activate(location.hash.slice(1) || 'news', false);
-    if (subNav) activateLane(subNav.dataset.default || 'general');
+    activate(location.hash.slice(1) || 'intensive', false);
   })();
 </script>
 </body>

@@ -41,25 +41,29 @@ def apply_git_brief(brief: Any, projects: list[dict[str, Any]]) -> list[dict[str
     for project in projects:
         match = by_name.get(str(project.get("full_name") or "").lower())
         if match is None:
+            project["ai_briefed"] = False
             project["plain"] = project.get("plain") or _fallback_plain(project)
+            project["use_cases"] = project.get("use_cases") or []
             continue
         if str(match.kicker or "").strip():
-            project["kicker"] = str(match.kicker).strip()
-        project["plain"] = clean_text(match.function, 200)
+            project["kicker"] = clean_text(str(match.kicker), 12)
+        project["plain"] = clean_text(match.function, 300)
+        project["use_cases"] = [
+            clean_text(str(item), 160)
+            for item in (match.use_cases or [])
+            if clean_text(str(item), 160)
+        ][:3]
+        project["ai_briefed"] = True
     return projects
 
 
 def annotate_github_visuals(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    peak_today = max((int(item.get("stars_today") or 0) for item in projects), default=0) or 1
-    peak_week = max((int(item.get("stars_week") or 0) for item in projects), default=0) or 1
     for index, item in enumerate(projects, 1):
-        today = int(item.get("stars_today") or 0)
-        week = int(item.get("stars_week") or 0)
         item["rank"] = index
         item["kicker"] = item.get("kicker") or "开源"
         item["plain"] = item.get("plain") or _fallback_plain(item)
-        item["today_width"] = round(min(100.0, today / peak_today * 100), 1) if today else 0.0
-        item["week_width"] = round(min(100.0, week / peak_week * 100), 1) if week else 0.0
+        item["use_cases"] = item.get("use_cases") or []
+        item["ai_briefed"] = bool(item.get("ai_briefed", False))
         item["stars_total_label"] = format_stars(item.get("stars_total") or 0)
     return projects
 
@@ -128,10 +132,13 @@ class GitHubTrendingPipeline:
             try:
                 context = fetch_github_project_context(str(item.get("full_name") or ""), timeout=timeout)
             except Exception:
-                context = {"readme": "", "root_files": "", "manifest": ""}
+                context = {
+                    "readme": "", "root_files": "", "manifest": "", "source_excerpt": "",
+                }
             item["readme"] = context.get("readme") or ""
             item["root_files"] = context.get("root_files") or ""
             item["manifest"] = context.get("manifest") or ""
+            item["source_excerpt"] = context.get("source_excerpt") or ""
         briefs = annotate_github_visuals(projects)
         return GitRunResult(projects=briefs, source_status=status, errors=errors)
 

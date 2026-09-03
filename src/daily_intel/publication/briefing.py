@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from daily_intel.core.models import DigestBrief
-from daily_intel.market.normalize import clean_text
+from daily_intel.market.normalize import _clean_url, clean_text
 from daily_intel.publication.plain_digest import match_kicker
 
 
@@ -35,7 +35,7 @@ def present_market_news(item: dict[str, Any]) -> dict[str, Any]:
     kicker = clean_text(str(item.get("kicker") or ""), 8) or match_kicker(
         f"{title} {scan}"
     ) or "市场"
-    return {**item, "kicker": kicker, "scan": scan}
+    return {**item, "kicker": kicker, "scan": scan, "url": _clean_url(item.get("url"))}
 
 
 def fallback_market_news(item: dict[str, Any]) -> dict[str, Any]:

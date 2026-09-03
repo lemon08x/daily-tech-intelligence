@@ -18,6 +18,10 @@ from daily_intel.intelligence.quality import (
     QualityPolicy,
     summarize_quality,
 )
+from daily_intel.intelligence.reading import (
+    intensive_material_issue,
+    partition_reading_analyses,
+)
 from daily_intel.intelligence.research import EventResearcher
 from daily_intel.intelligence.selection import EventSelector
 from daily_intel.intelligence.sources.common import event_lane
@@ -36,6 +40,8 @@ class IntelligenceRunResult:
     cache_scope: str = ""
     analysis_cache_hits: int = 0
     analysis_cache_misses: int = 0
+    processing_funnel: dict[str, int] = field(default_factory=dict)
+    processing_trace: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
 
@@ -77,6 +83,7 @@ class IntelligencePipeline:
         force_analysis: bool = False,
     ) -> IntelligenceRunResult:
         self.stages.begin_run()
+        self.selector.begin_run()
         if require_ai and (offline or no_ai or not self.stages.available):
             raise RuntimeError("--require-ai 已启用，但AI密钥不可用或与离线/禁用AI模式冲突")
         ai_enabled = self.stages.available and not no_ai and not offline
@@ -101,29 +108,23 @@ class IntelligencePipeline:
                 errors.append(scout_error)
         else:
             selected = self.selector.order_with_repeat(event_docs, now)
+        selected = self.selector.prioritize_for_research(
+            selected,
+            int(self.config.get("preferred_general_events", 5)),
+            int(self.config.get("preferred_hardcore_events", 5)),
+            int(self.config.get("preferred_max_per_topic", 2)),
+            self.selector.priority_event_ids,
+        )
         progress(f"当前：选题完成，准备深研 {len(selected)} 个事件")
 
         analyses: list[Analysis] = []
         cache_hits = 0
         cache_misses = 0
-        max_general = int(self.config.get("max_general_events", 5))
-        max_hardcore = int(self.config.get("max_hardcore_events", 5))
-        overall = int(self.config.get("max_deep_events", max_general + max_hardcore))
-        max_per_topic = int(self.config.get("selection_max_per_topic", 2))
-        lane_counts = {"general": 0, "hardcore": 0}
-        topic_lane_counts: dict[tuple[str, str], int] = {}
+        research_attempted = 0
+        research_outcomes: dict[str, tuple[str, str]] = {}
         for event, event_documents in selected:
             lane = event_lane(event_documents)
-            lane_limit = max_general if lane == "general" else max_hardcore
-            if lane_counts[lane] >= lane_limit or len(analyses) >= overall:
-                if lane_counts["general"] >= max_general and lane_counts["hardcore"] >= max_hardcore:
-                    break
-                if len(analyses) >= overall:
-                    break
-                continue
-            topic_key = (lane, event.topic_id or event.id)
-            if topic_lane_counts.get(topic_key, 0) >= max_per_topic:
-                continue
+            research_attempted += 1
             cached = (
                 None
                 if force_analysis
@@ -135,8 +136,9 @@ class IntelligencePipeline:
                 cache_hits += 1
                 cached = cached.model_copy(update={"lane": lane})
                 analyses.append(cached)
-                lane_counts[lane] += 1
-                topic_lane_counts[topic_key] = topic_lane_counts.get(topic_key, 0) + 1
+                research_outcomes[event.id] = (
+                    "published", f"复用缓存，质量状态 {cached.status.value}"
+                )
                 continue
             cache_misses += 1
             progress(f"当前：深研 {lane} · {title}")
@@ -153,11 +155,69 @@ class IntelligencePipeline:
                     analysis = self.researcher.analyze(event, enriched, now)
                 except Exception as exc:
                     errors.append(f"{event.id}: {type(exc).__name__}: {exc}")
+                    research_outcomes[event.id] = (
+                        "analysis_failed", f"深研失败：{type(exc).__name__}: {exc}"[:500]
+                    )
                     continue
             self.repository.save_analysis(analysis, cache_scope)
             analyses.append(analysis)
-            lane_counts[analysis.lane] += 1
-            topic_lane_counts[topic_key] = topic_lane_counts.get(topic_key, 0) + 1
+            research_outcomes[event.id] = (
+                "published", f"完成深研，质量状态 {analysis.status.value}"
+            )
+
+        intensive_limit = max(0, int(self.config["intensive_reading_events"]))
+        intensive_analyses, extensive_analyses = partition_reading_analyses(
+            analyses, intensive_limit
+        )
+        intensive_ids = {item.event_id for item in intensive_analyses}
+        analyses_by_id = {item.event_id: item for item in analyses}
+        publication_tiers = {
+            analysis.event_id: (
+                "intensive" if analysis.event_id in intensive_ids else "extensive"
+            )
+            for analysis in analyses
+        }
+        processing_trace = list(getattr(self.catalog, "last_trace", []))
+        selection_order = {
+            event.id: index for index, (event, _) in enumerate(selected, start=1)
+        }
+        for item in getattr(self.selector, "last_trace", []):
+            traced = dict(item)
+            if traced.get("event_id") in selection_order:
+                traced["selection_order"] = selection_order[traced["event_id"]]
+            outcome = research_outcomes.get(str(traced.get("event_id") or ""))
+            if outcome:
+                traced["status"], traced["reason"] = outcome
+                publication_tier = publication_tiers.get(str(traced.get("event_id") or ""))
+                if publication_tier:
+                    traced["publication_tier"] = publication_tier
+                    label = "精读" if publication_tier == "intensive" else "泛读"
+                    material_issue = intensive_material_issue(
+                        analyses_by_id[str(traced.get("event_id") or "")]
+                    )
+                    if material_issue and publication_tier == "extensive":
+                        traced["reason"] += f"，精读材料门未通过（{material_issue}），展示为泛读"
+                    else:
+                        traced["reason"] += f"，展示为{label}"
+            elif traced.get("status") == "candidate":
+                traced["status"] = "not_researched"
+                traced["reason"] = "Scout 保留，但本轮未完成研究；" + str(
+                    traced.get("reason") or ""
+                )
+            processing_trace.append(traced)
+        processing_funnel = {
+            **getattr(self.catalog, "last_funnel", {}),
+            **getattr(self.selector, "last_funnel", {}),
+            "research_target_events": len(selected),
+            "research_attempted_events": research_attempted,
+            "published_events": len(analyses),
+            "intensive_reading_events": len(intensive_analyses),
+            "extensive_reading_events": len(extensive_analyses),
+            "intensive_material_ineligible_events": sum(
+                bool(intensive_material_issue(item)) for item in analyses
+            ),
+            "deep_events": sum(item.status.value == "deep" for item in analyses),
+        }
 
         return self._result(
             analyses=analyses,
@@ -168,14 +228,16 @@ class IntelligencePipeline:
             cache_scope=cache_scope,
             analysis_cache_hits=cache_hits,
             analysis_cache_misses=cache_misses,
+            processing_funnel=processing_funnel,
+            processing_trace=processing_trace,
             errors=errors,
         )
 
     def _offline_result(self, cache_scope: str) -> IntelligenceRunResult:
-        limit = int(self.config["max_deep_events"])
+        limit = max(1, int(self.config["offline_analysis_events"]))
         analyses = [
             item
-            for item in self.repository.get_latest_analyses(limit * 4)
+            for item in self.repository.get_latest_analyses(limit)
             if not is_obvious_build_title(item.headline)
         ][:limit]
         return self._result(
@@ -201,6 +263,8 @@ class IntelligencePipeline:
         cache_scope: str = "",
         analysis_cache_hits: int = 0,
         analysis_cache_misses: int = 0,
+        processing_funnel: dict[str, int] | None = None,
+        processing_trace: list[dict[str, Any]] | None = None,
         errors: list[str] | None = None,
     ) -> IntelligenceRunResult:
         model_runtime = self.stages.runtime_metadata()
@@ -219,5 +283,7 @@ class IntelligencePipeline:
             cache_scope=cache_scope,
             analysis_cache_hits=analysis_cache_hits,
             analysis_cache_misses=analysis_cache_misses,
+            processing_funnel=processing_funnel or {},
+            processing_trace=processing_trace or [],
             errors=errors or [],
         )

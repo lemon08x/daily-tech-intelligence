@@ -127,8 +127,12 @@ class DigestBrief(StrictModel):
 
 class GitProjectBrief(StrictModel):
     full_name: str
-    kicker: str = Field(default="", max_length=8)
-    function: str = Field(min_length=8, max_length=200)
+    # Git briefs are normalized at publication time. Keep the model-facing
+    # schema permissive so one slightly verbose label cannot invalidate the
+    # entire batch of otherwise useful project summaries.
+    kicker: str = ""
+    function: str = Field(min_length=8)
+    use_cases: list[str] = Field(default_factory=list)
 
 
 class GitBriefingBatch(StrictModel):

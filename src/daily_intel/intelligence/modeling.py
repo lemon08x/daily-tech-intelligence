@@ -103,11 +103,17 @@ class ModelStageRunner:
         return int(self.settings.get("intelligence", {}).get(key, default))
 
     def scout(self, event_docs: list[tuple[Event, list[Document]]], topics: list[dict]) -> ScoutBatch:
-        return self._generate(
-            "scout", SCOUT_SYSTEM,
-            scout_user(event_docs, topics, doc_chars=self._source_chars("scout_doc_chars", 4000)),
-            ScoutBatch, None,
-        ).value
+        batch_size = max(1, self._source_chars("scout_batch_size", 30))
+        items = []
+        for start in range(0, len(event_docs), batch_size):
+            batch = event_docs[start:start + batch_size]
+            result = self._generate(
+                "scout", SCOUT_SYSTEM,
+                scout_user(batch, topics, doc_chars=self._source_chars("scout_doc_chars", 4000)),
+                ScoutBatch, None,
+            ).value
+            items.extend(result.items)
+        return ScoutBatch(items=items)
 
     def brief_digest(self, payload: dict[str, Any]) -> DigestBrief:
         return self._generate(

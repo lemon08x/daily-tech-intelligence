@@ -27,17 +27,19 @@ QUALITY_DEFAULTS = {
     "plain_takeaway_max_chars": 280,
 }
 INTELLIGENCE_DEFAULTS = {
-    "selection_deterministic_weight": .65,
-    "selection_model_weight": .35,
+    "selection_deterministic_weight": .35,
+    "selection_model_weight": .65,
     "selection_model_reject_floor": 55,
     "selection_repeat_penalty": .4,
     "selection_repeat_hours": 36,
-    "max_general_events": 5,
-    "max_hardcore_events": 5,
-    "selection_max_per_topic": 2,
-    "max_scout_general": 20,
-    "max_scout_hardcore": 20,
+    "preferred_general_events": 5,
+    "preferred_hardcore_events": 5,
+    "preferred_max_per_topic": 2,
+    "preferred_official_release_events": 3,
+    "scout_batch_size": 30,
     "scout_doc_chars": 4000,
+    "intensive_reading_events": 10,
+    "offline_analysis_events": 500,
 }
 GITHUB_DEFAULTS = {
     "enabled": True,
@@ -139,8 +141,16 @@ def _validate_sources(sources: dict[str, Any]) -> None:
             raise ValueError(f"arXiv 来源 {item['id']} 缺少 categories")
         if source_type in {"feed", "sitemap"} and not str(item.get("url", "")).startswith("https://"):
             raise ValueError(f"来源 {item['id']} 必须使用 HTTPS URL")
-        if source_type == "api" and item.get("type") not in {"huggingface_daily_papers"}:
+        if source_type == "api" and item.get("type") not in {
+            "huggingface_daily_papers", "github_issues",
+        }:
             raise ValueError(f"来源 {item['id']} 使用了不支持的 API 类型")
+        if (
+            source_type == "api"
+            and item.get("type") == "github_issues"
+            and str(item.get("repo", "")).count("/") != 1
+        ):
+            raise ValueError(f"GitHub Issues 来源 {item['id']} 的 repo 格式无效")
         if source_type == "github_release" and "/" not in str(item.get("repo", "")):
             raise ValueError(f"GitHub 来源 {item['id']} 的 repo 格式无效")
 
