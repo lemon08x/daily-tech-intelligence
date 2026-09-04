@@ -26,6 +26,8 @@ def evidence_material_chars(analysis: Analysis) -> int:
 
 def intensive_material_issue(analysis: Analysis) -> str:
     """Return why an AI result is too thin for a full intensive-reading card."""
+    if "broad_reading_only" in analysis.quality.issues:
+        return "仅完成批量泛读，未执行 Analyst 与 Verifier"
     # The explicit no-AI fallback is already labelled as an unresearched lead;
     # preserve its deterministic ranking instead of pretending it passed AI QA.
     if analysis.model == "none":

@@ -73,7 +73,13 @@ def run_application(
     run_id = repository.start_run(
         {"offline": offline, "no_ai": no_ai, "require_ai": require_ai,
          "prompt_version": settings["llm"]["prompt_version"],
-         "experiment_id": experiment_id, "force_analysis": force_analysis}
+         "experiment_id": experiment_id, "force_analysis": force_analysis,
+         "broad_reading": {
+             "enabled": bool((settings.get("broad_reading") or {}).get("enabled")),
+             "prompt_version": (settings.get("broad_reading") or {}).get(
+                 "prompt_version", ""
+             ),
+         }}
     )
     resolved_run_name = sanitize_run_identifier(
         run_name or f"{current:%H%M%S}-{run_id:04d}-{experiment_id}"
@@ -137,16 +143,22 @@ def run_application(
                 github_brief_status = "failed"
         model_runtime = intelligence.model_runtime
         usage = intelligence.usage
-        if stages is not None:
-            runtime_metadata = getattr(stages, "runtime_metadata", None)
+        audit_owner = (
+            intelligence_runner
+            if callable(getattr(intelligence_runner, "runtime_metadata", None))
+            else stages
+        )
+        if audit_owner is not None:
+            runtime_metadata = getattr(audit_owner, "runtime_metadata", None)
             if callable(runtime_metadata):
                 model_runtime = runtime_metadata()
                 model_runtime["analysis_models"] = sorted({
                     item.model
                     for item in intelligence.analyses
                     if item.model and item.model != "none"
+                    and "broad_reading_only" not in item.quality.issues
                 })
-            usage = getattr(stages, "usage", intelligence.usage)
+            usage = getattr(audit_owner, "usage", intelligence.usage)
         intensive_limit = max(
             0, int(settings["intelligence"]["intensive_reading_events"])
         )

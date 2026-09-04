@@ -47,6 +47,14 @@ GITHUB_DEFAULTS = {
     "weekly_limit": 8,
     "publish_limit": 10,
 }
+BROAD_READING_DEFAULTS = {
+    "enabled": False,
+    "prompt_version": "broad-reading-v1",
+    "shortlist_events": 40,
+    "batch_size": 30,
+    "rerank_batch_size": 40,
+    "doc_chars": 1800,
+}
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -71,6 +79,9 @@ def load_settings(path: Path) -> dict[str, Any]:
     github = raw.setdefault("github", {})
     for key, value in GITHUB_DEFAULTS.items():
         github.setdefault(key, value)
+    broad_reading = raw.setdefault("broad_reading", {})
+    for key, value in BROAD_READING_DEFAULTS.items():
+        broad_reading.setdefault(key, value)
     quality = raw.setdefault("quality", {})
     for key, value in QUALITY_DEFAULTS.items():
         quality.setdefault(key, value)
@@ -100,6 +111,10 @@ def _validate(settings: dict[str, Any]) -> None:
     )
     if any(value < 0 for value in selection_weights) or abs(sum(selection_weights) - 1.0) > 1e-9:
         raise ValueError("intelligence 的确定性与模型筛选权重必须非负且之和为 1")
+    broad_reading = settings["broad_reading"]
+    for key in ("shortlist_events", "batch_size", "rerank_batch_size", "doc_chars"):
+        if int(broad_reading[key]) <= 0:
+            raise ValueError(f"broad_reading.{key} 必须大于 0")
     quality = settings["quality"]
     for minimum, maximum in (
         ("min_key_facts", "max_key_facts"),

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from collections import defaultdict
+from time import perf_counter
 from typing import Any
 
 from pydantic import BaseModel
@@ -17,6 +19,7 @@ from daily_intel.core.models import (
     VerificationResult,
 )
 from daily_intel.core.ports import IntelligenceRepository, LLMClient, LLMResult
+from daily_intel.core.progress import progress
 from daily_intel.core.runs import sanitize_run_identifier
 from daily_intel.intelligence.prompts import (
     ANALYST_SYSTEM,
@@ -45,8 +48,20 @@ class ModelStageRunner:
         self.llm = llm
         self.quality_policy = quality_policy
         self.prompt_version = settings["llm"]["prompt_version"]
-        self._usage = {"input_tokens": 0, "output_tokens": 0, "calls": 0, "estimated": False}
+        self._usage = self._empty_usage()
         self._actual_models: dict[str, set[str]] = defaultdict(set)
+
+    @staticmethod
+    def _empty_usage() -> dict[str, Any]:
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "calls": 0,
+            "attempts": 0,
+            "duration_seconds": 0.0,
+            "estimated": False,
+            "by_stage": {},
+        }
 
     @property
     def available(self) -> bool:
@@ -54,16 +69,11 @@ class ModelStageRunner:
 
     @property
     def usage(self) -> dict[str, Any]:
-        return dict(self._usage)
+        return deepcopy(self._usage)
 
     def begin_run(self) -> None:
         """Reset per-run audit state without discarding persistent LLM history."""
-        self._usage = {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "calls": 0,
-            "estimated": False,
-        }
+        self._usage = self._empty_usage()
         self._actual_models.clear()
 
     def runtime_metadata(self) -> dict[str, Any]:
@@ -102,14 +112,48 @@ class ModelStageRunner:
     def _source_chars(self, key: str, default: int) -> int:
         return int(self.settings.get("intelligence", {}).get(key, default))
 
-    def scout(self, event_docs: list[tuple[Event, list[Document]]], topics: list[dict]) -> ScoutBatch:
-        batch_size = max(1, self._source_chars("scout_batch_size", 30))
+    def configured_model(self, stage: str) -> str:
+        stage_config = self.settings["llm"].get(stage) or self.settings["llm"].get(
+            "scout", {}
+        )
+        return str(stage_config.get("model", "unknown"))
+
+    def scout(
+        self,
+        event_docs: list[tuple[Event, list[Document]]],
+        topics: list[dict],
+        *,
+        stage: str = "scout",
+        batch_size: int | None = None,
+        doc_chars: int | None = None,
+        progress_label: str | None = None,
+    ) -> ScoutBatch:
+        resolved_batch_size = max(
+            1,
+            int(batch_size) if batch_size is not None
+            else self._source_chars("scout_batch_size", 30),
+        )
+        resolved_doc_chars = (
+            int(doc_chars) if doc_chars is not None
+            else self._source_chars("scout_doc_chars", 4000)
+        )
         items = []
-        for start in range(0, len(event_docs), batch_size):
-            batch = event_docs[start:start + batch_size]
+        total_batches = (
+            (len(event_docs) + resolved_batch_size - 1) // resolved_batch_size
+            if event_docs else 0
+        )
+        for batch_number, start in enumerate(
+            range(0, len(event_docs), resolved_batch_size), start=1,
+        ):
+            batch = event_docs[start:start + resolved_batch_size]
+            if progress_label:
+                progress(
+                    f"当前：{progress_label} {batch_number}/{total_batches} "
+                    f"（{len(batch)} 个事件）"
+                )
             result = self._generate(
-                "scout", SCOUT_SYSTEM,
-                scout_user(batch, topics, doc_chars=self._source_chars("scout_doc_chars", 4000)),
+                stage, SCOUT_SYSTEM,
+                scout_user(batch, topics, doc_chars=resolved_doc_chars),
                 ScoutBatch, None,
             ).value
             items.extend(result.items)
@@ -154,7 +198,10 @@ class ModelStageRunner:
         self, stage: str, system: str, user: str, schema: type[BaseModel], event_id: str | None,
     ) -> LLMResult:
         error: Exception | None = None
+        started = perf_counter()
+        attempts = 0
         for _ in range(2):
+            attempts += 1
             try:
                 result = self.llm.generate(stage, system, user, schema)
                 self.repository.record_llm_run(
@@ -164,12 +211,49 @@ class ModelStageRunner:
                 self._usage["input_tokens"] += result.input_tokens
                 self._usage["output_tokens"] += result.output_tokens
                 self._usage["calls"] += 1
+                self._usage["attempts"] += attempts
+                elapsed = perf_counter() - started
+                self._usage["duration_seconds"] = round(
+                    float(self._usage["duration_seconds"]) + elapsed, 3
+                )
                 self._usage["estimated"] = self._usage["estimated"] or result.usage_estimated
+                by_stage = self._usage["by_stage"]
+                stage_usage = by_stage.setdefault(stage, {
+                    "calls": 0,
+                    "attempts": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "duration_seconds": 0.0,
+                })
+                stage_usage["calls"] += 1
+                stage_usage["attempts"] += attempts
+                stage_usage["input_tokens"] += result.input_tokens
+                stage_usage["output_tokens"] += result.output_tokens
+                stage_usage["duration_seconds"] = round(
+                    float(stage_usage["duration_seconds"]) + elapsed, 3
+                )
                 self._actual_models[stage].add(result.model)
                 return result
             except Exception as exc:
                 error = exc
-        model = self.settings["llm"].get(stage, {}).get("model", "unknown")
+        elapsed = perf_counter() - started
+        self._usage["attempts"] += attempts
+        self._usage["duration_seconds"] = round(
+            float(self._usage["duration_seconds"]) + elapsed, 3
+        )
+        by_stage = self._usage["by_stage"]
+        stage_usage = by_stage.setdefault(stage, {
+            "calls": 0,
+            "attempts": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "duration_seconds": 0.0,
+        })
+        stage_usage["attempts"] += attempts
+        stage_usage["duration_seconds"] = round(
+            float(stage_usage["duration_seconds"]) + elapsed, 3
+        )
+        model = self.configured_model(stage)
         self.repository.record_llm_run(
             stage, event_id, model, self.prompt_version, 0, 0, "failed", str(error),
         )

@@ -15,14 +15,17 @@ reimplementing collection, analysis, or publication.
 
 ## Daily run
 
-Production is LAN DeepSeek V4 Flash at 06:00 (including weekends):
+Production runs daily at 01:00 (including weekends), with a 48-hour
+task execution limit. DeepSeek scans every event in batches, keeps the global
+top 40, reranks that shortlist, and only the final top 10 run Analyst +
+Verifier. The remaining shortlisted events are broad-reading leads:
 
 ```powershell
 .\scripts\run_daily.ps1 -RequireAI -Open
 ```
 
-or double-click `启动日报.cmd`. Config is `config/settings.deepseek.yaml`,
-key env `OMLX_API_KEY`.
+or double-click `启动日报.cmd`. Config is `config/settings.deepseek.yaml`;
+the required key env is `OMLX_API_KEY`.
 
 Occasional local check with Qwen 3.8-27B: `启动日报-qwen.cmd` or
 
@@ -31,7 +34,8 @@ Occasional local check with Qwen 3.8-27B: `启动日报-qwen.cmd` or
 ```
 
 That path uses `data/intelligence_qwen.db` and does not share analysis cache
-with DeepSeek. Key env `QWEN_LAN_API_KEY`.
+with DeepSeek. Key env `QWEN_LAN_API_KEY`. It is an isolated manual model check
+and never participates in the production DeepSeek run.
 
 Same-model A/B rerun: add `-ForceAnalysis`. A different model or experiment
 automatically receives a different analysis and Scout cache scope. Never reuse
@@ -41,7 +45,9 @@ There is no Harness file bridge. Do not recreate `scripts/harness`.
 
 ## Model stages
 
-Read the configured `scout` / `analyst` / `verifier` / `digest_brief` stages.
+Read the configured broad-reading / `scout` / `analyst` / `verifier` /
+`digest_brief` stages. Broad-reading leads are not deep conclusions and must
+not be written to the DeepSeek analysis cache.
 Use only documents supplied to that stage. Evidence quotes must be exact
 continuous substrings of the supplied document. Do not invent company mappings
 or stock calls.

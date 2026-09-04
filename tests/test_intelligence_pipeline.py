@@ -289,3 +289,217 @@ def test_scout_user_sends_body_excerpt_not_a_short_summary_only() -> None:
     assert "short rss blurb" not in excerpt
     assert excerpt.startswith("mechanism and benchmark result.")
     assert len(excerpt) > 1500
+
+
+class BroadReadingLLM(LLMClient):
+    def __init__(
+        self, name: str, *, fail_analyst_for: str = "",
+    ) -> None:
+        self.name = name
+        self.model = f"{name}-model"
+        self.fail_analyst_for = fail_analyst_for
+        self.calls: list[str] = []
+        self.scout_payloads: dict[str, list[dict]] = {}
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def runtime_metadata(self) -> dict:
+        return {
+            "provider": "fixture",
+            "base_url": f"http://{self.name}.local/v1",
+            "configured_models": {
+                "scout": self.model,
+                "analyst": self.model,
+                "verifier": self.model,
+            },
+            "usage_reporting": "reported",
+        }
+
+    def generate(self, stage, system, user, schema):
+        self.calls.append(stage)
+        payload = json.loads(user)
+        if stage.startswith("scout"):
+            self.scout_payloads.setdefault(stage, []).append(payload)
+            value = ScoutBatch(items=[
+                ScoutItem(
+                    event_id=item["event_id"], relevant=True, topic_id="compute",
+                    relevance=float(item["deterministic_score"]),
+                    novelty=float(item["deterministic_score"]),
+                    technical_depth=float(item["deterministic_score"]),
+                    industry_impact=float(item["deterministic_score"]),
+                    reason=f"{self.name} 认为材料值得保留",
+                    scan=f"{self.name} 泛读确认：{item['title']} 公布了材料中的技术结果。",
+                )
+                for item in payload["events"]
+            ])
+        elif stage == "analyst":
+            title = payload["event"]["title"]
+            if self.fail_analyst_for and self.fail_analyst_for in title:
+                raise ValueError("forced analyst failure")
+            content = payload["documents"][0]["content"]
+            quote_one, quote_two = content.split("\n", 1)
+            value = AnalysisDraft(
+                headline=title,
+                plain_takeaway=f"{title} 公布了可核对的技术结果，后续仍需独立验证。",
+                key_facts=["材料公布了结果。", "材料说明了方法。", "结果仍需复核。"],
+                technical_mechanism="材料描述了测试方法。",
+                novelty="材料报告了新的工程结果。",
+                maturity="当前处于公开材料所述阶段。",
+                outlook_6_24m="后续影响取决于独立验证。",
+                risks=["结果尚待复核。", "工程适用范围仍有限。"],
+                counterpoints=["现有方法仍可能适用。"],
+                confidence=.8,
+                evidence=[
+                    Evidence(
+                        document_id=payload["documents"][0]["document_id"],
+                        url=payload["documents"][0]["url"],
+                        quote=quote_one, locator="正文第一段",
+                    ),
+                    Evidence(
+                        document_id=payload["documents"][0]["document_id"],
+                        url=payload["documents"][0]["url"],
+                        quote=quote_two, locator="正文第二段",
+                    ),
+                ],
+            )
+        else:
+            value = VerificationResult(
+                supported_evidence_indexes=[0, 1], unsupported_claims=[],
+                confidence_adjustment=0, verdict="pass", notes="supported",
+            )
+        return LLMResult(value, self.model, 10, 5)
+
+
+def _broad_pipeline(
+    tmp_path, monkeypatch, *, count: int = 8, fail_analyst_for: str = "",
+) -> tuple[IntelligencePipeline, BroadReadingLLM]:
+    cfg = settings()
+    cfg["intelligence"].update({
+        "intensive_reading_events": 2,
+        "preferred_general_events": 0,
+        "preferred_hardcore_events": 2,
+        "preferred_max_per_topic": 2,
+    })
+    cfg["broad_reading"] = {
+        "enabled": True,
+        "prompt_version": "broad-test-v1",
+        "shortlist_events": 6,
+        "batch_size": 30,
+        "rerank_batch_size": 30,
+        "doc_chars": 1800,
+    }
+    pairs: list[tuple[Event, list[Document]]] = []
+    documents: list[Document] = []
+    for index in range(count):
+        quote_one = f"event-{index}-first " + ("A" * 90)
+        quote_two = f"event-{index}-second " + ("B" * 90)
+        doc = document().model_copy(update={
+            "id": f"doc-{index}",
+            "external_id": str(index),
+            "title": f"Event {index} accelerator result",
+            "url": f"https://example.com/{index}",
+            "canonical_url": f"https://example.com/{index}",
+            "summary": f"Event {index} published a technical result.",
+            "content": f"{quote_one}\n{quote_two}",
+            "content_hash": f"{index:064d}",
+        })
+        event = Event(
+            id=f"event-{index}", title=doc.title,
+            topic_id="compute", topic_name="芯片算力",
+            document_ids=[doc.id], first_seen=NOW, last_seen=NOW,
+            source_quality=90, deterministic_score=90 - index,
+        )
+        documents.append(doc)
+        pairs.append((event, [doc]))
+
+    repository = SQLiteIntelligenceRepository(tmp_path / "broad-reading.db")
+    deepseek = BroadReadingLLM("deepseek", fail_analyst_for=fail_analyst_for)
+    pipeline = IntelligencePipeline(cfg, repository, deepseek)
+    monkeypatch.setattr(
+        pipeline.collector, "collect_sources",
+        lambda now: (documents, [{
+            "name": "fixture", "source": "Fixture",
+            "fetched_at": now.isoformat(), "stale": False,
+            "count": len(documents), "error": "",
+        }]),
+    )
+    monkeypatch.setattr(
+        pipeline.catalog, "index_and_discover", lambda docs, now: pairs,
+    )
+    return pipeline, deepseek
+
+
+def test_deepseek_broad_reading_scans_all_bounded_and_cached(
+    tmp_path, monkeypatch,
+) -> None:
+    pipeline, deepseek = _broad_pipeline(tmp_path, monkeypatch)
+    original_scope = pipeline.stages.cache_scope("default")
+    plain_pipeline = IntelligencePipeline(
+        settings(),
+        SQLiteIntelligenceRepository(tmp_path / "plain-scope.db"),
+        BroadReadingLLM("deepseek"),
+    )
+    assert plain_pipeline.stages.cache_scope("default") == original_scope
+
+    first = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
+
+    broad_ids = {
+        item["event_id"]
+        for payload in deepseek.scout_payloads["scout_broad"]
+        for item in payload["events"]
+    }
+    rerank_ids = {
+        item["event_id"]
+        for payload in deepseek.scout_payloads["scout_rerank"]
+        for item in payload["events"]
+    }
+    assert broad_ids == {f"event-{index}" for index in range(8)}
+    assert len(rerank_ids) == 6
+    assert deepseek.calls.count("analyst") == 2
+    assert deepseek.calls.count("verifier") == 2
+    assert len(first.analyses) == 6
+    assert first.processing_funnel["research_target_events"] == 2
+    assert first.processing_funnel["broad_only_events"] == 4
+    assert first.processing_funnel["broad_reading_input_events"] == 8
+    assert first.processing_funnel["broad_reading_shortlist_events"] == 6
+    assert first.processing_funnel["intensive_reading_events"] == 2
+    assert first.processing_funnel["extensive_reading_events"] == 4
+    assert first.usage["calls"] == 6
+    assert first.model_runtime["broad_reading"]["primary"]["base_url"] == (
+        "http://deepseek.local/v1"
+    )
+    assert first.model_runtime["broad_reading"]["mode"] == (
+        "single_model_scan_shortlist_then_rerank"
+    )
+    assert "auxiliary" not in first.model_runtime["broad_reading"]
+    assert "qwen" not in json.dumps(first.model_runtime).lower()
+    assert all(
+        "broad_reading_only" in item.quality.issues
+        for item in first.analyses[2:]
+    )
+
+    call_count = len(deepseek.calls)
+    second = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
+    assert len(deepseek.calls) == call_count
+    assert second.analysis_cache_hits == 2
+    assert second.analysis_cache_misses == 0
+    assert second.processing_funnel["research_attempted_events"] == 2
+    assert pipeline.stages.cache_scope("default") == original_scope
+
+
+def test_broad_analysis_failure_becomes_lead_without_backfill(
+    tmp_path, monkeypatch,
+) -> None:
+    pipeline, deepseek = _broad_pipeline(
+        tmp_path, monkeypatch, count=8, fail_analyst_for="Event 0",
+    )
+    result = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
+    failed = next(item for item in result.analyses if "Event 0" in item.headline)
+    assert failed.status.value == "lead"
+    assert "broad_reading_only" in failed.quality.issues
+    assert deepseek.calls.count("analyst") == 3
+    assert deepseek.calls.count("verifier") == 1
+    assert result.processing_funnel["research_attempted_events"] == 2
+    assert result.processing_funnel["broad_only_events"] == 5

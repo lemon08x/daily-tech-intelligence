@@ -51,6 +51,15 @@
     .scan-cluster .scan-item { padding:6px 0 6px 15px; border-top:1px solid #edf0f5; position:relative; }
     .scan-cluster .scan-item:first-child { border-top:0; }
     .scan-cluster .scan-item::before { content:""; position:absolute; top:15px; left:1px; width:5px; height:5px; border-radius:50%; background:#8fa7dc; }
+    .extensive-entry { width:100%; padding:0; border:0; color:var(--ink); background:transparent; font:inherit; font-weight:650; line-height:1.5; text-align:left; cursor:pointer; }
+    .extensive-entry:hover { color:var(--brand); text-decoration:underline; }
+    .extensive-entry:focus-visible,.extensive-back:focus-visible { outline:3px solid #91adf3; outline-offset:3px; border-radius:4px; }
+    .extensive-detail { border-left:4px solid var(--brand); }
+    .extensive-back { margin:0 0 18px; padding:0; border:0; color:var(--brand); background:transparent; font:inherit; font-weight:750; cursor:pointer; }
+    .extensive-detail h2 { margin-bottom:8px; }
+    .extensive-detail-meta { margin-bottom:14px; }
+    .extensive-detail-block { margin-top:20px; }
+    .extensive-detail-block h3 { margin-bottom:8px; font-size:16px; }
     .takeaway { margin:8px 0 10px; font-size:16px; line-height:1.7; }
     .story { padding:26px 28px; margin:14px 0; }
     .story-kicker { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:7px; color:var(--muted); font-size:13px; font-weight:700; letter-spacing:.02em; }
@@ -100,6 +109,8 @@
       header .muted { color:var(--muted); }
       .report-tabs { display:none; }
       .tab-panel[hidden] { display:block !important; }
+      .extensive-detail[hidden] { display:block !important; }
+      .extensive-back { display:none; }
       details:not([open]) > *:not(summary) { display:block; }
       .section,.story { break-inside:avoid; box-shadow:none; }
     }
@@ -184,15 +195,35 @@
   </section>
 
   <section id="extensive-panel" class="tab-panel" role="tabpanel" aria-labelledby="extensive-tab" hidden>
-    <section class="section digest">
-      <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ extensive_items|length }} 项</span></h2>
-      <p class="muted section-intro">Scout 保留、完成深研但未进入精读的事件，也包括原始材料过短的线索。这里沿用缩略展示，一句话说清发生了什么；AkShare 快讯与其他来源使用同一套 Scout 判断。</p>
-      {% if extensive_groups %}
-      <div class="scan-clusters">{% for group in extensive_groups %}<section class="scan-cluster"><h3><span>{{ group.label }}</span><span class="scan-count">{{ group['items']|length }} 项</span></h3><div class="scan-list">{% for item in group['items'] %}<div class="scan-item">{% if item.url %}<a href="{{ item.url }}" target="_blank" rel="noopener noreferrer">{{ item.scan }}</a>{% else %}<span>{{ item.scan }}</span>{% endif %}</div>{% endfor %}</div></section>{% endfor %}</div>
-      {% else %}
-      <p class="muted">今日没有精读之外的泛读事件。</p>
-      {% endif %}
+    <div id="extensive-index">
+      <section class="section digest">
+        <h2>泛读 <span class="muted" style="font-size:13px;font-weight:400">{{ extensive_items|length }} 项</span></h2>
+        <p class="muted section-intro">按分类浏览条目，点标题进入详情。</p>
+        {% if extensive_groups %}
+        <div class="scan-clusters">{% for group in extensive_groups %}<section class="scan-cluster"><h3><span>{{ group.label }}</span><span class="scan-count">{{ group['items']|length }} 项</span></h3><div class="scan-list">{% for item in group['items'] %}<div class="scan-item"><button type="button" class="extensive-entry" data-extensive-target="{{ item.detail_id }}" aria-controls="{{ item.detail_id }}">{{ item.headline }}</button></div>{% endfor %}</div></section>{% endfor %}</div>
+        {% else %}
+        <p class="muted">今日没有精读之外的泛读事件。</p>
+        {% endif %}
+      </section>
+    </div>
+    {% for item in extensive_items %}
+    <section id="{{ item.detail_id }}" class="section extensive-detail" data-extensive-detail hidden aria-labelledby="{{ item.detail_id }}-title">
+      <button type="button" class="extensive-back" data-extensive-back>← 返回泛读列表</button>
+      <div class="story-kicker"><span>{{ item.kicker }} · 泛读 {{ '%02d'|format(loop.index) }}</span></div>
+      <h2 id="{{ item.detail_id }}-title" tabindex="-1">{{ item.headline }}</h2>
+      <p class="muted extensive-detail-meta">本条为泛读线索，未进入前十精读。</p>
+      <p class="takeaway">{{ item.scan }}</p>
+      {% if item.key_facts %}<div class="extensive-detail-block"><h3>具体要点</h3><ul>{% for fact in item.key_facts %}<li>{{ fact }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if item.technical_mechanism or item.novelty or item.maturity or item.outlook %}<div class="analysis-grid extensive-detail-block">
+        {% if item.technical_mechanism %}<div><strong>技术机制</strong><p>{{ item.technical_mechanism }}</p></div>{% endif %}
+        {% if item.novelty %}<div><strong>新颖性</strong><p>{{ item.novelty }}</p></div>{% endif %}
+        {% if item.maturity %}<div><strong>成熟度</strong><p>{{ item.maturity }}</p></div>{% endif %}
+        {% if item.outlook %}<div><strong>6–24个月影响</strong><p>{{ item.outlook }}</p></div>{% endif %}
+      </div>{% endif %}
+      {% if item.risks or item.counterpoints %}<div class="extensive-detail-block"><h3>风险与反面信息</h3><ul>{% for value in item.risks + item.counterpoints %}<li>{{ value }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if item.sources %}<div class="extensive-detail-block"><h3>来源材料</h3>{% for source in item.sources %}<div class="evidence">{% if source.url %}<a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.locator or '阅读原文' }} ↗</a>{% else %}<strong>{{ source.locator or '来源摘录' }}</strong>{% endif %}{% if source.quote %}：{{ source.quote }}{% endif %}</div>{% endfor %}</div>{% endif %}
     </section>
+    {% endfor %}
   </section>
 
   <section id="git-panel" class="tab-panel" role="tabpanel" aria-labelledby="git-tab" hidden>
@@ -232,16 +263,30 @@
       git: document.getElementById('git-panel')
     };
     const aliases = {news: 'intensive', market: 'extensive'};
-    const activate = (name, updateHistory = false) => {
-      name = aliases[name] || name;
+    const extensiveIndex = document.getElementById('extensive-index');
+    const extensiveDetails = Array.from(document.querySelectorAll('[data-extensive-detail]'));
+    const detailIds = new Set(extensiveDetails.map((detail) => detail.id));
+    const showExtensiveDetail = (detailId = '') => {
+      const resolved = detailIds.has(detailId) ? detailId : '';
+      if (extensiveIndex) extensiveIndex.hidden = Boolean(resolved);
+      extensiveDetails.forEach((detail) => { detail.hidden = detail.id !== resolved; });
+      return resolved;
+    };
+    const activate = (route, updateHistory = false, state = null) => {
+      const [rawName, requestedDetail = ''] = String(route || '').split('/');
+      let name = aliases[rawName] || rawName;
       if (!panels[name]) name = 'intensive';
+      const detailId = name === 'extensive' ? showExtensiveDetail(requestedDetail) : showExtensiveDetail();
       tabs.forEach((tab) => {
         const selected = tab.dataset.tab === name;
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       });
       Object.entries(panels).forEach(([key, panel]) => { panel.hidden = key !== name; });
-      if (updateHistory) history.pushState(null, '', `#${name}`);
+      if (updateHistory) {
+        const suffix = detailId ? `/${detailId}` : '';
+        history.pushState(state, '', `#${name}${suffix}`);
+      }
     };
     tabs.forEach((tab, index) => {
       tab.addEventListener('click', () => activate(tab.dataset.tab, true));
@@ -252,6 +297,22 @@
         const next = tabs[(index + delta + tabs.length) % tabs.length];
         activate(next.dataset.tab, true);
         next.focus();
+      });
+    });
+    document.querySelectorAll('[data-extensive-target]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const detailId = button.dataset.extensiveTarget;
+        activate(`extensive/${detailId}`, true, {fromExtensiveIndex: true});
+        document.getElementById(`${detailId}-title`)?.focus();
+      });
+    });
+    document.querySelectorAll('[data-extensive-back]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (history.state?.fromExtensiveIndex) {
+          history.back();
+        } else {
+          activate('extensive', true);
+        }
       });
     });
     window.addEventListener('popstate', () => activate(location.hash.slice(1), false));

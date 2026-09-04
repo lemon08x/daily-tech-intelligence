@@ -106,6 +106,37 @@ def _normalized(value: str) -> str:
     return re.sub(r"\s+", "", value)
 
 
+def exact_evidence_quote(quote: str, document: Document) -> str | None:
+    """Return an exact source span, tolerating only model-normalized whitespace."""
+    target = quote.strip()
+    if not target:
+        return None
+    for source in (document.content, document.summary):
+        if not source:
+            continue
+        if target in source:
+            return target
+        compact_target = _normalized(target)
+        if not compact_target:
+            continue
+        compact_chars: list[str] = []
+        source_indexes: list[int] = []
+        for index, char in enumerate(source):
+            if char.isspace():
+                continue
+            compact_chars.append(char)
+            source_indexes.append(index)
+        compact_source = "".join(compact_chars)
+        start = compact_source.find(compact_target)
+        if start < 0:
+            continue
+        end = start + len(compact_target) - 1
+        exact = source[source_indexes[start]:source_indexes[end] + 1]
+        if 8 <= len(exact) <= 1200:
+            return exact
+    return None
+
+
 def _compact(value: str, limit: int) -> str:
     text = re.sub(r"\s+", " ", value or "").strip()
     if len(text) <= limit:
@@ -279,15 +310,14 @@ class AnalysisQualityGate:
             document = documents_by_id.get(evidence.document_id)
             if document is None or evidence.url.rstrip("/") != document.url.rstrip("/"):
                 continue
-            quote = _normalized(evidence.quote)
-            source_text = _normalized(f"{document.content}\n{document.summary}")
-            if not quote or quote not in source_text:
+            exact_quote = exact_evidence_quote(evidence.quote, document)
+            if exact_quote is None:
                 continue
-            key = (evidence.document_id, quote)
+            key = (evidence.document_id, _normalized(exact_quote))
             if key in seen:
                 continue
             seen.add(key)
-            accepted.append(evidence)
+            accepted.append(evidence.model_copy(update={"quote": exact_quote}))
             if len(accepted) >= self.policy.max_supported_evidence:
                 break
         return accepted

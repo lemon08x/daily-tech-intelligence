@@ -6,7 +6,7 @@ from typing import Any
 
 import pandas as pd
 
-from daily_intel.core.models import Analysis
+from daily_intel.core.models import Analysis, Document, Event
 from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository, LLMClient
 from daily_intel.intelligence.clustering import is_obvious_build_title
@@ -72,6 +72,21 @@ class IntelligencePipeline:
             settings, self.stages, AnalysisQualityGate(policy)
         )
 
+    @property
+    def usage(self) -> dict[str, Any]:
+        return self.stages.usage
+
+    def runtime_metadata(self) -> dict[str, Any]:
+        metadata = self.stages.runtime_metadata()
+        metadata["broad_reading"] = {
+            "enabled": bool(self.selector.broad_reading_enabled),
+            "mode": "single_model_scan_shortlist_then_rerank",
+            "prompt_version": self.selector.broad_prompt_version,
+            "shortlist_events": self.selector.shortlist_events,
+            "primary": self._runner_summary(self.stages),
+        }
+        return metadata
+
     def run(
         self,
         now: datetime,
@@ -115,14 +130,24 @@ class IntelligencePipeline:
             int(self.config.get("preferred_max_per_topic", 2)),
             self.selector.priority_event_ids,
         )
-        progress(f"当前：选题完成，准备深研 {len(selected)} 个事件")
+        intensive_limit = max(0, int(self.config["intensive_reading_events"]))
+        bounded_research = ai_enabled and self.selector.broad_reading_enabled
+        research_targets = selected[:intensive_limit] if bounded_research else selected
+        broad_only_targets = selected[len(research_targets):] if bounded_research else []
+        if bounded_research:
+            progress(
+                f"当前：选题完成；{len(selected)} 条进入发布候选，"
+                f"仅前 {len(research_targets)} 条执行 DeepSeek 精读"
+            )
+        else:
+            progress(f"当前：选题完成，准备深研 {len(research_targets)} 个事件")
 
         analyses: list[Analysis] = []
         cache_hits = 0
         cache_misses = 0
         research_attempted = 0
         research_outcomes: dict[str, tuple[str, str]] = {}
-        for event, event_documents in selected:
+        for event, event_documents in research_targets:
             lane = event_lane(event_documents)
             research_attempted += 1
             cached = (
@@ -130,11 +155,15 @@ class IntelligencePipeline:
                 if force_analysis
                 else self.repository.get_analysis(event.id, cache_scope)
             )
+            reusable = (
+                self.researcher.prepare_cached(cached, event_documents, ai_enabled)
+                if cached is not None else None
+            )
             title = (event.title or event.id)[:48]
-            if cached and self.researcher.can_reuse(cached, ai_enabled):
+            if reusable is not None:
                 progress(f"当前：复用缓存 · {title}")
                 cache_hits += 1
-                cached = cached.model_copy(update={"lane": lane})
+                cached = reusable.model_copy(update={"lane": lane})
                 analyses.append(cached)
                 research_outcomes[event.id] = (
                     "published", f"复用缓存，质量状态 {cached.status.value}"
@@ -155,6 +184,17 @@ class IntelligencePipeline:
                     analysis = self.researcher.analyze(event, enriched, now)
                 except Exception as exc:
                     errors.append(f"{event.id}: {type(exc).__name__}: {exc}")
+                    if bounded_research:
+                        analysis = self._broad_lead(
+                            event, event_documents, now,
+                            failure=f"精读失败：{type(exc).__name__}: {exc}",
+                        )
+                        analyses.append(analysis)
+                        research_outcomes[event.id] = (
+                            "published",
+                            f"精读失败，保留泛读摘要：{type(exc).__name__}: {exc}"[:500],
+                        )
+                        continue
                     research_outcomes[event.id] = (
                         "analysis_failed", f"深研失败：{type(exc).__name__}: {exc}"[:500]
                     )
@@ -165,7 +205,14 @@ class IntelligencePipeline:
                 "published", f"完成深研，质量状态 {analysis.status.value}"
             )
 
-        intensive_limit = max(0, int(self.config["intensive_reading_events"]))
+        for event, event_documents in broad_only_targets:
+            analysis = self._broad_lead(event, event_documents, now)
+            analyses.append(analysis)
+            research_outcomes[event.id] = (
+                "published",
+                f"完成 DeepSeek 泛读与复排，未进入前 {intensive_limit} 精读",
+            )
+
         intensive_analyses, extensive_analyses = partition_reading_analyses(
             analyses, intensive_limit
         )
@@ -208,8 +255,11 @@ class IntelligencePipeline:
         processing_funnel = {
             **getattr(self.catalog, "last_funnel", {}),
             **getattr(self.selector, "last_funnel", {}),
-            "research_target_events": len(selected),
+            "research_target_events": len(research_targets),
             "research_attempted_events": research_attempted,
+            "broad_only_events": sum(
+                "broad_reading_only" in item.quality.issues for item in analyses
+            ),
             "published_events": len(analyses),
             "intensive_reading_events": len(intensive_analyses),
             "extensive_reading_events": len(extensive_analyses),
@@ -267,15 +317,17 @@ class IntelligencePipeline:
         processing_trace: list[dict[str, Any]] | None = None,
         errors: list[str] | None = None,
     ) -> IntelligenceRunResult:
-        model_runtime = self.stages.runtime_metadata()
+        model_runtime = self.runtime_metadata()
         model_runtime["analysis_models"] = sorted({
-            item.model for item in analyses if item.model and item.model != "none"
+            item.model for item in analyses
+            if item.model and item.model != "none"
+            and "broad_reading_only" not in item.quality.issues
         })
         return IntelligenceRunResult(
             analyses=analyses,
             source_status=source_status,
             ai_status=ai_status,
-            usage=self.stages.usage,
+            usage=self.usage,
             model_runtime=model_runtime,
             quality_summary=summarize_quality(analyses),
             collected_documents=collected_documents,
@@ -287,3 +339,43 @@ class IntelligencePipeline:
             processing_trace=processing_trace or [],
             errors=errors or [],
         )
+
+    def _broad_lead(
+        self,
+        event: Event,
+        documents: list[Document],
+        now: datetime,
+        *,
+        failure: str = "",
+    ) -> Analysis:
+        details = self.selector.scan_details(event.id)
+        scan = str(details.get("scan") or "").strip()
+        if not scan:
+            scan = next(
+                (
+                    (document.summary or document.title).strip()
+                    for document in documents
+                    if (document.summary or document.title).strip()
+                ),
+                event.title,
+            )[:220]
+        selection_reason = str(details.get("reason") or "").strip()
+        if failure:
+            selection_reason = f"{failure}；{selection_reason}".strip("；")
+        return self.researcher.lead(
+            event, documents, now, scan,
+            model=str(details.get("model") or self.stages.configured_model("scout")),
+            prompt_version=self.selector.broad_prompt_version,
+            issue="broad_reading_only",
+            selection_reason=selection_reason,
+        )
+
+    @staticmethod
+    def _runner_summary(runner: ModelStageRunner) -> dict[str, Any]:
+        metadata = runner.runtime_metadata()
+        return {
+            "provider": metadata.get("provider", type(runner.llm).__name__),
+            "base_url": metadata.get("base_url", ""),
+            "configured_model": runner.configured_model("scout"),
+            "actual_models": metadata.get("models", {}),
+        }

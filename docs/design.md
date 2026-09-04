@@ -23,7 +23,7 @@
 
 总的设计思路可以压成一句话：**模型只生成候选结构，程序拥有去重、证据核验、质量裁决和发布规格。** 换模型不能改变“什么可以作为深度结论”。AkShare 是 Tier 3 雷达，不是独立选题或观察名单；它与其他内容使用同一个 Scout。产品标题已是「科技产业情报日报」，日报不展示个股扫描。
 
-对外「今日速读」是精读结果的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。主页面按 Scout 顺序从材料达到门槛的结果中补足最多十条“精读”，材料过短及其余结果进入“泛读”；`digest_brief` 不再参与日常发布。
+对外「今日速读」是精读结果的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。生产由 DeepSeek 分批泛读全部候选、保留全局前 40 后统一复排；最终前十才运行 Analyst + Verifier。未进前十及精读失败项只作为泛读摘要；`digest_brief` 不再参与日常发布。
 
 ---
 
@@ -35,7 +35,7 @@
 
 **意见 vs 证据。** 合法后端是 OpenAI 兼容 API（局域网 DeepSeek / Qwen，或云端示例）。生产早间任务走局域网 API。不要在应用外重做采集、分析或发布。
 
-**双模型实验曾经存在，日常调度按配置是单模型。** Qwen 与 DeepSeek 用不同 SQLite（`data/intelligence_qwen.db` vs `data/intelligence_deepseek.db`）、不同 `experiment_id`、不同分析/Scout 缓存。`config/settings.deepseek.yaml` 把 `scout` / `analyst` / `verifier` / `digest_brief` 全部写成 `deepseek-v4-flash-0731`，base_url 为 `http://192.168.31.236:8000/v1`（**配置如此；本仓库测试不验证该主机可达，也不验证 06:00 现场一定连上 Flash**）。`config/settings.yaml` 里的云端 flash+pro 双模型只是示例。Qwen 3.8-27B（`启动日报-qwen.cmd`，`http://192.168.31.235:8317/v1`）是更快的本地改动验证后端，不覆盖 DeepSeek 缓存。局域网模型质量优先于省 token：思考开启；DeepSeek YAML 显式 `reasoning_effort: xhigh`；Qwen YAML **不**写 xhigh——注释称该端点显式传 xhigh 会被改写成 high 并 400（**端点行为，observed / configured，本仓库无自动化证明**）。两侧 `max_output_tokens: 32000`。
+**生产是 DeepSeek 单模型链路。** `config/settings.deepseek.yaml` 的后端是 DeepSeek V4 Flash（`192.168.31.236:8000`）。它扫描全部候选、截取全局前 40、再次复排，并负责最终前十的 Analyst、Verifier 与确定性质量门。选题使用独立的 `broad-reading-v1`、模型/端点指纹和 `rank-fusion-v5-deepseek` 缓存键；分析缓存 scope 不变。独立 `settings.qwen.yaml` 只用于手工兼容性检查并写 `data/intelligence_qwen.db`，不参与生产链路。
 
 **今日速读（对外）。** `plain_digest.tech_items`：精读条目的每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要把「深/线索」徽章埋在速读里。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。精读卡和速读共享同一份按首次出现主题稳定分组的列表，同主题相邻，组内仍是 Scout 顺序。
 
@@ -45,7 +45,7 @@
 
 **Git 页。** 只抓 GitHub 今日最热 + 本周增长最快。仓库身份只取 Trending 卡片标题链接，不能把前置 Sponsor 按钮当成仓库。AI 逐仓库对照 README、清单和源码入口生成中文功能说明与具体使用场景；API 匿名额度耗尽时 README 回退到 `raw.githubusercontent.com`。卡片展示当前总星标，日/周增量只在副标题出现，不绘制相对峰值进度条。不要 Hugging Face / GitLab、不要语言热度看板、不要「此为推演」。
 
-**精读与泛读。** `preferred_general_events` / `preferred_hardcore_events` 仍用于排序覆盖，但不再形成用户可见的子栏目，也不限制深研。Scout 保留项全部研究；AI 结果至少要有 2 条有效证据，且去除重复与包含关系后的可定位引文总量不少于 160 字，才有资格按 Scout 顺位补足最多 10 个完整精读卡。材料不足及名额外结果按主题词聚类显示泛读短句，组内保留 Scout 顺序。Tier 2/3 缺少一手来源时不能升成深度结论。
+**精读与泛读。** `preferred_general_events` / `preferred_hardcore_events` 仍用于最终复排后的覆盖排序，但不形成用户可见子栏目。只有固定前十允许研究；若其中某条失败或材料门不通过，不从第 11 条补做昂贵研究。泛读项带 `issues=["broad_reading_only"]`，不写分析缓存，也永远不能被材料门补位成精读。完整研究仍需至少 2 条有效证据和 160 字去重引文；Tier 2/3 缺少一手来源时不能升成深度结论。
 
 **Windows。** `pypdf` 往 stderr 打警告不得中断运行；PowerShell `Tee-Object` 编码会弄坏中文；`cmd.exe` 的 UTF-8 中文解析不稳定，所以根启动器是 ASCII-safe `.cmd`。
 
@@ -99,7 +99,7 @@
 4. **端口意图**是 LLM / 存储 / 市场快照走 `LLMClient` / `IntelligenceRepository` / `MarketProvider`，业务阶段不依赖 SQLite 类、某个模型 SDK 类。**例外（现码）：** `intelligence/mapping.py` 的 `CompanyMapper` 直接 `import akshare as ak`，调用 `ak.stock_zh_a_disclosure_report_cninfo` 与 `ak.stock_industry_change_cninfo`，不是 `MarketProvider`。
 5. `publication` 只消费标准化结果：不采集、不调模型、不重新裁决质量。**现码成立。**
 6. 新阶段失败返回局部错误或降级状态，不能补造事实。**现码成立。**
-7. 分析与 Scout 缓存必须包含实验标识和模型指纹；不同模型不得互相复用 **`analysis_variants` / Scout state 键**。**成立。** 但 `EventSelector._recent_analyses()` 与离线 `get_latest_analyses(limit * 4)` **省略 `cache_scope`**，同库多实验会共享次日 0.4 惩罚和离线复用。生产靠 Qwen/DeepSeek **分文件库**规避。
+7. 分析与 Scout 缓存必须包含实验标识和模型指纹；不同模型不得互相复用 **`analysis_variants` / Scout state 键**。**成立。** 但 `EventSelector._recent_analyses()` 与离线 `get_latest_analyses(limit * 4)` **省略 `cache_scope`**，同库多实验会共享次日 0.4 惩罚和离线复用。生产只使用 DeepSeek；手工 Qwen 检查另用文件库规避。
 
 ### 2. 程序拥有发布规格，模型只出草稿
 
@@ -148,7 +148,7 @@
 - `EventSelector._recent_analyses` 调用 `get_latest_analyses(80)` 不传 scope → 次日惩罚可能吃到另一实验昨天的发布。
 - 离线 `IntelligencePipeline._offline_result` 同样不传 scope。
 
-生产 Qwen/DeepSeek 分库，所以上述缺口日常不发作。同库 A/B 仍危险。
+生产只使用 DeepSeek 库；手工 Qwen 检查使用独立库，所以上述缺口日常不发作。同库 A/B 仍危险。
 
 ### 6. 降级优于停机
 
@@ -407,13 +407,13 @@ sequenceDiagram
 - 完全重复：×0.4。
 - 上次发布后 2 小时以上又有新 `last_seen`：× min(1.0, 0.4+0.35)=0.75。
 
-Scout 每批最多 `scout_batch_size`（默认 30）个事件，必须逐一返回；主题必须是配置主题或 `other`。结果按完整事件集合签名缓存在 `pipeline_state`，键含 `prompt_version` 和 `cache_scope`，并保存模型主题、评分和处理轨迹。
+生产泛读由 DeepSeek 以 `broad_reading.batch_size`（默认 30）扫描全部事件，按融合分截取 `shortlist_events`（默认 40），再按 `rerank_batch_size`（默认 40）统一复排。每个结果必须含评分、主题、编辑理由和一句仅基于材料的 `scan`。缓存签名包含事件及文档哈希，键包含独立泛读提示词版本、DeepSeek 模型/URL 指纹、选择器版本和分析实验 scope。
 
 **禁止。** 让模型分数 100% 决定入选；跨实验复用 Scout 缓存键。不要假设次日惩罚已按实验隔离（同库未隔离）。
 
 ### `intelligence/modeling.py` — 统一模型 I/O
 
-**理念。** 所有 AI 阶段（scout / analyst / verifier / git_brief / digest_brief）共用重试、用量、实际模型名审计。
+**理念。** 所有 AI 阶段（broad scout / rerank / analyst / verifier / git_brief / digest_brief）共用重试、用量、耗时与实际模型名审计。
 
 **需求。** `_generate` 外层最多 2 次调用 `llm.generate`；两次都失败才写一条 `llm_runs status=failed` 并抛出。`runtime_metadata()` 区分 configured vs actual。`cache_scope(experiment_id)` 见 §5。内层 HTTP 重试次数由具体 `LLMClient` 决定（OpenAI 兼容客户端再 ×2，见 `openai_compatible.py`）。
 
@@ -655,10 +655,10 @@ Scout 每批最多 `scout_batch_size`（默认 30）个事件，必须逐一返�
 **需求。** 页结构：
 
 1. 今日速读（精读合格项的 kicker + 一句话链接）
-2. 主 Tab：**精读**（完整卡片）| **泛读**（其余分析的缩略列表）| **Git**
+2. 主 Tab：**精读**（完整卡片）| **泛读**（分类与标题索引，点标题进入二级详情）| **Git**
 3. 页脚免责声明
 
-精读卡常显大白话要点，深度段可展开；泛读只显示主题词和一句话，不显示展开详情，并使用双栏瀑布流避免相邻主题高度差留下整行空白。不在速读或泛读区显示「深/线索」徽章。Git 卡展示 GitHub 总星标、日/周增量副标题和具体使用场景，不显示增量进度条。运行目录只写 `daily_digest.html`；目录已有文件则 `FileExistsError`。
+精读卡常显大白话要点，深度段可展开；泛读一级页只显示主题分类和条目标题，并使用双栏瀑布流，二级详情在同一 HTML 内显示摘要、要点和来源，支持返回列表与浏览器后退。不在速读或泛读索引显示「深/线索」徽章。Git 卡展示 GitHub 总星标、日/周增量副标题和具体使用场景，不显示增量进度条。运行目录只写 `daily_digest.html`；目录已有文件则 `FileExistsError`。
 
 **禁止。** invent 事实；重裁 `quality`；写日期根副本或 latest-run manifest。
 
@@ -687,8 +687,8 @@ Scout 每批最多 `scout_batch_size`（默认 30）个事件，必须逐一返�
 | 文件 | 角色 |
 | --- | --- |
 | `config/settings.yaml` | 云端 DeepSeek 示例：scout=flash、analyst/verifier=pro，库 `data/intelligence.db`。**不是早间任务配置。** 未配置 `git_brief`/`digest_brief` 时客户端回退到 `scout` 段 |
-| `config/settings.deepseek.yaml` | **日常定时任务配置。** LAN `http://192.168.31.236:8000/v1`，`OMLX_API_KEY`，库 `intelligence_deepseek.db`，五阶段同一 `deepseek-v4-flash-0731`，thinking + xhigh，32000 tokens。主机可达性 / 现场是否 06:00 跑 Flash：**configured，非本仓库测试** |
-| `config/settings.qwen.yaml` | 本地验证。LAN `http://192.168.31.235:8317/v1`，`QWEN_LAN_API_KEY`，库 `intelligence_qwen.db`。thinking enabled，**不**显式传 xhigh（YAML 注释：端点会 400；observed，非测试） |
+| `config/settings.deepseek.yaml` | **日常定时任务配置。** DeepSeek `192.168.31.236:8000` 负责全量泛读、前 40 复排和最终前十 Analyst/Verifier；只需要 `OMLX_API_KEY`，库为 `intelligence_deepseek.db` |
+| `config/settings.qwen.yaml` | 可选手工兼容性检查。LAN `http://192.168.31.235:8317/v1`，`QWEN_LAN_API_KEY`，库 `intelligence_qwen.db`。不参与生产；thinking enabled，**不**显式传 xhigh（YAML 注释：端点会 400；observed，非测试） |
 | `config/topics.yaml` | 八个主题 id/name：大模型与Agent、芯片算力、**机器人与具身智能**、云与开发工具、网络安全、智能汽车、能源科技、生物技术 |
 | `config/sources.yaml` | 分层白名单 + lane + publisher_id + 关键词预过滤 |
 
@@ -702,7 +702,7 @@ Scout 每批最多 `scout_batch_size`（默认 30）个事件，必须逐一返�
 | `启动日报-qwen.cmd` | 同上，强制 qwen yaml + `qwen3.8-27b` |
 | `scripts/run_daily.ps1` | 生产入口。Banner 打后端/配置/实验 id。UTF-8 `StreamWriter` 写 `logs/latest.log`，不用 `Tee-Object`。`PSNativeCommandUseErrorActionPreference=$false` 避免 pypdf stderr 变成 native 失败 |
 | `scripts/run_daily_agent.ps1` | 调度：生成 + `send_report.py` 邮件 |
-| `scripts/install_agent_task.ps1` | 每天（含周末）06:00，任务名「科技情报日报」，错过补跑，上限 **90** 分钟。Description 仍含「科技产业情报与A股观察日报」 |
+| `scripts/install_agent_task.ps1` | 每天（含周末）01:00，任务名「科技情报日报」，错过补跑，上限 **48** 小时，不并行重入 |
 | `scripts/install_scheduled_task.ps1` | 可选工作日 18:10。默认**任务名**仍是 `A股每日信息精选`；Description「工作日生成科技产业情报与 A 股观察统一日报」；时限 **60** 分钟；已存在则抛错、不覆盖 |
 | `scripts/daily_agent_prompt.txt` | 无头 Harness 提示，第 1 行仍是「生成今日科技产业情报与A股观察日报」 |
 | `scripts/send_report.py` | 取当日 `runs/` 下最新含 `daily_digest.html` 的运行，SMTP 附件 HTML+MD |
@@ -820,7 +820,7 @@ Skill 路径曾被讨论（Harness 日常跑过 `qwen-code-agent`）。否决原
 
 ### B. 仅 Harness vs 仅 API vs 双后端端口（已选端口）
 
-仅 Harness：审计好，但早间 06:00 无人值守等待 `.response.json` 不现实。仅云端 API：简单，但密钥出网、双模型 A/B 成本高、局域网 Flash 用不上。本设计把二者都挂在 `LLMClient`：生产 LAN API，需要复盘时走文件桥。`run_meta` 记录实际 provider，禁止把每次运行都标成 Qwen Code。
+仅 Harness：审计好，但凌晨 01:00 无人值守等待 `.response.json` 不现实。仅云端 API：简单，但密钥出网、双模型 A/B 成本高、局域网 Flash 用不上。本设计把二者都挂在 `LLMClient`：生产 LAN API，需要复盘时走文件桥。`run_meta` 记录实际 provider，禁止把每次运行都标成 Qwen Code。
 
 ### C. 市场与情报耦合打分 vs 独立流水线（已选独立）
 
@@ -869,12 +869,12 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 ## Observability
 
 - **Live：** `progress()` 的 `[n/6]` 与 `当前：`，tee 到控制台和 `logs/latest.log`。
-- **运行级：** `run_meta.json`（模型、token 含解析重试、缓存、来源 stale、质量汇总、estimated 标记）。
+- **运行级：** SQLite `pipeline_runs.metadata_json`（实际模型/URL、分阶段调用与耗时、缓存、来源 stale、质量汇总、estimated 标记）。
 - **库级：** `llm_runs`、`pipeline_runs`、`pipeline_state`。
-- **过程级：** `process.html` / `process.json` —— 作者主观测面（漏选、栏位已满、Scout 剔除、新闻噪音过滤、内部 `scan_paragraph`）。
+- **过程级：** `processing_funnel` / `processing_trace` 保存在 SQLite；运行目录只发布 HTML。
 - **告警：** 早间任务依赖 `--require-ai` 非零退出 + 邮件失败通知（无成功 HTML 时 `send_report.py` 发日志尾）。没有独立 metrics daemon。
 
-延迟量级（本机 LAN 模型、思考开启、32k 上限）：AkShare 数十秒；采集并发约 1–3 分钟（视墙与源）；全量 Scout 后，每个未命中缓存的保留事件各调用一次 Analyst 和 Verifier，是主耗时。以 298 个冷缓存事件计约 9–10 小时；稳定运行后按新增/变化事件数下降。主调度 `ExecutionTimeLimit` 为 18 小时并设置 `MultipleInstances=IgnoreNew`，避免次日并行重入。
+延迟量级（约 304 事件、思考开启）：约 11 个 DeepSeek 泛读批次，之后 1 个前 40 复排批次；昂贵调用固定为最多 10 次 Analyst + 10 次 Verifier。相比旧流程约 608 次逐事件调用，冷启动的重调用数降到 20。主调度 `ExecutionTimeLimit` 为 48 小时并设置 `MultipleInstances=IgnoreNew`。
 
 存储：每份 HTML 约数百 KB；SQLite 随文档增长，按实验分库避免 Qwen 写爆 DeepSeek 库。
 
@@ -884,11 +884,11 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 
 已经在生产使用的「发布开关」就是配置文件和 CLI flag，没有 feature flag 服务。
 
-1. **日常：** `启动日报.cmd` 或计划任务 06:00 → `settings.deepseek.yaml` + `--require-ai`（按配置；现场连通性不在测试网内）。
-2. **改代码后的快速验证：** `启动日报-qwen.cmd`（独立库，不污染早间缓存）。
+1. **日常：** `启动日报.cmd`，或每天 01:00 的计划任务 → `settings.deepseek.yaml` + `--require-ai`；只要求 `OMLX_API_KEY`。
+2. **可选模型兼容性检查：** `启动日报-qwen.cmd`（独立库，不污染生产缓存，也不辅助生产日报）。
 3. **契约变更：** 先改 `tests/`，跑 `pytest`，再改 `policy_version` / `prompt_version`。
 4. **回滚：** 不覆盖历史 `runs/`；改回 YAML 或换回上一份配置再跑即可。`--force-analysis` 只影响当前 scope。
-5. **双模型 A/B：** 不同 yaml、不同 db、不同 experiment_id；比较用 `scripts/compare_runs.py`，不要混缓存。
+5. **手工模型 A/B：** 不同 yaml、不同 db、不同 experiment_id；不要混缓存。
 
 Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Object、忽略 pypdf stderr。
 
@@ -920,9 +920,9 @@ Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Obje
 1. **模块化单体 + 端口。** 一份日报、可替换来源/模型/发布器。避免微服务运维，也避免 Skill 把契约吞进提示词。
 2. **质量门在模型之外。** `evidence-gate-v2` 用完整 issue taxonomy 定义深度结论（证据、一手来源、unsupported、verifier pass、事实/风险/反面/必填段/plain_takeaway）。换模型不能放宽其中任何一项。
 3. **科技情报为主，市场为雷达。** 产品标题去掉 A 股观察；无个股扫描；热点讲事件成因。地理标签「A股」保留。
-4. **35/65 融合选题 + 次日 0.4 惩罚 + 精读/泛读展示。** Scout 主导语义判断但不独占选题；昨天发过的新闻今天让路；所有 Scout 保留项研究后，经材料门顺位补足精读上限，其余进入泛读。
-5. **实验隔离用库文件 + cache_scope 指纹。** Qwen/DeepSeek 物理分库；同库内 `analysis_variants` 与 Scout 键按指纹隔离，旁表与 latest-analyses 查询尚未。
-6. **LAN Flash 生产，Qwen 验证，Harness 审计。** 三套后端同一 `LLMClient`；早间无人值守必须是 API。
+4. **35/65 融合选题 + 次日 0.4 惩罚 + 精读/泛读展示。** DeepSeek 泛读全部候选并复排全局前 40；昨天发过的新闻今天让路；只有最终前十研究，其余入围项进入泛读。
+5. **实验隔离用库文件 + cache_scope 指纹。** 生产只使用 DeepSeek；手工 Qwen 检查物理分库。同库内 `analysis_variants` 与 Scout 键按指纹隔离，旁表与 latest-analyses 查询尚未。
+6. **LAN Flash 生产，Qwen 仅手工检查。** 两套后端遵循同一 `LLMClient`，但生产无人值守链路只创建 DeepSeek 客户端。
 7. **产物只进 unique run 目录。** 同日多次、可对比、不可覆盖；过程页与日报成对出现。
 8. **公司映射默认假说。** 只有巨潮公告能把状态抬到 verified。
 9. **失败局部降级。** 单源、单事件、digest_brief、git_brief 都可以失败；整报仍出。HTTP 层最多 2×2 次。`--require-ai` 是调度用的硬开关。

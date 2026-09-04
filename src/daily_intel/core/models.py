@@ -109,6 +109,11 @@ class ScoutItem(StrictModel):
     technical_depth: float = Field(ge=0, le=100)
     industry_impact: float = Field(ge=0, le=100)
     reason: str
+    scan: str = Field(
+        default="",
+        max_length=220,
+        description="只依据给定材料写的一句事实性泛读摘要，不作预测或外推。",
+    )
 
 
 class ScoutBatch(StrictModel):

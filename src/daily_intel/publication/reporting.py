@@ -26,6 +26,7 @@ QUALITY_ISSUE_LABELS = {
     "insufficient_risks": "风险项不足",
     "insufficient_counterpoints": "反面观点不足",
     "ai_not_enabled": "AI未启用",
+    "broad_reading_only": "仅完成泛读，未进入前十精读",
 }
 
 
@@ -70,6 +71,8 @@ def publish(
     draft = build_plain_digest(intensive_analyses, context)
     extensive_digest = build_plain_digest(extensive_analyses, context)
     extensive_items = extensive_digest["tech_items"]
+    for index, item in enumerate(extensive_items, start=1):
+        item["detail_id"] = f"extensive-item-{index}"
     digest = {
         **draft,
         "has_content": bool(draft["tech_items"] or extensive_digest["tech_items"]),

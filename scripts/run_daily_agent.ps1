@@ -1,5 +1,5 @@
-﻿﻿# 计划任务入口：DeepSeek V4 Flash 生成日报 + 邮件发送
-# 由 Windows 任务计划程序每天 06:00 调用（含周末，见 install_agent_task.ps1）
+# 计划任务入口：DeepSeek V4 Flash 泛读、前十精读与邮件发送
+# 由 Windows 任务计划程序每天 01:00 调用（含周末，见 install_agent_task.ps1）
 $ErrorActionPreference = "Continue"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $ProjectRoot
@@ -30,10 +30,10 @@ $SendLog = Join-Path $LogDir "send_$Stamp.log"
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $Config = Join-Path $ProjectRoot "config\settings.deepseek.yaml"
 
-Write-Host "[$Stamp] 启动 DeepSeek V4 Flash 生成日报"
+Write-Host "[$Stamp] 启动 DeepSeek 泛读 + 前十精读"
 $env:PYTHONUTF8 = "1"
 $env:PYTHONUNBUFFERED = "1"
-$lanBypass = "localhost,127.0.0.1,::1,192.168.31.235,192.168.31.236"
+$lanBypass = "localhost,127.0.0.1,::1,192.168.31.236"
 if ($env:NO_PROXY) {
     $env:NO_PROXY = "$($env:NO_PROXY),$lanBypass"
 } else {

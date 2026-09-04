@@ -142,6 +142,36 @@ def test_duplicate_and_fabricated_quotes_cannot_satisfy_evidence_gate() -> None:
     assert "insufficient_evidence" in decision.quality.issues
 
 
+def test_quality_gate_publishes_exact_source_span_after_whitespace_normalization() -> None:
+    document = _document().model_copy(update={
+        "content": (
+            "First supported result spans\nmultiple source lines with technical detail. "
+            "Second supported result also spans\nmultiple source lines with benchmark detail."
+        ),
+        "summary": "",
+    })
+    evidence = [
+        Evidence(
+            document_id=document.id, url=document.url,
+            quote="First supported result spans multiple source lines with technical detail.",
+            locator="p1",
+        ),
+        Evidence(
+            document_id=document.id, url=document.url,
+            quote="Second supported result also spans multiple source lines with benchmark detail.",
+            locator="p2",
+        ),
+    ]
+    decision = AnalysisQualityGate(QualityPolicy()).evaluate(
+        _draft(evidence=evidence),
+        _verification(supported_evidence_indexes=[0, 1]),
+        [document],
+    )
+    assert decision.deep
+    assert all(item.quote in document.content for item in decision.evidence)
+    assert "spans\nmultiple" in decision.evidence[0].quote
+
+
 def test_duplicate_facts_do_not_game_minimum_and_single_source_caps_confidence() -> None:
     gate = AnalysisQualityGate(QualityPolicy())
     duplicate_decision = gate.evaluate(

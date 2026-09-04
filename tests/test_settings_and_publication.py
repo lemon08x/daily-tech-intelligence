@@ -46,6 +46,22 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
     assert settings["intelligence"]["intensive_reading_events"] == 10
 
 
+def test_production_config_uses_deepseek_only_for_broad_reading() -> None:
+    root = Path(__file__).resolve().parents[1]
+    production = load_settings(root / "config" / "settings.deepseek.yaml")
+    qwen_check = load_settings(root / "config" / "settings.qwen.yaml")
+    broad = production["broad_reading"]
+    assert broad["enabled"] is True
+    assert broad["shortlist_events"] == 40
+    assert broad["batch_size"] == 30
+    assert broad["rerank_batch_size"] == 40
+    assert "auxiliary_llm" not in broad
+    assert production["llm"]["base_url"] == "http://192.168.31.236:8000/v1"
+    assert production["llm"]["analyst"]["model"] == "deepseek-v4-flash-0731"
+    assert production["llm"]["verifier"]["model"] == "deepseek-v4-flash-0731"
+    assert qwen_check["broad_reading"]["enabled"] is False
+
+
 def test_group_scan_items_preserves_topic_and_scout_order() -> None:
     items = [
         {"kicker": "芯片", "scan": "芯片事件一"},
@@ -262,6 +278,9 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     extensive_html = html.split('id="extensive-panel"', 1)[1].split(
         'id="git-panel"', 1
     )[0]
+    extensive_index_html = extensive_html.split(
+        '<section id="extensive-item-1"', 1
+    )[0]
     assert "产业风向" not in html and "全球市场" not in html
     assert "金融行业" not in extensive_html
     assert "纳斯达克" not in extensive_html and "黄金" not in extensive_html
@@ -272,6 +291,15 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" not in html
     assert "第二项事件已经完成分析" in extensive_html
+    assert "第二项事件已经完成分析" not in extensive_index_html
+    assert "泛读事件" in extensive_index_html
+    assert 'class="extensive-entry"' in extensive_index_html
+    assert 'data-extensive-target="extensive-item-1"' in extensive_index_html
+    assert 'href="https://example.com/source"' not in extensive_index_html
+    assert 'class="extensive-back"' in extensive_html
+    assert "返回泛读列表" in extensive_html
+    assert "history.state?.fromExtensiveIndex" in html
+    assert "window.addEventListener('popstate'" in html
     assert 'class="scan-clusters"' in extensive_html
     assert 'class="scan-cluster"' in extensive_html
     assert "columns:2" in html and "break-inside:avoid" in html

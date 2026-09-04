@@ -29,9 +29,9 @@
 | 文件 | 锁住的行为 |
 | --- | --- |
 | `test_intelligence_quality.py` | 质量门裁剪过长输出；`unsupported_claims` 即使 `pass` 也降级；重复/伪造引文不能凑证据数；重复事实不能凑最低条数；单源置信度封顶 |
-| `test_intelligence_pipeline.py` | 假模型走通 scout→analyst→verifier；Scout 保留项全部研究；AkShare 快讯进入同一 Scout；精读/泛读计数与轨迹；未分类官方发布仍进入 Scout；同日同实验复用缓存；不同实验不共用分析；无效 JSON 重试一次后跳过；无 AI 只发线索；`--require-ai` 在缺密钥或离线时失败 |
+| `test_intelligence_pipeline.py` | 假模型走通 DeepSeek 全量泛读→前 40 复排→前十 analyst/verifier；其余只发泛读线索；AkShare 快讯进入同一 Scout；精读/泛读计数与轨迹；未分类官方发布仍进入 Scout；同日同实验复用缓存；不同实验不共用分析；无效 JSON 重试一次后跳过；无 AI 只发线索；`--require-ai` 在缺密钥或离线时失败 |
 | `test_sources_and_clustering.py` | RSS/Atom/arXiv/sitemap/HF Daily Papers 解析；sitemap 页面抓取复用为早期正文；未分类内容保留为 `other`；同 URL、同类标题与同 GitHub 项目合并；周刊 Markdown 抽链；短链还原；nightly 噪音丢弃；全文失败时保留摘要 |
-| `test_settings_and_publication.py` | 配置路径与来源数量；重复 id / 未知 API 类型拒绝；只写 HTML；精读材料门与顺位补位；精读/速读同主题相邻；泛读瀑布流主题聚类；Git 总星标、无进度条及逐仓库使用场景；原始 AkShare 列表不能绕过 Scout 渲染；同日多次运行不写日期根副本；Git 解读与科技缓存状态解耦并记录真实模型元数据；主题词看标题和速读句 |
+| `test_settings_and_publication.py` | 配置路径与来源数量；生产泛读仅使用 DeepSeek；重复 id / 未知 API 类型拒绝；只写 HTML；精读材料门；精读/速读同主题相邻；泛读一级分类标题与同页二级详情路由；Git 总星标、无进度条及逐仓库使用场景；原始 AkShare 列表不能绕过 Scout 渲染；同日多次运行不写日期根副本；Git 解读与科技缓存状态解耦并记录真实模型元数据；主题词看标题和速读句 |
 | `test_normalize.py` | AkShare 完整标准化快讯交给统一 Scout、市场层不再产生独立发布列表；同花顺+新浪快讯合并去重及 URL 保留 |
 | `test_storage_and_mapping.py` | 文档幂等写入；同一事件按实验保存多份分析 |
 | `test_github_trending.py` | GitHub Trending HTML 解析与最热/最快合并；Sponsor 按钮不能冒充仓库；API 限流时从 raw.githubusercontent.com 读取 README；总星标与副标题增量；前一天已发布事件第二天降权 |

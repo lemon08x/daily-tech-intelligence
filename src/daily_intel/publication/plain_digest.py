@@ -74,14 +74,40 @@ def build_plain_digest(
     hardcore_items = []
     for analysis in analyses:
         url = analysis.evidence[0].url if analysis.evidence else ""
+        scan = _scan_line(analysis)
+        detail_facts: list[str] = []
+        seen_facts = {scan.strip(), analysis.headline.strip()}
+        for fact in analysis.key_facts:
+            cleaned = clean_text(fact, 500).strip()
+            if cleaned and cleaned not in seen_facts:
+                detail_facts.append(cleaned)
+                seen_facts.add(cleaned)
         item = {
+            "event_id": analysis.event_id,
             "headline": analysis.headline,
             "kicker": _topic_kicker(analysis),
-            "scan": _scan_line(analysis),
+            "scan": scan,
             "takeaway": _takeaway(analysis),
             "url": url,
             "status": analysis.status.value,
             "lane": analysis.lane,
+            "key_facts": detail_facts,
+            "technical_mechanism": clean_text(analysis.technical_mechanism, 900),
+            "novelty": clean_text(analysis.novelty, 900),
+            "maturity": clean_text(analysis.maturity, 900),
+            "outlook": clean_text(analysis.outlook_6_24m, 900),
+            "risks": [clean_text(value, 500) for value in analysis.risks if value.strip()],
+            "counterpoints": [
+                clean_text(value, 500) for value in analysis.counterpoints if value.strip()
+            ],
+            "sources": [
+                {
+                    "url": evidence.url,
+                    "locator": evidence.locator,
+                    "quote": clean_text(evidence.quote, 800),
+                }
+                for evidence in analysis.evidence
+            ],
         }
         tech_items.append(item)
         if analysis.lane == "general":
