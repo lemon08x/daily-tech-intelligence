@@ -6,9 +6,9 @@
 | 作者 | 项目维护者（据 `src/daily_intel` 现码整理） |
 | 日期 | 2026-08-29 |
 | 状态 | Accepted（精简后） |
-| 代码版本 | `daily_intel` 0.4.0（`src/daily_intel/__init__.py`） |
-| 质量策略 | `evidence-gate-v2` |
-| 提示词版本 | `tech-intel-v3` |
+| 代码版本 | `daily_intel` 0.5.0（`src/daily_intel/__init__.py`） |
+| 质量策略 | `evidence-gate-v3` |
+| 提示词版本 | `tech-intel-v6` |
 | 性质 | **现况（as-built）文档**，描述仓库里已经在跑的应用，不是绿场提案 |
 
 > **2026-08-29 精简已落地。** 产品只出 HTML 日报。已删除 Harness 文件桥、双模型对照脚本、GitHub 以外的 HF/GitLab/使用场景、`language_bars`、非 HTML 产物（md/json/csv/`process.html`）、公司映射与巨潮核验、个股 `scoring.py`、`scan_paragraph`、第二份定时任务、以及市场筛选死字段。下文若仍写这些能力，以源码为准。SQLite 仍保留 `company_mappings` 表，仅为读旧库，产品页不再展示。
@@ -35,7 +35,7 @@
 
 **意见 vs 证据。** 合法后端是 OpenAI 兼容 API（局域网 DeepSeek / Qwen，或云端示例）。生产早间任务走局域网 API。不要在应用外重做采集、分析或发布。
 
-**生产是 DeepSeek 单模型链路。** `config/settings.deepseek.yaml` 的后端是 DeepSeek V4 Flash（`192.168.31.236:8000`）。它扫描全部候选、截取全局前 40、再次复排，并负责最终前十的 Analyst、Verifier 与确定性质量门。选题使用独立的 `broad-reading-v1`、模型/端点指纹和 `rank-fusion-v5-deepseek` 缓存键；分析缓存 scope 不变。独立 `settings.qwen.yaml` 只用于手工兼容性检查并写 `data/intelligence_qwen.db`，不参与生产链路。
+**生产是 DeepSeek 单模型链路。** `config/settings.deepseek.yaml` 的后端是 DeepSeek V4 Flash（`192.168.31.236:8000`）。它扫描全部候选、截取全局前 40、再次复排，并负责最终前十的 Analyst、Verifier 与确定性质量门。选题使用独立的 `broad-reading-v2`、模型/端点指纹和 `rank-fusion-v6-quality` 缓存键；分析缓存还包含质量策略与审核 schema 版本。独立 `settings.qwen.yaml` 只用于手工兼容性检查并写 `data/intelligence_qwen.db`，不参与生产链路。
 
 **今日速读（对外）。** `plain_digest.tech_items`：精读条目的每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要把「深/线索」徽章埋在速读里。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。精读卡和速读共享同一份按首次出现主题稳定分组的列表，同主题相邻，组内仍是 Scout 顺序。
 

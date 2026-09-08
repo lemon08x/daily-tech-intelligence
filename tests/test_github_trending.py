@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from daily_intel.core.models import (
     Analysis, AnalysisQuality, AnalysisStatus, Document, Event, Evidence,
+    PublicationRecord,
 )
 from daily_intel.core.models import GitProjectBrief, GitBriefingBatch
 from daily_intel.github.pipeline import annotate_github_visuals, apply_git_brief
@@ -258,6 +259,17 @@ def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:
         ),
         "scope",
     )
+    repository.record_publications([
+        PublicationRecord(
+            run_id=1, event_id="old-event",
+            canonical_urls=[old_doc.canonical_url],
+            experiment_id="deepseek-v4-flash", is_production=True,
+            selection_order=1, publication_tier="intensive",
+            research_status="deep_pass",
+            published_at=now - timedelta(hours=22),
+            content_fingerprint="",
+        )
+    ])
     selector = EventSelector(
         {"intelligence": {
             "selection_deterministic_weight": .65, "selection_model_weight": .35,
@@ -267,8 +279,39 @@ def test_repeat_publication_lowers_next_day_rank(tmp_path) -> None:
         repository,
         stages=None,  # type: ignore[arg-type]
     )
+    selector.begin_run(experiment_id="deepseek-v4-flash", is_production=True)
     ordered = selector.order_with_repeat(
         [(old_event, [old_doc]), (new_event, [new_doc])], now,
     )
     assert ordered[0][0].id == "new-event"
-    assert selector._repeat_factor(old_event, [old_doc], selector._recent_analyses(now)) == .4
+    assert selector._repeat_factor(old_event, [old_doc], selector._recent_publications(now)) == .4
+
+    repository.record_publications([
+        PublicationRecord(
+            run_id=2, event_id="broad-event",
+            canonical_urls=["https://example.com/broad"],
+            experiment_id="deepseek-v4-flash", is_production=True,
+            selection_order=20, publication_tier="extensive",
+            research_status="broad_only",
+            published_at=now - timedelta(hours=20),
+            content_fingerprint="",
+        ),
+        PublicationRecord(
+            run_id=2, event_id="cached-event",
+            canonical_urls=["https://example.com/cached"],
+            experiment_id="deepseek-v4-flash", is_production=True,
+            selection_order=3, publication_tier="intensive",
+            research_status="deep_pass",
+            published_at=now - timedelta(hours=20),
+            content_fingerprint="",
+        ),
+    ])
+    broad_event = old_event.model_copy(update={"id": "broad-event"})
+    cached_event = old_event.model_copy(update={"id": "cached-event"})
+    recent = selector._recent_publications(now)
+    assert selector._repeat_factor(broad_event, [old_doc.model_copy(update={
+        "url": "https://example.com/broad", "canonical_url": "https://example.com/broad",
+    })], recent) == .4
+    assert selector._repeat_factor(cached_event, [old_doc.model_copy(update={
+        "url": "https://example.com/cached", "canonical_url": "https://example.com/cached",
+    })], recent) == .4

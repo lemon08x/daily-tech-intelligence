@@ -5,7 +5,7 @@ import os
 import re
 from typing import Any, TypeVar
 
-from openai import OpenAI
+from openai import OpenAI, APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import BaseModel, ValidationError
 
 from daily_intel.core.ports import LLMClient, LLMResult
@@ -13,54 +13,53 @@ from daily_intel.core.ports import LLMClient, LLMResult
 
 T = TypeVar("T", bound=BaseModel)
 
-_JSON_START = re.compile(r"[{\[]", re.S)
+class ModelResponseError(RuntimeError):
+    def __init__(self, category: str, *, model: str = "", input_tokens: int = 0,
+                 output_tokens: int = 0, usage_unknown: bool = True, finish_reason: str = ""):
+        super().__init__(category)
+        self.category = category
+        self.model = model
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.usage_unknown = usage_unknown
+        self.finish_reason = finish_reason
+
+
+def json_objects(text: str):
+    """Scan complete top-level values, skipping arrays and nested subobjects."""
+    decoder = json.JSONDecoder()
+    cursor = 0
+    while cursor < len(text):
+        match = re.search(r"[\[{]", text[cursor:])
+        if not match:
+            return
+        start = cursor + match.start()
+        try:
+            value, end = decoder.raw_decode(text, start)
+        except ValueError:
+            # A malformed object must never be salvaged from its nested fields.
+            if text[start] == "{":
+                return
+            cursor = start + 1
+            continue
+        if isinstance(value, dict):
+            yield text[start:end]
+        cursor = end
 
 
 def extract_json_object(text: str) -> str:
-    """从模型输出中宽容提取首个完整 JSON 对象。
-
-    容忍:thinking 前缀、```json 围栏、围栏后拖尾文本、对象前导说明。
-    返回第一个配对完整的 JSON 对象/数组文本;找不到则原样返回。
-    """
-    text = text.strip()
-    if not text:
-        return text
-    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I | re.S)
-    match = _JSON_START.search(text)
-    if not match:
-        return text
-    start = match.start()
-    opener = text[start]
-    closer = "]" if opener == "[" else "}"
-    depth = 0
-    in_string = False
-    escape = False
-    for index in range(start, len(text)):
-        char = text[index]
-        if in_string:
-            if escape:
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char in "[{":
-            depth += 1
-        elif char in "]}":
-            depth -= 1
-            if depth == 0:
-                return text[start : index + 1]
-    return text
+    return next(json_objects(text.strip()), text.strip())
 
 
 class OpenAICompatibleLLM(LLMClient):
     def __init__(self, config: dict) -> None:
         self.config = config
         self.api_key = os.getenv(config["api_key_env"], "").strip()
-        self._client = OpenAI(api_key=self.api_key, base_url=config["base_url"]) if self.api_key else None
+        timeout_seconds = float(config.get("request_timeout_seconds", 1200))
+        self._client = (
+            OpenAI(api_key=self.api_key, base_url=config["base_url"], timeout=timeout_seconds, max_retries=0)
+            if self.api_key else None
+        )
 
     @property
     def available(self) -> bool:
@@ -83,43 +82,62 @@ class OpenAICompatibleLLM(LLMClient):
             raise RuntimeError(f"缺少环境变量 {self.config['api_key_env']}")
         stage_config = self.config.get(stage) or self.config["scout"]
         extra_body = dict(stage_config.get("extra_body", {}))
-        # 把 schema 描述补进 system,弥补端点不强制执行 response_format 的不足
         schema_hint = (
-            f"\n输出必须是一个JSON对象，字段严格符合以下JSON Schema：\n"
-            f"{json.dumps(schema.model_json_schema(), ensure_ascii=False)}\n"
-            "不要输出Markdown围栏或解释文字。"
+            "\n输出一个严格符合以下 JSON Schema 的对象，不要解释文字：\n"
+            + json.dumps(schema.model_json_schema(), ensure_ascii=False)
         )
-        system_with_schema = system + schema_hint
-        max_tokens = int(stage_config.get("max_output_tokens", 6000))
-        last_error: str | None = None
-        for attempt in range(2):
-            messages = [{"role": "system", "content": system_with_schema}, {"role": "user", "content": user}]
-            if last_error:
-                messages.append({
-                    "role": "user",
-                    "content": f"你上一次的输出无法解析: {last_error}\n请重新输出严格符合schema的JSON对象。",
-                })
-            request = {
-                "model": stage_config["model"],
-                "messages": messages,
-                "response_format": {"type": "json_object"},
-                "max_tokens": max_tokens,
-                "temperature": float(stage_config.get("temperature", 0)),
-                "stream": False,
-            }
-            if extra_body:
-                request["extra_body"] = extra_body
+        # Stage prompts already carry the schema; avoid doubling the large contract.
+        system_with_schema = system if '"$defs"' in user or '"properties"' in user else system + schema_hint
+        request = {
+            "model": stage_config["model"],
+            "messages": [{"role": "system", "content": system_with_schema}, {"role": "user", "content": user}],
+            "response_format": {"type": "json_object"},
+            "max_tokens": int(stage_config.get("max_output_tokens", 6000)),
+            "temperature": float(stage_config.get("temperature", 0)),
+            "stream": False,
+        }
+        if extra_body:
+            request["extra_body"] = extra_body
+        try:
             response = self._client.chat.completions.create(**request)
-            content = response.choices[0].message.content or ""
+        except APITimeoutError as exc:
+            raise ModelResponseError("network_timeout") from exc
+        except APIConnectionError as exc:
+            raise ModelResponseError("network_connection") from exc
+        except APIStatusError as exc:
+            raise ModelResponseError(f"http_status_{exc.status_code}") from exc
+        usage = response.usage
+        metadata = dict(model=str(getattr(response, "model", "") or stage_config["model"]),
+                        input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                        output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                        usage_unknown=usage is None)
+        if not response.choices:
+            raise ModelResponseError("empty_response", **metadata)
+        choice = response.choices[0]
+        reason = str(getattr(choice, "finish_reason", "") or "")
+        content = choice.message.content or ""
+        if reason == "length":
+            raise ModelResponseError("truncated_response", finish_reason=reason, **metadata)
+        if not content.strip():
+            raise ModelResponseError("empty_response", finish_reason=reason, **metadata)
+        candidates = list(json_objects(content))
+        category = "json_syntax" if not candidates else "schema_mismatch"
+        if not candidates:
             try:
-                candidate = extract_json_object(content)
+                json.loads(content)
+            except ValueError:
+                pass
+            else:
+                category = "schema_mismatch"
+        for candidate in candidates:
+            try:
                 value = schema.model_validate(json.loads(candidate))
-                usage = response.usage
-                return LLMResult(
-                    value=value, model=str(getattr(response, "model", "") or stage_config["model"]),
-                    input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-                    output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-                )
-            except (ValueError, ValidationError) as exc:
-                last_error = f"{type(exc).__name__}: {str(exc)[:300]}"
-        raise RuntimeError(f"模型输出解析失败(重试2次): {last_error}")
+            except (ValueError, ValidationError):
+                continue
+            result = LLMResult(value=value, model=metadata["model"],
+                               input_tokens=metadata["input_tokens"], output_tokens=metadata["output_tokens"],
+                               usage_estimated=metadata["usage_unknown"])
+            result.finish_reason = reason
+            result.usage_unknown = metadata["usage_unknown"]
+            return result
+        raise ModelResponseError(category, finish_reason=reason, **metadata)

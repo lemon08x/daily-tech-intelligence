@@ -16,6 +16,32 @@ class AnalysisStatus(StrEnum):
     LEAD = "lead"
 
 
+class ClaimStatus(StrEnum):
+    SUPPORTED = "supported"
+    UNSUPPORTED = "unsupported"
+    CONFLICTING = "conflicting"
+    UNVERIFIABLE = "unverifiable"
+    UNAUDITED = "unaudited"
+
+
+class ClaimKind(StrEnum):
+    FACT = "fact"
+    OUTLOOK = "outlook"
+
+
+class ResearchStatus(StrEnum):
+    DEEP_PASS = "deep_pass"
+    QUALITY_DOWNGRADE = "quality_downgrade"
+    RESEARCH_FAILED = "research_failed"
+    BROAD_ONLY = "broad_only"
+    MATERIAL_GATE_EXTENSIVE = "material_gate_extensive"
+
+
+class PublicationTier(StrEnum):
+    INTENSIVE = "intensive"
+    EXTENSIVE = "extensive"
+
+
 class Document(StrictModel):
     id: str
     source_id: str
@@ -52,6 +78,9 @@ class Evidence(StrictModel):
     url: str
     quote: str = Field(min_length=8, max_length=1200)
     locator: str = "正文"
+    snapshot_hash: str = ""
+    char_start: int | None = None
+    char_end: int | None = None
 
 
 class IndustryImpact(StrictModel):
@@ -61,17 +90,80 @@ class IndustryImpact(StrictModel):
     rationale: str
 
 
+class ClaimAudit(StrictModel):
+    claim_id: str
+    field_path: str
+    text: str
+    status: ClaimStatus = ClaimStatus.UNAUDITED
+    kind: ClaimKind = ClaimKind.FACT
+    document_id: str = ""
+    snapshot_hash: str = ""
+    locator: str = ""
+    quote: str = ""
+    notes: str = ""
+
+
+class ClaimCheck(StrictModel):
+    """Verifier judgement for one program-enumerated claim."""
+
+    claim_id: str = ""
+    field_path: str = ""
+    text: str = ""
+    status: Literal["supported", "unsupported", "conflicting", "unverifiable"] = "unverifiable"
+    document_id: str = ""
+    locator: str = ""
+    quote: str = ""
+    notes: str = ""
+
+
+class ComparisonRow(StrictModel):
+    subject: str
+    metric: str
+    value: float | None = None
+    unit: str = ""
+    baseline: str = ""
+    condition: str = ""
+    quote: str = ""
+    document_id: str = ""
+
+
 class AnalysisQuality(StrictModel):
     """Deterministic audit result applied after all model stages."""
 
-    policy_version: str = "evidence-gate-v2"
+    policy_version: str = "evidence-gate-v4"
     passed: bool = False
     score: int = Field(default=0, ge=0, le=100)
     supported_evidence: int = Field(default=0, ge=0)
     primary_sources: int = Field(default=0, ge=0)
     source_diversity: int = Field(default=0, ge=0)
     unsupported_claims: list[str] = Field(default_factory=list, max_length=12)
-    issues: list[str] = Field(default_factory=list, max_length=12)
+    issues: list[str] = Field(default_factory=list, max_length=16)
+    schema_version: str = "claim-audit-v2"
+    claim_audits: list[ClaimAudit] = Field(default_factory=list)
+
+
+class PublicationMeta(StrictModel):
+    selection_order: int = 0
+    was_research_target: bool = False
+    cache_hit: bool = False
+    research_status: str = ""
+    publication_tier: str = ""
+    material_gate_passed: bool | None = None
+    material_gate_reason: str = ""
+    public_notice: str = ""
+    source_headline: str = ""
+    disputed_claims: list[str] = Field(default_factory=list)
+    content_fingerprint: str = ""
+    snapshot_hash: str = ""
+    schema_version: str = "claim-audit-v2"
+    source_published_at: datetime | None = None
+    original_published_at: datetime | None = None
+    first_published_at: datetime | None = None
+    first_seen: datetime | None = None
+    last_seen: datetime | None = None
+    freshness_label: str = ""
+    unverified_placeholder: bool = False
+    source_excerpts: list[str] = Field(default_factory=list)
 
 
 class Analysis(StrictModel):
@@ -83,6 +175,7 @@ class Analysis(StrictModel):
     status: AnalysisStatus
     headline: str
     plain_takeaway: str = ""
+    scan_sentence: str = ""
     key_facts: list[str] = Field(default_factory=list, max_length=8)
     technical_mechanism: str = ""
     novelty: str = ""
@@ -98,6 +191,15 @@ class Analysis(StrictModel):
     prompt_version: str = ""
     created_at: datetime
     lane: Literal["general", "hardcore"] = "hardcore"
+    topic_id: str = ""
+    topic_name: str = ""
+    publication: PublicationMeta = Field(default_factory=PublicationMeta)
+
+
+class ScoutPublicFact(StrictModel):
+    text: str = Field(default="", max_length=300)
+    document_id: str = ""
+    quote: str = Field(default="", max_length=400)
 
 
 class ScoutItem(StrictModel):
@@ -114,6 +216,9 @@ class ScoutItem(StrictModel):
         max_length=220,
         description="只依据给定材料写的一句事实性泛读摘要，不作预测或外推。",
     )
+    public_headline: str = Field(default="", max_length=120)
+    public_summary: str = Field(default="", max_length=400)
+    public_facts: list[ScoutPublicFact] = Field(default_factory=list, max_length=3)
 
 
 class ScoutBatch(StrictModel):
@@ -150,6 +255,10 @@ class AnalysisDraft(StrictModel):
     )
     # Draft limits are deliberately wider than published limits. The deterministic
     # quality gate normalizes verbose model responses before building Analysis.
+    scan_sentence: str = Field(
+        default="",
+        description="独立速读句：说明谁做了什么及主要结果，不要只写背景。",
+    )
     plain_takeaway: str = Field(
         min_length=8,
         description="2到3句大白话。先说发生了什么和为什么重要；缩写、算法名、指标名第一次出现必须用人话解释。解释不得引入文档没有的数字、排名或公司属性。",
@@ -170,6 +279,10 @@ class AnalysisDraft(StrictModel):
     counterpoints: list[str] = Field(default_factory=list, max_length=16)
     confidence: float = Field(ge=0, le=1)
     evidence: list[Evidence] = Field(default_factory=list, max_length=24)
+    claims: list[ClaimAudit] = Field(
+        default_factory=list,
+        description="模型可选自报的断言清单，不能代替程序核对字段覆盖。",
+    )
 
     @field_validator("evidence")
     @classmethod
@@ -182,6 +295,23 @@ class AnalysisDraft(StrictModel):
 class VerificationResult(StrictModel):
     supported_evidence_indexes: list[int] = Field(default_factory=list)
     unsupported_claims: list[str] = Field(default_factory=list)
+    claim_checks: list[ClaimCheck] = Field(default_factory=list)
+    comparison_rows: list[ComparisonRow] = Field(default_factory=list)
     confidence_adjustment: float = Field(ge=-0.5, le=0.2)
     verdict: Literal["pass", "downgrade", "reject"]
     notes: str
+    schema_version: str = "claim-audit-v2"
+
+
+class PublicationRecord(StrictModel):
+    run_id: int
+    event_id: str
+    canonical_urls: list[str] = Field(default_factory=list)
+    experiment_id: str = ""
+    is_production: bool = False
+    selection_order: int = 0
+    publication_tier: str = ""
+    research_status: str = ""
+    published_at: datetime
+    content_fingerprint: str = ""
+    freshness_label: str = ""

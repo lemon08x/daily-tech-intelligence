@@ -115,9 +115,9 @@ def project_identity_keys(url: str) -> set[str]:
     host = parts.netloc.lower()
     path = parts.path.strip("/")
     keys = {canonical}
-    if "github.com" in host:
+    if host in {"github.com", "www.github.com"}:
         segments = path.split("/")
-        if len(segments) >= 2 and segments[0] not in {"login", "topics", "orgs", "settings"}:
+        if (len(segments) == 2 or len(segments) >= 5 and segments[2:4] == ["releases", "tag"]) and segments[0] not in {"login", "topics", "orgs", "settings"}:
             keys.add(f"github:{segments[0]}/{segments[1]}".lower())
     return keys
 

@@ -1,6 +1,7 @@
 app:
   title: "科技产业情报日报"
   timezone: "Asia/Shanghai"
+  production_experiment_id: "deepseek-v4-flash"
 
 paths:
   cache_dir: "../data/cache"
@@ -27,6 +28,9 @@ intelligence:
   selection_model_reject_floor: 55
   selection_repeat_penalty: 0.4
   selection_repeat_hours: 36
+  selection_freshness_0_24h: 1.0
+  selection_freshness_24_48h: 0.9
+  selection_freshness_48_72h: 0.75
 
 github:
   enabled: true
@@ -35,7 +39,8 @@ github:
   publish_limit: 10
 
 quality:
-  policy_version: "evidence-gate-v2"
+  policy_version: "evidence-gate-v4"
+  schema_version: "claim-audit-v2"
   min_key_facts: 3
   max_key_facts: 6
   min_supported_evidence: 2
@@ -58,7 +63,8 @@ llm:
   provider: "openai_compatible"
   base_url: "https://api.deepseek.com"
   api_key_env: "DEEPSEEK_API_KEY"
-  prompt_version: "tech-intel-v5"
+  prompt_version: "tech-intel-v7"
+  request_timeout_seconds: 1200
   scout:
     model: "deepseek-v4-flash"
     max_output_tokens: 6000

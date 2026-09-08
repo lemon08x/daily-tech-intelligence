@@ -6,7 +6,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from daily_intel.core.models import Analysis, Document, Event, ScoutBatch, ScoutItem
+from daily_intel.core.models import (
+    Document, Event, PublicationRecord, ScoutBatch, ScoutItem,
+)
+from daily_intel.intelligence.snapshots import (
+    canonical_urls, content_fingerprint, hours_since,
+)
+from daily_intel.intelligence.terms import localize_public_facts, localize_public_text
 from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository
 from daily_intel.intelligence.modeling import ModelStageRunner
@@ -17,7 +23,7 @@ from daily_intel.intelligence.sources.common import event_lane
 class EventSelector:
     """Rank-fuses deterministic signals with bounded model judgement."""
 
-    VERSION = "rank-fusion-v5-deepseek"
+    VERSION = "rank-fusion-v6-quality"
 
     def __init__(
         self, settings: dict[str, Any], repository: IntelligenceRepository,
@@ -40,6 +46,11 @@ class EventSelector:
         self.model_reject_floor = float(self.config.get("selection_model_reject_floor", 55))
         self.repeat_penalty = float(self.config.get("selection_repeat_penalty", .4))
         self.repeat_hours = float(self.config.get("selection_repeat_hours", 36))
+        self.freshness_0_24h = float(self.config.get("selection_freshness_0_24h", 1.0))
+        self.freshness_24_48h = float(self.config.get("selection_freshness_24_48h", .9))
+        self.freshness_48_72h = float(self.config.get("selection_freshness_48_72h", .75))
+        self.experiment_id = "default"
+        self.is_production = False
         self.topic_names = {
             str(item["id"]): str(item["name"])
             for item in settings.get("topics", [])
@@ -48,13 +59,19 @@ class EventSelector:
         self.last_trace: list[dict[str, Any]] = []
         self.last_funnel: dict[str, int] = {}
         self.last_scan_details: dict[str, dict[str, Any]] = {}
+        self.last_exposure: dict[str, dict[str, Any]] = {}
         self.priority_event_ids: set[str] = set()
 
-    def begin_run(self) -> None:
+    def begin_run(
+        self, *, experiment_id: str = "default", is_production: bool = False,
+    ) -> None:
         self.last_trace = []
         self.last_funnel = {}
         self.last_scan_details = {}
+        self.last_exposure: dict[str, dict[str, Any]] = {}
         self.priority_event_ids = set()
+        self.experiment_id = experiment_id
+        self.is_production = is_production
 
     def scan_details(self, event_id: str) -> dict[str, Any]:
         return dict(self.last_scan_details.get(event_id) or {})
@@ -72,7 +89,7 @@ class EventSelector:
         now: datetime | None = None,
     ) -> tuple[list[tuple[Event, list[Document]]], str | None]:
         current = now or datetime.now(timezone.utc)
-        recent = self._recent_analyses(current)
+        recent = self._recent_publications(current)
         signature = hashlib.sha256(json.dumps(
             {
                 "events": [event.id for event, _ in event_docs],
@@ -113,7 +130,10 @@ class EventSelector:
                         str(item.get("event_id")) for item in self.last_trace
                         if item.get("official_release_priority")
                     }
-                    return self._apply_repeat(ranked, recent), None
+                    return [
+                        (event, docs) for _, event, docs in
+                        self._apply_exposure(ranked, recent, current)
+                    ], None
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 pass
         try:
@@ -201,7 +221,10 @@ class EventSelector:
                 "trace": trace,
                 "funnel": funnel,
             }))
-            return self._apply_repeat(ranked, recent), None
+            return [
+                (event, docs) for _, event, docs in
+                self._apply_exposure(ranked, recent, current)
+            ], None
         except Exception as exc:
             self.last_trace = [
                 self._trace_item(
@@ -227,12 +250,12 @@ class EventSelector:
     ) -> tuple[list[tuple[Event, list[Document]]], str | None]:
         """Let DeepSeek scan all events, shortlist globally, then rerank once."""
         current = now or datetime.now(timezone.utc)
-        recent = self._recent_analyses(current)
+        recent = self._recent_publications(current)
         signature = self._broad_signature(event_docs)
         cache_key = self._broad_cache_key(cache_scope)
         cached = self.repository.get_state(cache_key)
         if cached:
-            restored = self._restore_broad_cache(cached, signature, event_docs, recent)
+            restored = self._restore_broad_cache(cached, signature, event_docs, recent, current)
             if restored is not None:
                 progress(f"当前：复用 DeepSeek 泛读与复排缓存（{len(restored)} 个候选）")
                 return restored, None
@@ -258,8 +281,9 @@ class EventSelector:
                 runner=self.stages, stage="scout_broad", allow_reject=True,
             )
         )
+        broad_ranked = self._apply_exposure(broad_ranked, recent, current, record_trace=False)
         shortlist = self._take_shortlist(
-            broad_ranked, broad_priority, self.shortlist_events
+            broad_ranked, set(), self.shortlist_events
         )
 
         rerank_response = ScoutBatch(items=[])
@@ -295,12 +319,15 @@ class EventSelector:
                 key=lambda item: (item[0], item[1].last_seen), reverse=True
             )
 
+        raw_ranked = list(final_ranked)
+        final_ranked = self._apply_exposure(raw_ranked, recent, current)
         priority_limit = max(
             0, int(self.config.get("preferred_official_release_events", 3))
         )
         priority_ranked = [
-            event.id for _, event, _ in final_ranked
+            event.id for _, event, docs in final_ranked
             if event.id in rerank_priority
+            and self._repeat_factor(event, docs, recent) >= 0.99
         ]
         self.priority_event_ids = set(priority_ranked[:priority_limit])
 
@@ -332,7 +359,7 @@ class EventSelector:
             trace_by_id[event_id] = previous
 
         self.last_trace = [
-            trace_by_id[event.id]
+            {**trace_by_id[event.id], **self.last_exposure.get(event.id, {})}
             for event, _ in event_docs
             if event.id in trace_by_id
         ]
@@ -345,6 +372,10 @@ class EventSelector:
                 "reason": str(item.get("reason") or "")[:500],
                 "model": str(item.get("model") or self.stages.configured_model("scout")),
                 "reader": "deepseek_rerank",
+                "public_headline": str(item.get("public_headline") or "")[:120],
+                "public_summary": str(item.get("public_summary") or "")[:400],
+                "public_facts": list(item.get("public_facts") or []),
+                "excerpts": dict(item.get("excerpts") or {}),
             }
             for event_id, item in rerank_by_id.items()
             if event_id in shortlisted_ids
@@ -372,13 +403,13 @@ class EventSelector:
                     "score": score,
                     "topic_id": event.topic_id,
                 }
-                for score, event, _ in final_ranked
+                for score, event, _ in raw_ranked
             ],
             "trace": self.last_trace,
             "funnel": self.last_funnel,
             "scan_details": self.last_scan_details,
         }, ensure_ascii=False))
-        selected = self._apply_repeat(final_ranked, recent)
+        selected = [(event, docs) for _, event, docs in final_ranked]
         return selected, "; ".join(errors) if errors else None
 
     def _rank_scout_response(
@@ -416,6 +447,10 @@ class EventSelector:
                 relevant = True
                 industry_impact = 0.0
                 model_score = None
+                public_headline = ""
+                public_summary = ""
+                public_facts: list[dict[str, Any]] = []
+                excerpts = {}
             else:
                 event = self._with_topic(original_event, item.topic_id)
                 self.repository.upsert_event(event)
@@ -424,6 +459,19 @@ class EventSelector:
                 reason = item.reason
                 relevant = bool(item.relevant)
                 industry_impact = float(item.industry_impact)
+                public_headline = localize_public_text(item.public_headline or "")
+                public_summary = localize_public_text(item.public_summary or "")
+                public_facts = [
+                    fact.model_dump(mode="json")
+                    for fact in localize_public_facts(item.public_facts)
+                    if fact.text.strip()
+                ]
+                excerpts = {
+                    document.id: (document.content or document.summary or "")[:
+                        max(200, int(self.broad_config.get("doc_chars", 1800)))
+                    ]
+                    for document in docs
+                }
                 if allow_reject and not relevant and event.deterministic_score < self.model_reject_floor:
                     rejected += 1
                     traced = self._trace_item(
@@ -452,6 +500,10 @@ class EventSelector:
                 "model_relevant": relevant,
                 "model": model,
                 "scan": scan,
+                "public_headline": public_headline,
+                "public_summary": public_summary,
+                "public_facts": public_facts,
+                "excerpts": excerpts,
             })
             trace.append(traced)
         ranked.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
@@ -555,7 +607,8 @@ class EventSelector:
         cached: str,
         signature: str,
         event_docs: list[tuple[Event, list[Document]]],
-        recent: list[Analysis],
+        recent: list[PublicationRecord],
+        now: datetime,
     ) -> list[tuple[Event, list[Document]]] | None:
         try:
             payload = json.loads(cached)
@@ -579,25 +632,28 @@ class EventSelector:
                 str(item.get("event_id")) for item in self.last_trace
                 if item.get("official_release_priority")
             }
-            return self._apply_repeat(ranked, recent)
+            return [
+                (event, docs) for _, event, docs in
+                self._apply_exposure(ranked, recent, now)
+            ]
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             return None
 
     def order_with_repeat(
         self, event_docs: list[tuple[Event, list[Document]]], now: datetime,
     ) -> list[tuple[Event, list[Document]]]:
-        recent = self._recent_analyses(now)
-        scored: list[tuple[float, Event, list[Document]]] = []
-        for event, docs in event_docs:
-            factor = self._repeat_factor(event, docs, recent)
-            scored.append((event.deterministic_score * factor, event, docs))
-        scored.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
+        recent = self._recent_publications(now)
+        scored = [
+            (event.deterministic_score, event, docs)
+            for event, docs in event_docs
+        ]
+        adjusted = self._apply_exposure(scored, recent, now)
         if not self.last_trace:
             self.last_trace = [
                 self._trace_item(
                     event, docs, "candidate", "AI 未启用，使用确定性排序", score,
                 )
-                for score, event, docs in scored
+                for score, event, docs in adjusted
             ]
             self.last_funnel = {
                 "scout_input_events": len(event_docs),
@@ -607,19 +663,30 @@ class EventSelector:
                 "scout_retained_events": len(event_docs),
                 "official_release_priority_events": 0,
             }
-        return [(event, docs) for _, event, docs in scored]
+        return [(event, docs) for _, event, docs in adjusted]
 
-    def _apply_repeat(
+    def _apply_exposure(
         self,
         ranked: list[tuple[float, Event, list[Document]]],
-        recent: list[Analysis],
-    ) -> list[tuple[Event, list[Document]]]:
-        adjusted = [
-            (score * self._repeat_factor(event, docs, recent), event, docs)
-            for score, event, docs in ranked
-        ]
+        recent: list[PublicationRecord],
+        now: datetime,
+        *,
+        record_trace: bool = True,
+    ) -> list[tuple[float, Event, list[Document]]] | list[tuple[Event, list[Document]]]:
+        adjusted: list[tuple[float, Event, list[Document]]] = []
+        for score, event, docs in ranked:
+            freshness = self._freshness_factor(docs, now)
+            repeat = self._repeat_factor(event, docs, recent)
+            adjusted.append((score * freshness * repeat, event, docs))
+            self.last_exposure[event.id] = {
+                "raw_score": round(float(score), 2),
+                "freshness_factor": round(float(freshness), 3),
+                "repeat_factor": round(float(repeat), 3),
+                "adjusted_score": round(float(score * freshness * repeat), 2),
+                "freshness_label": self._freshness_label(event, docs, recent),
+            }
         adjusted.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
-        return [(event, docs) for _, event, docs in adjusted]
+        return adjusted
 
     def _with_topic(self, event: Event, topic_id: str | None) -> Event:
         resolved = str(topic_id or "")
@@ -664,32 +731,66 @@ class EventSelector:
             "reason": str(reason or "")[:500],
         }
 
-    def _recent_analyses(self, now: datetime) -> list[Analysis]:
+    def _recent_publications(self, now: datetime) -> list[PublicationRecord]:
         current = _aware(now)
         start_of_today = current.replace(hour=0, minute=0, second=0, microsecond=0)
         cutoff = start_of_today - timedelta(hours=self.repeat_hours)
-        return [
-            item for item in self.repository.get_latest_analyses(80)
-            if cutoff <= _aware(item.created_at) < start_of_today
-        ]
+        production_only = bool(self.is_production)
+        try:
+            return self.repository.recent_publications(
+                cutoff, start_of_today,
+                production_only=production_only,
+                experiment_id=None if production_only else self.experiment_id,
+            )
+        except AttributeError:
+            return []
 
     def _repeat_factor(
-        self, event: Event, docs: list[Document], recent: list[Analysis],
+        self, event: Event, docs: list[Document], recent: list[PublicationRecord],
     ) -> float:
-        if not recent or self.repeat_penalty >= 1:
+        previous = self._previous_publication(event, docs, recent)
+        if previous is None or self.repeat_penalty >= 1:
             return 1.0
-        urls = {str(doc.canonical_url or doc.url).rstrip("/") for doc in docs if doc.url}
-        previous: Analysis | None = None
-        for item in recent:
-            item_urls = {str(ev.url).rstrip("/") for ev in item.evidence if ev.url}
-            if item.event_id == event.id or (urls and urls & item_urls):
-                previous = item
-                break
-        if previous is None:
-            return 1.0
-        if _aware(event.last_seen) > _aware(previous.created_at) + timedelta(hours=2):
+        current = content_fingerprint(docs)
+        if previous.content_fingerprint and current and previous.content_fingerprint != current:
             return min(1.0, self.repeat_penalty + 0.35)
         return self.repeat_penalty
+
+    def _freshness_factor(self, docs: list[Document], now: datetime) -> float:
+        ages = [hours_since(item.published_at, now) for item in docs]
+        ages = [item for item in ages if item is not None]
+        if not ages:
+            return self.freshness_48_72h
+        age = min(ages)
+        if age <= 24:
+            return self.freshness_0_24h
+        if age <= 48:
+            return self.freshness_24_48h
+        return self.freshness_48_72h
+
+    def _freshness_label(
+        self, event: Event, docs: list[Document], recent: list[PublicationRecord],
+    ) -> str:
+        previous = self._previous_publication(event, docs, recent)
+        if previous is None:
+            return "首次收录"
+        current = content_fingerprint(docs)
+        if previous.content_fingerprint and current and previous.content_fingerprint != current:
+            return "有新材料"
+        if not previous.content_fingerprint:
+            return "新增材料待核对"
+        return "再次收录"
+
+    def _previous_publication(
+        self, event: Event, docs: list[Document], recent: list[PublicationRecord],
+    ) -> PublicationRecord | None:
+        if not recent:
+            return None
+        urls = set(canonical_urls(docs))
+        for item in recent:
+            if item.event_id == event.id or (urls and urls & set(item.canonical_urls)):
+                return item
+        return None
 
     @staticmethod
     def prioritize_for_research(

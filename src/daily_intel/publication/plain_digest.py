@@ -1,7 +1,24 @@
 from __future__ import annotations
 
+from typing import Any
+
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 from daily_intel.core.models import Analysis
 from daily_intel.market.normalize import clean_text
+
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
+TOPIC_ID_KICKERS = {
+    "foundation_models": "模型",
+    "compute_chips": "芯片",
+    "robotics": "机器人",
+    "cloud_devtools": "软件",
+    "cybersecurity": "安全",
+    "smart_mobility": "汽车",
+    "energy_tech": "能源",
+    "biotech": "生物",
+}
 
 
 TOPIC_KICKERS = (
@@ -17,6 +34,8 @@ TOPIC_KICKERS = (
     ("芯片", ("gpu", "hbm", "semiconductor", "cuda", "nvfp4", "芯片", "算力", "光刻", "晶圆")),
 )
 
+BACKGROUND_HINTS = ("背景", "长期以来", "近年来", "过去几年", "随着", "in recent years")
+
 
 def _takeaway(analysis: Analysis) -> str:
     if analysis.plain_takeaway.strip():
@@ -24,20 +43,53 @@ def _takeaway(analysis: Analysis) -> str:
     for fact in analysis.key_facts:
         if fact.strip():
             return fact.strip()
+    if analysis.headline.strip() and not analysis.publication.unverified_placeholder:
+        return analysis.headline.strip()
+    excerpts = analysis.publication.source_excerpts
+    if excerpts:
+        return excerpts[0]
     return analysis.headline.strip()
 
 
-def _one_sentence(value: str) -> str:
-    text = clean_text(value, 400).strip()
-    for mark in ("。", "！", "？"):
-        index = text.find(mark)
-        if index >= 8:
-            return text[: index + 1]
-    return text
+def _sentences(value: str) -> list[str]:
+    text = clean_text(value, 800).strip()
+    parts: list[str] = []
+    remaining = text
+    while remaining:
+        boundary = -1
+        chosen = ""
+        for mark in ("。", "！", "？", ".", "!", "?"):
+            index = remaining.find(mark)
+            if index >= 8 and (boundary < 0 or index < boundary):
+                boundary = index
+                chosen = mark
+        if boundary < 0:
+            parts.append(remaining)
+            break
+        parts.append(remaining[: boundary + len(chosen)].strip())
+        remaining = remaining[boundary + len(chosen):].strip()
+    return [item for item in parts if item]
+
+
+def _looks_like_background(sentence: str) -> bool:
+    compact = sentence.strip()
+    if any(hint in compact for hint in BACKGROUND_HINTS) and not any(
+        token in compact for token in ("发布", "提出", "达到", "推出", "证明", "实现")
+    ):
+        return True
+    return False
 
 
 def _scan_line(analysis: Analysis) -> str:
-    return _one_sentence(_takeaway(analysis)) or clean_text(analysis.headline, 80)
+    if analysis.scan_sentence.strip():
+        return clean_text(analysis.scan_sentence, 220)
+    sentences = _sentences(_takeaway(analysis))
+    for sentence in sentences:
+        if not _looks_like_background(sentence):
+            return sentence
+    if sentences:
+        return sentences[-1]
+    return clean_text(analysis.headline, 80)
 
 
 def match_kicker(text: str) -> str:
@@ -48,9 +100,26 @@ def match_kicker(text: str) -> str:
     return ""
 
 
+def _shanghai(value: datetime | None) -> str:
+    if value is None:
+        return "日期未知"
+    current = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return current.astimezone(_SHANGHAI).strftime("%Y-%m-%d %H:%M")
+
+
 def _topic_kicker(analysis: Analysis) -> str:
-    # Match the scan line first. Key facts can mention side topics (e.g. a
-    # Transformers release that also ships a protein model) and must not win.
+    structured = TOPIC_ID_KICKERS.get(analysis.topic_id, "")
+    if not structured and analysis.topic_name:
+        for key, label in (
+            ("安全", "安全"), ("模型", "模型"), ("芯片", "芯片"), ("机器人", "机器人"),
+            ("汽车", "汽车"), ("能源", "能源"), ("生物", "生物"), ("软件", "软件"),
+            ("航天", "航天"),
+        ):
+            if key in analysis.topic_name:
+                structured = label
+                break
+    if structured:
+        return structured
     primary = match_kicker(f"{analysis.headline} {_scan_line(analysis)}")
     if primary:
         return primary
@@ -63,6 +132,25 @@ def group_analyses_by_topic(analyses: list[Analysis]) -> list[Analysis]:
     for analysis in analyses:
         groups.setdefault(_topic_kicker(analysis), []).append(analysis)
     return [analysis for group in groups.values() for analysis in group]
+
+
+def _date_line(analysis: Analysis) -> str:
+    meta = analysis.publication
+    original = _shanghai(meta.original_published_at)
+    source = _shanghai(meta.source_published_at)
+    first_seen = _shanghai(meta.first_seen)
+    parts = []
+    if meta.original_published_at:
+        parts.append(f"原始发表 {original}")
+    if meta.source_published_at:
+        parts.append(f"来源日期 {source}")
+    if meta.first_published_at:
+        parts.append(f"首次刊登 {_shanghai(meta.first_published_at)}")
+    else:
+        parts.append("首次刊登：无历史记录")
+    if meta.freshness_label:
+        parts.append(meta.freshness_label)
+    return " · ".join(parts) if parts else "日期未知"
 
 
 def build_plain_digest(
@@ -100,11 +188,22 @@ def build_plain_digest(
             "counterpoints": [
                 clean_text(value, 500) for value in analysis.counterpoints if value.strip()
             ],
+            "public_notice": analysis.publication.public_notice,
+            "research_status": analysis.publication.research_status,
+            "was_research_target": analysis.publication.was_research_target,
+            "cache_hit": analysis.publication.cache_hit,
+            "date_line": _date_line(analysis),
+            "freshness_label": analysis.publication.freshness_label,
+            "disputed_claims": analysis.publication.disputed_claims,
+            "source_headline": analysis.publication.source_headline,
+            "source_excerpts": analysis.publication.source_excerpts,
+            "unverified_placeholder": analysis.publication.unverified_placeholder,
+            "selection_order": analysis.publication.selection_order,
             "sources": [
                 {
                     "url": evidence.url,
                     "locator": evidence.locator,
-                    "quote": clean_text(evidence.quote, 800),
+                    "quote": evidence.quote,
                 }
                 for evidence in analysis.evidence
             ],

@@ -150,11 +150,13 @@
     <article class="story">
       <div class="story-kicker">
         <span>{{ lane_label }} {{ '%02d'|format(index) }}</span>
-        <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{{ '深度结论' if analysis.status.value == 'deep' else '线索' }} · {{ (analysis.confidence*100)|round|int }}%</span>
+        <span class="badge {{ 'lead' if analysis.status.value != 'deep' else '' }}">{% if analysis.status.value == 'deep' %}深度结论{% elif analysis.publication.research_status == 'quality_downgrade' %}已深研线索{% else %}线索{% endif %} · 模型自评 {{ (analysis.confidence*100)|round|int }}%</span>
       </div>
       <h3 class="story-title">{% if analysis.evidence %}<a href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">{{ analysis.headline }}</a>{% else %}{{ analysis.headline }}{% endif %}</h3>
-      <p class="muted quality-line">质量分 {{ analysis.quality.score }}/100 · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）</p>
-      {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% endif %}
+      {% if analysis.publication.public_notice %}<p class="quality-alert"><strong>{{ analysis.publication.public_notice }}</strong></p>{% endif %}
+      {% if analysis.publication.disputed_claims %}<p class="quality-alert"><strong>未采信：</strong>{% for item in analysis.publication.disputed_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</p>{% endif %}
+      <p class="muted quality-line">{% if analysis.quality.passed %}规则检查通过{% else %}规则检查未通过{% endif %} · 有效证据 {{ analysis.quality.supported_evidence }} · 来源 {{ analysis.quality.source_diversity }}（一手 {{ analysis.quality.primary_sources }}）{% if analysis.publication.freshness_label %} · {{ analysis.publication.freshness_label }}{% endif %}{% if analysis.publication.original_published_at %} · 原始发表 {{ analysis.publication.original_published_at|shanghai }}{% elif analysis.publication.source_published_at %} · 来源日期 {{ analysis.publication.source_published_at|shanghai }}{% else %} · 日期未知{% endif %}</p>
+      {% if analysis.plain_takeaway %}<p class="takeaway">{{ analysis.plain_takeaway }}</p>{% elif analysis.publication.source_excerpts %}<p class="takeaway">待核验来源摘录：{{ analysis.publication.source_excerpts[0] }}</p>{% endif %}
       {% if analysis.key_facts %}<ul class="highlights">{% for item in analysis.key_facts[:2] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
       <div class="story-actions">
         {% if analysis.evidence %}<a class="source-link" href="{{ analysis.evidence[0].url }}" target="_blank" rel="noopener noreferrer">阅读原文 ↗</a><span class="muted">{{ analysis.evidence[0].locator }} · 共 {{ analysis.evidence|length }} 条证据</span>{% else %}<span class="muted">本条暂无可定位原文</span>{% endif %}
@@ -164,7 +166,7 @@
         <div class="deep-body">
           {% if analysis.key_facts|length > 2 %}<div class="subhead">更多事实</div><ul>{% for item in analysis.key_facts[2:] %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
           {% if analysis.quality.issues %}<div class="quality-alert"><strong>质量门降级原因：</strong>{% for issue in analysis.quality.issues %}{{ issue|quality_issue }}{% if not loop.last %}、{% endif %}{% endfor %}</div>{% endif %}
-          {% if analysis.quality.unsupported_claims %}<div class="quality-alert"><strong>未被来源支持的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
+          {% if analysis.quality.unsupported_claims %}<div class="quality-alert"><strong>未采信或无法核验的结论：</strong>{% for item in analysis.quality.unsupported_claims %}{% if not loop.first %}；{% endif %}{{ item }}{% endfor %}</div>{% endif %}
           {% if analysis.technical_mechanism or analysis.novelty or analysis.maturity or analysis.outlook_6_24m %}<div class="analysis-grid">
             {% if analysis.technical_mechanism %}<div><strong>技术机制</strong><p>{{ analysis.technical_mechanism }}</p></div>{% endif %}
             {% if analysis.novelty %}<div><strong>新颖性</strong><p>{{ analysis.novelty }}</p></div>{% endif %}
@@ -186,8 +188,8 @@
 
     <details class="section runtime">
       <summary>运行、模型与来源状态</summary>
-      <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次调用 {{ usage.calls }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.estimated %}（估算）{% endif %}。</p>
-      <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('未产生分析', true) }}；平均质量分 {{ quality_summary.average_score|default(0) }}；通过 {{ quality_summary.passed|default(0) }} 项，降级 {{ quality_summary.downgraded|default(0) }} 项。</p>
+      <p class="muted">AI：{{ ai_status_label }}；实际提供方 {{ model_runtime.provider|default('unknown') }}{% if model_runtime.models %}；本次实际模型 {% for stage, model in model_runtime.models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% elif model_runtime.analysis_models %}；缓存分析模型 {{ model_runtime.analysis_models|join('、') }}{% elif model_runtime.configured_models %}；配置模型 {% for stage, model in model_runtime.configured_models.items() %}{{ stage }}={{ model }}{% if not loop.last %}、{% endif %}{% endfor %}{% endif %}；提示词版本 {{ prompt_version }}；本次成功调用 {{ usage.calls }} 次，请求尝试 {{ usage.attempts|default(usage.calls) }} 次，输入 {{ usage.input_tokens }} tokens，输出 {{ usage.output_tokens }} tokens{% if usage.usage_unknown|default(false) %}（部分请求用量未知，已知用量合计）{% elif usage.estimated %}（估算）{% endif %}。</p>
+      <p class="muted">确定性质量策略 {{ quality_summary.policy_version|default('未产生分析', true) }}。研究目标 {{ quality_summary.research_targets|default(0) }}；新调用 {{ quality_summary.new_calls|default(0) }}，缓存命中 {{ quality_summary.cache_hits|default(0) }}；通过 {{ quality_summary.deep_passed|default(quality_summary.passed)|default(0) }}，质量降级 {{ quality_summary.quality_downgraded|default(quality_summary.downgraded)|default(0) }}，研究失败 {{ quality_summary.research_failed|default(0) }}；仅泛读 {{ quality_summary.broad_only|default(0) }}；其中材料不足转入泛读 {{ quality_summary.material_gate_extensive|default(0) }}；页面精读 {{ quality_summary.intensive_published|default(intensive_analyses|length) }}、泛读 {{ quality_summary.extensive_published|default(extensive_items|length) }}。研究样本均分 {{ quality_summary.research_average_score|default(0) }}（诊断用，不作为准确率）。</p>
       <h3>科技来源</h3>{% for item in intelligence_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '失败/缓存' if item.stale else '采集成功' }}</span><span class="muted">{{ item.count|default(0) }} 条{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
       <h3 style="margin-top:16px">AkShare 市场雷达</h3>{% for item in market_source_status %}<div class="status"><strong>{{ item.name }}</strong><span class="{{ 'stale' if item.stale else '' }}">{{ '缓存/降级' if item.stale else '实时成功' }}</span><span class="muted">{{ item.source }} · {{ item.fetched_at }}{% if item.error %} · {{ item.error }}{% endif %}</span></div>{% endfor %}
       {% if pipeline_errors %}<h3 style="margin-top:16px">独立降级记录</h3><ul class="muted">{% for item in pipeline_errors %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
@@ -211,8 +213,10 @@
       <button type="button" class="extensive-back" data-extensive-back>← 返回泛读列表</button>
       <div class="story-kicker"><span>{{ item.kicker }} · 泛读 {{ '%02d'|format(loop.index) }}</span></div>
       <h2 id="{{ item.detail_id }}-title" tabindex="-1">{{ item.headline }}</h2>
-      <p class="muted extensive-detail-meta">本条为泛读线索，未进入前十精读。</p>
+      <p class="muted extensive-detail-meta">{{ item.public_notice or '本条为泛读线索。' }}{% if item.date_line %} · {{ item.date_line }}{% endif %}{% if item.selection_order %} · 选题第 {{ item.selection_order }}{% endif %}</p>
       <p class="takeaway">{{ item.scan }}</p>
+      {% if item.disputed_claims %}<p class="quality-alert"><strong>未采信：</strong>{% for claim in item.disputed_claims %}{% if not loop.first %}；{% endif %}{{ claim }}{% endfor %}</p>{% endif %}
+      {% if item.unverified_placeholder and item.source_headline %}<p class="muted">原文题名：{{ item.source_headline }}</p>{% endif %}
       {% if item.key_facts %}<div class="extensive-detail-block"><h3>具体要点</h3><ul>{% for fact in item.key_facts %}<li>{{ fact }}</li>{% endfor %}</ul></div>{% endif %}
       {% if item.technical_mechanism or item.novelty or item.maturity or item.outlook %}<div class="analysis-grid extensive-detail-block">
         {% if item.technical_mechanism %}<div><strong>技术机制</strong><p>{{ item.technical_mechanism }}</p></div>{% endif %}

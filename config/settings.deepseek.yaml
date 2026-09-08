@@ -1,6 +1,7 @@
 app:
   title: "科技产业情报日报 · DeepSeek V4 Flash"
   timezone: "Asia/Shanghai"
+  production_experiment_id: "deepseek-v4-flash"
 
 paths:
   cache_dir: "../data/cache"
@@ -27,6 +28,9 @@ intelligence:
   selection_model_weight: 0.65
   selection_repeat_penalty: 0.4
   selection_repeat_hours: 36
+  selection_freshness_0_24h: 1.0
+  selection_freshness_24_48h: 0.9
+  selection_freshness_48_72h: 0.75
 
 github:
   enabled: true
@@ -36,17 +40,22 @@ github:
 
 broad_reading:
   enabled: true
-  prompt_version: "broad-reading-v1"
+  prompt_version: "broad-reading-v2"
   shortlist_events: 40
   batch_size: 30
   rerank_batch_size: 40
   doc_chars: 1800
 
+quality:
+  policy_version: "evidence-gate-v4"
+  schema_version: "claim-audit-v2"
+
 llm:
   provider: "openai_compatible"
   base_url: "http://192.168.31.236:8000/v1"
   api_key_env: "OMLX_API_KEY"
-  prompt_version: "tech-intel-v5"
+  prompt_version: "tech-intel-v7"
+  request_timeout_seconds: 1200
   scout:
     model: "deepseek-v4-flash-0731"
     extra_body:

@@ -1,6 +1,7 @@
 app:
   title: "科技产业情报日报 · Qwen3.8 27B"
   timezone: "Asia/Shanghai"
+  production_experiment_id: "deepseek-v4-flash"
 
 paths:
   cache_dir: "../data/cache"
@@ -27,6 +28,9 @@ intelligence:
   selection_model_weight: 0.65
   selection_repeat_penalty: 0.4
   selection_repeat_hours: 36
+  selection_freshness_0_24h: 1.0
+  selection_freshness_24_48h: 0.9
+  selection_freshness_48_72h: 0.75
 
 github:
   enabled: true
@@ -38,7 +42,8 @@ llm:
   provider: "openai_compatible"
   base_url: "http://192.168.31.235:8317/v1"
   api_key_env: "QWEN_LAN_API_KEY"
-  prompt_version: "tech-intel-v5"
+  prompt_version: "tech-intel-v7"
+  request_timeout_seconds: 1200
   scout:
     model: "qwen3.8-27b"
     extra_body:

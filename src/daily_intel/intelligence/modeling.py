@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from daily_intel.core.models import (
-    AnalysisDraft,
+    AnalysisDraft, ClaimAudit,
     DigestBrief,
     Document,
     Event,
@@ -48,6 +48,7 @@ class ModelStageRunner:
         self.llm = llm
         self.quality_policy = quality_policy
         self.prompt_version = settings["llm"]["prompt_version"]
+        self.audit_context: dict[str, Any] = {}
         self._usage = self._empty_usage()
         self._actual_models: dict[str, set[str]] = defaultdict(set)
 
@@ -60,6 +61,7 @@ class ModelStageRunner:
             "attempts": 0,
             "duration_seconds": 0.0,
             "estimated": False,
+            "usage_unknown": False,
             "by_stage": {},
         }
 
@@ -98,11 +100,14 @@ class ModelStageRunner:
             "configured_models", metadata.get("models", {})
         )
         identity = {
+            "clustering_version": "event-identity-v2",
+            "claim_contract_version": "fixed-claims-v2",
             "experiment_id": sanitize_run_identifier(experiment_id),
             "provider": metadata.get("provider", type(self.llm).__name__),
             "configured_models": configured_models,
             "prompt_version": self.prompt_version,
             "quality_policy": self.quality_policy.version,
+            "schema_version": getattr(self.quality_policy, "schema_version", "claim-audit-v1"),
         }
         fingerprint = hashlib.sha256(
             json.dumps(identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -184,77 +189,73 @@ class ModelStageRunner:
 
     def verify(
         self, event: Event, documents: list[Document], draft: AnalysisDraft,
+        *, claims: list[ClaimAudit] | None = None,
     ) -> VerificationResult:
         return self._generate(
             "verifier", VERIFIER_SYSTEM,
             verifier_user(
-                event, documents, draft,
+                event, documents, draft, claims=claims,
                 max_chars=self._source_chars("full_text_max_chars", 50000),
             ),
             VerificationResult, event.id,
         ).value
 
+    def audit(self, event_id: str | None, stage: str, payload: dict, *,
+              model: str = "", snapshot_hash: str = "") -> None:
+        self.repository.save_research_audit({
+            **self.audit_context, "event_id": event_id or "", "stage": stage,
+            "model": model, "prompt_version": self.prompt_version,
+            "policy_version": self.quality_policy.version,
+            "schema_version": self.quality_policy.schema_version,
+            "snapshot_hash": snapshot_hash, "payload": payload,
+        })
+
     def _generate(
         self, stage: str, system: str, user: str, schema: type[BaseModel], event_id: str | None,
     ) -> LLMResult:
-        error: Exception | None = None
-        started = perf_counter()
-        attempts = 0
-        for _ in range(2):
-            attempts += 1
+        # One owner: exactly one initial request and at most one retry; SDK/client do not retry.
+        input_hash = self.repository.save_content_snapshot(json.dumps(
+            {"system": system, "user": user, "schema": schema.model_json_schema()}, ensure_ascii=False,
+        ))
+        self.audit(event_id, stage + "_input", {"input_hash": input_hash}, snapshot_hash=input_hash)
+        error = None
+        stage_usage = self._usage["by_stage"].setdefault(stage, {
+            "calls": 0, "attempts": 0, "input_tokens": 0, "output_tokens": 0,
+            "duration_seconds": 0.0, "usage_unknown": False,
+        })
+        for attempt in range(1, 3):
+            started = perf_counter()
+            result = None
             try:
                 result = self.llm.generate(stage, system, user, schema)
-                self.repository.record_llm_run(
-                    stage, event_id, result.model, self.prompt_version,
-                    result.input_tokens, result.output_tokens, "success",
-                )
-                self._usage["input_tokens"] += result.input_tokens
-                self._usage["output_tokens"] += result.output_tokens
-                self._usage["calls"] += 1
-                self._usage["attempts"] += attempts
-                elapsed = perf_counter() - started
-                self._usage["duration_seconds"] = round(
-                    float(self._usage["duration_seconds"]) + elapsed, 3
-                )
-                self._usage["estimated"] = self._usage["estimated"] or result.usage_estimated
-                by_stage = self._usage["by_stage"]
-                stage_usage = by_stage.setdefault(stage, {
-                    "calls": 0,
-                    "attempts": 0,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "duration_seconds": 0.0,
-                })
-                stage_usage["calls"] += 1
-                stage_usage["attempts"] += attempts
-                stage_usage["input_tokens"] += result.input_tokens
-                stage_usage["output_tokens"] += result.output_tokens
-                stage_usage["duration_seconds"] = round(
-                    float(stage_usage["duration_seconds"]) + elapsed, 3
-                )
-                self._actual_models[stage].add(result.model)
-                return result
             except Exception as exc:
                 error = exc
-        elapsed = perf_counter() - started
-        self._usage["attempts"] += attempts
-        self._usage["duration_seconds"] = round(
-            float(self._usage["duration_seconds"]) + elapsed, 3
-        )
-        by_stage = self._usage["by_stage"]
-        stage_usage = by_stage.setdefault(stage, {
-            "calls": 0,
-            "attempts": 0,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "duration_seconds": 0.0,
-        })
-        stage_usage["attempts"] += attempts
-        stage_usage["duration_seconds"] = round(
-            float(stage_usage["duration_seconds"]) + elapsed, 3
-        )
-        model = self.configured_model(stage)
-        self.repository.record_llm_run(
-            stage, event_id, model, self.prompt_version, 0, 0, "failed", str(error),
-        )
+            elapsed = perf_counter() - started
+            outcome = result if result is not None else error
+            model = getattr(outcome, "model", "") or self.configured_model(stage)
+            input_tokens = getattr(outcome, "input_tokens", 0)
+            output_tokens = getattr(outcome, "output_tokens", 0)
+            unknown = getattr(outcome, "usage_unknown", result is None)
+            category = "success" if result is not None else getattr(error, "category", "network_or_client_error")
+            for usage in (self._usage, stage_usage):
+                usage["attempts"] += 1
+                usage["input_tokens"] += input_tokens
+                usage["output_tokens"] += output_tokens
+                usage["duration_seconds"] = round(usage["duration_seconds"] + elapsed, 3)
+                usage["usage_unknown"] = usage.get("usage_unknown", False) or unknown
+                if result is not None:
+                    usage["calls"] += 1
+            self._usage["estimated"] |= unknown or bool(getattr(outcome, "usage_estimated", False))
+            if getattr(outcome, "model", ""):
+                self._actual_models[stage].add(model)
+            self.repository.record_llm_run(stage, event_id, model, self.prompt_version,
+                input_tokens, output_tokens, "success" if result is not None else "failed", category if result is None else "")
+            payload = {"attempt": attempt, "category": category, "input_tokens": input_tokens,
+                       "output_tokens": output_tokens, "usage_unknown": unknown,
+                       "finish_reason": getattr(outcome, "finish_reason", ""), "duration_seconds": elapsed}
+            if result is not None:
+                payload["result"] = result.value.model_dump(mode="json")
+            self.audit(event_id, stage + "_attempt", payload, model=model, snapshot_hash=input_hash)
+            if result is not None:
+                return result
         raise error or RuntimeError("LLM调用失败")

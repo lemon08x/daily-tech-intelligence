@@ -7,7 +7,8 @@ import yaml
 
 
 QUALITY_DEFAULTS = {
-    "policy_version": "evidence-gate-v2",
+    "policy_version": "evidence-gate-v4",
+    "schema_version": "claim-audit-v2",
     "min_key_facts": 3,
     "max_key_facts": 6,
     "min_supported_evidence": 2,
@@ -32,6 +33,9 @@ INTELLIGENCE_DEFAULTS = {
     "selection_model_reject_floor": 55,
     "selection_repeat_penalty": .4,
     "selection_repeat_hours": 36,
+    "selection_freshness_0_24h": 1.0,
+    "selection_freshness_24_48h": .9,
+    "selection_freshness_48_72h": .75,
     "preferred_general_events": 5,
     "preferred_hardcore_events": 5,
     "preferred_max_per_topic": 2,
@@ -49,7 +53,7 @@ GITHUB_DEFAULTS = {
 }
 BROAD_READING_DEFAULTS = {
     "enabled": False,
-    "prompt_version": "broad-reading-v1",
+    "prompt_version": "broad-reading-v2",
     "shortlist_events": 40,
     "batch_size": 30,
     "rerank_batch_size": 40,
@@ -74,6 +78,7 @@ def load_settings(path: Path) -> dict[str, Any]:
         raise ValueError(
             "settings.yaml 配置缺少当前版本必需段: " + ", ".join(missing)
         )
+    raw.setdefault("app", {}).setdefault("production_experiment_id", "deepseek-v4-flash")
     for key, value in INTELLIGENCE_DEFAULTS.items():
         raw["intelligence"].setdefault(key, value)
     github = raw.setdefault("github", {})

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from daily_intel.core.models import PublicationRecord
 from daily_intel.core.ports import (
     DigestPublisher,
     IntelligenceRepository,
@@ -93,6 +94,7 @@ def run_application(
             current, market.radar_news,
             offline=offline, no_ai=no_ai, require_ai=require_ai,
             experiment_id=experiment_id, force_analysis=force_analysis,
+            run_id=run_id,
         )
         progress("[3/6] 采集开源热门项目…")
         github_runner = github_workflow or GitHubTrendingPipeline(
@@ -247,6 +249,31 @@ def run_application(
             context, intelligence.analyses,
             run_metadata, resolve_path(settings, "output_dir"), current,
         )
+        production_id = str(
+            (settings.get("app") or {}).get("production_experiment_id", "deepseek-v4-flash")
+        )
+        is_production = experiment_id == production_id
+        try:
+            repository.record_publications([
+                PublicationRecord(
+                    run_id=run_id,
+                    event_id=item.event_id,
+                    canonical_urls=[
+                        evidence.url.rstrip("/") for evidence in item.evidence if evidence.url
+                    ],
+                    experiment_id=experiment_id,
+                    is_production=is_production,
+                    selection_order=item.publication.selection_order,
+                    publication_tier=item.publication.publication_tier,
+                    research_status=item.publication.research_status,
+                    published_at=current,
+                    content_fingerprint=item.publication.content_fingerprint,
+                    freshness_label=item.publication.freshness_label,
+                )
+                for item in intelligence.analyses
+            ])
+        except AttributeError:
+            pass
         progress("[6/6] 保存运行状态…")
         repository.finish_run(run_id, "success", run_metadata)
         return outputs

@@ -9,6 +9,7 @@ import pytest
 from daily_intel.core.models import (
     AnalysisDraft, Document, Event, Evidence, ScoutBatch, ScoutItem, VerificationResult,
 )
+from daily_intel.intelligence.claims import covering_claim_checks
 from daily_intel.core.ports import LLMClient, LLMResult
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
 from daily_intel.intelligence.pipeline import IntelligencePipeline
@@ -93,9 +94,12 @@ class FakeLLM(LLMClient):
                     Evidence(document_id="doc-1", url="https://example.com/doc", quote="Second supported benchmark result in the source.", locator="正文2"),
                 ],
             )
+            self._last_draft = value
         else:
+            draft = getattr(self, "_last_draft", None)
             value = VerificationResult(
                 supported_evidence_indexes=[0, 1], unsupported_claims=[],
+                claim_checks=covering_claim_checks(draft) if draft is not None else [],
                 confidence_adjustment=0, verdict="pass", notes="supported",
             )
         return LLMResult(value, stage, 10, 5)
@@ -364,9 +368,12 @@ class BroadReadingLLM(LLMClient):
                     ),
                 ],
             )
+            self._last_draft = value
         else:
+            draft = getattr(self, "_last_draft", None)
             value = VerificationResult(
                 supported_evidence_indexes=[0, 1], unsupported_claims=[],
+                claim_checks=covering_claim_checks(draft) if draft is not None else [],
                 confidence_adjustment=0, verdict="pass", notes="supported",
             )
         return LLMResult(value, self.model, 10, 5)
@@ -498,8 +505,54 @@ def test_broad_analysis_failure_becomes_lead_without_backfill(
     result = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
     failed = next(item for item in result.analyses if "Event 0" in item.headline)
     assert failed.status.value == "lead"
-    assert "broad_reading_only" in failed.quality.issues
+    assert failed.publication.was_research_target
+    assert failed.publication.research_status == "research_failed"
+    assert "research_failed" in failed.quality.issues
     assert deepseek.calls.count("analyst") == 3
     assert deepseek.calls.count("verifier") == 1
     assert result.processing_funnel["research_attempted_events"] == 2
-    assert result.processing_funnel["broad_only_events"] == 5
+    assert result.processing_funnel["broad_only_events"] == 4
+
+
+def test_r16_does_not_backfill_eleventh_event_or_double_penalize(tmp_path, monkeypatch) -> None:
+    pipeline, deepseek = _broad_pipeline(tmp_path, monkeypatch, count=12)
+    result = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
+    assert result.processing_funnel["broad_reading_input_events"] == 12
+    assert result.processing_funnel["broad_reading_shortlist_events"] == 6
+    assert result.processing_funnel["research_target_events"] == 2
+    assert deepseek.calls.count("analyst") == 2
+    assert len(result.analyses) == 6
+    for item in result.processing_trace:
+        if item.get("repeat_factor") and item.get("freshness_factor"):
+            raw = item.get("raw_score")
+            adjusted = item.get("adjusted_score")
+            if raw and adjusted:
+                expected = round(raw * item["freshness_factor"] * item["repeat_factor"], 2)
+                assert abs(expected - adjusted) < 0.02
+
+
+def test_r15_quality_summary_separates_research_and_broad_counts(tmp_path, monkeypatch) -> None:
+    pipeline, _ = _broad_pipeline(tmp_path, monkeypatch, count=8)
+    result = pipeline.run(NOW, pd.DataFrame(), require_ai=True)
+    summary = result.quality_summary
+    assert summary["research_targets"] == 2
+    assert summary["deep_passed"] == 2
+    assert summary["broad_only"] == 4
+    assert summary["intensive_published"] == 2
+    assert summary["extensive_published"] == 4
+    assert "34" not in str(summary)
+
+
+def test_r11_old_schema_or_prompt_cache_cannot_reuse_as_deep(tmp_path, monkeypatch) -> None:
+    llm = FakeLLM()
+    pipeline = _pipeline(tmp_path, llm, monkeypatch)
+    first = pipeline.run(NOW, pd.DataFrame())
+    analysis = first.analyses[0]
+    stale = analysis.model_copy(update={
+        "quality": analysis.quality.model_copy(update={"claim_audits": []}),
+    })
+    pipeline.repository.save_analysis(stale, first.cache_scope)
+    second = pipeline.run(NOW, pd.DataFrame())
+    assert second.analysis_cache_hits == 0
+    assert second.analysis_cache_misses == 1
+    assert llm.calls.count("analyst") >= 2

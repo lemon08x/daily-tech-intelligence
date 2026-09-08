@@ -6,7 +6,9 @@ from typing import Any
 
 import pandas as pd
 
-from daily_intel.core.models import Analysis, Document, Event
+from daily_intel.core.models import (
+    Analysis, Document, Event, Evidence, PublicationTier, ResearchStatus,
+)
 from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository, LLMClient
 from daily_intel.intelligence.clustering import is_obvious_build_title
@@ -24,7 +26,11 @@ from daily_intel.intelligence.reading import (
 )
 from daily_intel.intelligence.research import EventResearcher
 from daily_intel.intelligence.selection import EventSelector
+from daily_intel.intelligence.snapshots import (
+    content_fingerprint, event_dates, stage_documents,
+)
 from daily_intel.intelligence.sources.common import event_lane
+from daily_intel.intelligence.terms import localize_public_text
 
 
 @dataclass(slots=True)
@@ -96,9 +102,17 @@ class IntelligencePipeline:
         require_ai: bool = False,
         experiment_id: str = "default",
         force_analysis: bool = False,
+        run_id: int = 0,
     ) -> IntelligenceRunResult:
         self.stages.begin_run()
-        self.selector.begin_run()
+        production_id = str(
+            (self.settings.get("app") or {}).get("production_experiment_id", "deepseek-v4-flash")
+        )
+        is_production = experiment_id == production_id
+        self.selector.begin_run(experiment_id=experiment_id, is_production=is_production)
+        self._run_id = run_id
+        self._experiment_id = experiment_id
+        self._is_production = is_production
         if require_ai and (offline or no_ai or not self.stages.available):
             raise RuntimeError("--require-ai 已启用，但AI密钥不可用或与离线/禁用AI模式冲突")
         ai_enabled = self.stages.available and not no_ai and not offline
@@ -106,6 +120,7 @@ class IntelligencePipeline:
             experiment_id if ai_enabled or offline else f"{experiment_id}-no-ai"
         )
         cache_scope = self.stages.cache_scope(cache_experiment)
+        self.stages.audit_context = {"run_id": run_id, "experiment_id": experiment_id, "cache_scope": cache_scope}
         if offline:
             return self._offline_result(cache_scope)
 
@@ -164,6 +179,11 @@ class IntelligencePipeline:
                 progress(f"当前：复用缓存 · {title}")
                 cache_hits += 1
                 cached = reusable.model_copy(update={"lane": lane})
+                cached = self._with_research_context(
+                    cached, event, event_documents, selection_order=0,
+                    was_research_target=True, cache_hit=True,
+                )
+                self._audit_research(event.id, cached, cache_scope, "cache_reuse")
                 analyses.append(cached)
                 research_outcomes[event.id] = (
                     "published", f"复用缓存，质量状态 {cached.status.value}"
@@ -182,23 +202,32 @@ class IntelligencePipeline:
                     for document in enriched:
                         self.repository.update_document_content(document)
                     analysis = self.researcher.analyze(event, enriched, now)
+                    self._audit_research(event.id, analysis, cache_scope, "quality_decision")
                 except Exception as exc:
                     errors.append(f"{event.id}: {type(exc).__name__}: {exc}")
                     if bounded_research:
                         analysis = self._broad_lead(
                             event, event_documents, now,
                             failure=f"精读失败：{type(exc).__name__}: {exc}",
+                            research_status=ResearchStatus.RESEARCH_FAILED.value,
+                        )
+                        analysis = self._with_research_context(
+                            analysis, event, event_documents, 0, True, False,
+                            research_status=ResearchStatus.RESEARCH_FAILED.value,
                         )
                         analyses.append(analysis)
                         research_outcomes[event.id] = (
                             "published",
-                            f"精读失败，保留泛读摘要：{type(exc).__name__}: {exc}"[:500],
+                            f"已列为研究目标，深研失败：{type(exc).__name__}: {exc}"[:500],
                         )
                         continue
                     research_outcomes[event.id] = (
                         "analysis_failed", f"深研失败：{type(exc).__name__}: {exc}"[:500]
                     )
                     continue
+            analysis = self._with_research_context(
+                analysis, event, event_documents, 0, True, False,
+            )
             self.repository.save_analysis(analysis, cache_scope)
             analyses.append(analysis)
             research_outcomes[event.id] = (
@@ -207,12 +236,50 @@ class IntelligencePipeline:
 
         for event, event_documents in broad_only_targets:
             analysis = self._broad_lead(event, event_documents, now)
+            analysis = self._with_research_context(
+                analysis, event, event_documents, 0, False, False,
+                research_status=ResearchStatus.BROAD_ONLY.value,
+            )
             analyses.append(analysis)
             research_outcomes[event.id] = (
                 "published",
-                f"完成 DeepSeek 泛读与复排，未进入前 {intensive_limit} 精读",
+                f"完成 DeepSeek 泛读与复排，未进入前 {intensive_limit} 研究",
             )
 
+        selection_order = {
+            event.id: index for index, (event, _) in enumerate(selected, start=1)
+        }
+        research_target_ids = {event.id for event, _ in research_targets}
+        stamped: list[Analysis] = []
+        for analysis in analyses:
+            material_issue = intensive_material_issue(analysis)
+            was_target = analysis.event_id in research_target_ids
+            if was_target and analysis.publication.research_status == ResearchStatus.RESEARCH_FAILED.value:
+                research_status = ResearchStatus.RESEARCH_FAILED.value
+                public_notice = "研究未完成，待核验；以下仅为泛读线索"
+            elif analysis.status.value == "deep":
+                research_status = ResearchStatus.DEEP_PASS.value
+                public_notice = ""
+            elif was_target and material_issue:
+                research_status = ResearchStatus.QUALITY_DOWNGRADE.value
+                public_notice = f"已深研，材料不足，转为泛读（{material_issue}）"
+            elif was_target:
+                research_status = ResearchStatus.QUALITY_DOWNGRADE.value
+                public_notice = "已深研，质量门降级"
+            else:
+                research_status = ResearchStatus.BROAD_ONLY.value
+                public_notice = f"仅完成泛读，未进入前 {intensive_limit} 研究"
+            publication = analysis.publication.model_copy(update={
+                "first_published_at": self.repository.first_publication_at(analysis.event_id, experiment_id=experiment_id, production_only=is_production),
+                "selection_order": selection_order.get(analysis.event_id, 0),
+                "was_research_target": was_target,
+                "research_status": research_status,
+                "material_gate_passed": not bool(material_issue) if was_target else None,
+                "material_gate_reason": material_issue,
+                "public_notice": public_notice,
+            })
+            stamped.append(analysis.model_copy(update={"publication": publication}))
+        analyses = stamped
         intensive_analyses, extensive_analyses = partition_reading_analyses(
             analyses, intensive_limit
         )
@@ -224,10 +291,20 @@ class IntelligencePipeline:
             )
             for analysis in analyses
         }
+        analyses = [
+            item.model_copy(update={"publication": item.publication.model_copy(update={
+                "publication_tier": publication_tiers[item.event_id],
+            })})
+            for item in analyses
+        ]
+        for item in analyses:
+            self._audit_research(item.event_id, item, cache_scope, "public_result")
+            if item.publication.was_research_target and item.publication.research_status != ResearchStatus.RESEARCH_FAILED.value:
+                self.repository.save_analysis(item, cache_scope)
+        analyses_by_id = {item.event_id: item for item in analyses}
+        intensive_analyses = [analyses_by_id[item.event_id] for item in intensive_analyses]
+        extensive_analyses = [analyses_by_id[item.event_id] for item in extensive_analyses]
         processing_trace = list(getattr(self.catalog, "last_trace", []))
-        selection_order = {
-            event.id: index for index, (event, _) in enumerate(selected, start=1)
-        }
         for item in getattr(self.selector, "last_trace", []):
             traced = dict(item)
             if traced.get("event_id") in selection_order:
@@ -235,17 +312,16 @@ class IntelligencePipeline:
             outcome = research_outcomes.get(str(traced.get("event_id") or ""))
             if outcome:
                 traced["status"], traced["reason"] = outcome
+                analysis = analyses_by_id.get(str(traced.get("event_id") or ""))
                 publication_tier = publication_tiers.get(str(traced.get("event_id") or ""))
+                if analysis is not None:
+                    traced["research_status"] = analysis.publication.research_status
+                    traced["cache_hit"] = analysis.publication.cache_hit
+                    traced["was_research_target"] = analysis.publication.was_research_target
+                    if analysis.publication.public_notice:
+                        traced["reason"] = analysis.publication.public_notice
                 if publication_tier:
                     traced["publication_tier"] = publication_tier
-                    label = "精读" if publication_tier == "intensive" else "泛读"
-                    material_issue = intensive_material_issue(
-                        analyses_by_id[str(traced.get("event_id") or "")]
-                    )
-                    if material_issue and publication_tier == "extensive":
-                        traced["reason"] += f"，精读材料门未通过（{material_issue}），展示为泛读"
-                    else:
-                        traced["reason"] += f"，展示为{label}"
             elif traced.get("status") == "candidate":
                 traced["status"] = "not_researched"
                 traced["reason"] = "Scout 保留，但本轮未完成研究；" + str(
@@ -329,7 +405,11 @@ class IntelligencePipeline:
             ai_status=ai_status,
             usage=self.usage,
             model_runtime=model_runtime,
-            quality_summary=summarize_quality(analyses),
+            quality_summary=summarize_quality(
+                analyses,
+                cache_hits=analysis_cache_hits,
+                cache_misses=analysis_cache_misses,
+            ),
             collected_documents=collected_documents,
             clustered_events=clustered_events,
             cache_scope=cache_scope,
@@ -347,9 +427,12 @@ class IntelligencePipeline:
         now: datetime,
         *,
         failure: str = "",
+        research_status: str = "",
     ) -> Analysis:
         details = self.selector.scan_details(event.id)
-        scan = str(details.get("scan") or "").strip()
+        scan = localize_public_text(str(details.get("scan") or "").strip())
+        summary = localize_public_text(str(details.get("public_summary") or "").strip()) or scan
+        headline = localize_public_text(str(details.get("public_headline") or "").strip())
         if not scan:
             scan = next(
                 (
@@ -359,16 +442,106 @@ class IntelligencePipeline:
                 ),
                 event.title,
             )[:220]
+            summary = summary or scan
         selection_reason = str(details.get("reason") or "").strip()
         if failure:
             selection_reason = f"{failure}；{selection_reason}".strip("；")
+        excerpts = {
+            str(key): str(value)
+            for key, value in dict(details.get("excerpts") or {}).items()
+        }
+        facts: list[str] = []
+        evidence: list[Evidence] = []
+        for item in details.get("public_facts") or []:
+            if not isinstance(item, dict):
+                continue
+            text = localize_public_text(str(item.get("text") or "").strip())
+            quote = str(item.get("quote") or "")
+            document_id = str(item.get("document_id") or "")
+            source = excerpts.get(document_id, "")
+            if not source or quote not in source:
+                quote = ""
+            if text and quote and document_id:
+                document = next((doc for doc in documents if doc.id == document_id), None)
+                if document is not None and len(quote) >= 8 and quote in (document.content or document.summary):
+                    facts.append(text)
+                    evidence.append(Evidence(
+                        document_id=document.id, url=document.url,
+                        quote=quote[:800], locator="复排材料",
+                    ))
         return self.researcher.lead(
-            event, documents, now, scan,
+            event, documents, now, summary or scan,
             model=str(details.get("model") or self.stages.configured_model("scout")),
             prompt_version=self.selector.broad_prompt_version,
-            issue="broad_reading_only",
+            issue="broad_reading_only" if not failure else "research_failed",
             selection_reason=selection_reason,
+            headline=headline,
+            summary=summary or scan,
+            facts=facts,
+            evidence=evidence,
+            research_status=research_status or (
+                ResearchStatus.RESEARCH_FAILED.value if failure else ResearchStatus.BROAD_ONLY.value
+            ),
         )
+
+    def _with_research_context(
+        self, analysis: Analysis, event: Event, documents: list[Document],
+        selection_order: int, was_research_target: bool, cache_hit: bool,
+        *, research_status: str = "",
+    ) -> Analysis:
+        dates = event_dates(event, documents)
+        publication = analysis.publication.model_copy(update={
+            "selection_order": selection_order,
+            "was_research_target": was_research_target,
+            "cache_hit": cache_hit or analysis.publication.cache_hit,
+            "content_fingerprint": analysis.publication.content_fingerprint or content_fingerprint(
+                stage_documents(documents, int(self.config.get("full_text_max_chars", 50000)))
+            ),
+            "source_published_at": dates["source_published_at"],
+            "original_published_at": dates["original_published_at"],
+            "first_seen": dates["first_seen"],
+            "last_seen": dates["last_seen"],
+            "freshness_label": (self.selector.last_exposure.get(event.id) or {}).get(
+                "freshness_label", analysis.publication.freshness_label
+            ),
+            "source_headline": analysis.publication.source_headline or event.title,
+        })
+        if research_status:
+            publication.research_status = research_status
+        return analysis.model_copy(update={
+            "publication": publication,
+            "topic_id": analysis.topic_id or event.topic_id,
+            "topic_name": analysis.topic_name or event.topic_name,
+        })
+
+    def _audit_research(
+        self, event_id: str, analysis: Analysis, cache_scope: str, stage: str,
+    ) -> None:
+        try:
+            self.repository.save_research_audit({
+                "run_id": getattr(self, "_run_id", 0),
+                "event_id": event_id,
+                "stage": stage,
+                "model": analysis.model,
+                "experiment_id": getattr(self, "_experiment_id", ""),
+                "cache_scope": cache_scope,
+                "prompt_version": analysis.prompt_version,
+                "policy_version": analysis.quality.policy_version,
+                "schema_version": analysis.quality.schema_version,
+                "snapshot_hash": analysis.publication.snapshot_hash,
+                "payload": {
+                    "analysis": analysis.model_dump(mode="json"),
+                    "headline": analysis.headline,
+                    "status": analysis.status.value,
+                    "issues": analysis.quality.issues,
+                    "claim_audits": [
+                        item.model_dump(mode="json") for item in analysis.quality.claim_audits
+                    ],
+                    "quality_passed": analysis.quality.passed,
+                },
+            })
+        except AttributeError:
+            return
 
     @staticmethod
     def _runner_summary(runner: ModelStageRunner) -> dict[str, Any]:

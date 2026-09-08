@@ -9,8 +9,9 @@ import pytest
 from daily_intel.app.orchestrator import run_application
 from daily_intel.core.models import (
     Analysis, AnalysisQuality, AnalysisStatus, Evidence,
-    GitBriefingBatch, GitProjectBrief,
+    GitBriefingBatch, GitProjectBrief, PublicationMeta,
 )
+from daily_intel.intelligence.terms import localize_public_text
 from daily_intel.core.settings import _validate_sources, load_settings, resolve_path
 from daily_intel.intelligence.sources.factory import configured_source_count
 from daily_intel.infrastructure.storage.sqlite import SQLiteIntelligenceRepository
@@ -41,8 +42,8 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
         if not item.get("enabled", True)
     }
     assert {"hacker_newsletter", "tldr_ai"} <= disabled
-    assert settings["llm"]["prompt_version"] == "tech-intel-v5"
-    assert settings["quality"]["policy_version"] == "evidence-gate-v2"
+    assert settings["llm"]["prompt_version"] == "tech-intel-v7"
+    assert settings["quality"]["policy_version"] == "evidence-gate-v4"
     assert settings["intelligence"]["intensive_reading_events"] == 10
 
 
@@ -596,3 +597,100 @@ def test_plain_digest_scans_short_lines_and_skips_news_copy() -> None:
         "plain_takeaway": "该站点会在后台播放人耳听不到的音频，这属于一种设备指纹技术。",
     })
     assert build_plain_digest([fingerprint], {})["tech_items"][0]["kicker"] == "安全"
+
+
+def test_r13_public_terms_and_quotes_are_separated() -> None:
+    from daily_intel.publication.plain_digest import build_plain_digest
+
+    analysis = Analysis(
+        event_id="realswe", status=AnalysisStatus.LEAD,
+        headline=localize_public_text("RealSWE 提升 resolution rate"),
+        scan_sentence=localize_public_text("该方法在软件任务上提高了 resolution rate，并采用 training-free 流程，提升 2 percentage points。"),
+        plain_takeaway=localize_public_text("该方法在软件任务上提高了 resolution rate，并采用 training-free 流程，提升 2 percentage points。FlashAttention 仍按材料保留名称。"),
+        key_facts=[
+            localize_public_text("任务 resolution rate 上升"),
+        ],
+        confidence=.3,
+        evidence=[Evidence(
+            document_id="d1", url="https://example.com/r",
+            quote="training-free resolution rate with FlashAttention", locator="原文",
+        )],
+        quality=AnalysisQuality(passed=False, score=30, issues=["broad_reading_only"]),
+        model="scout", prompt_version="broad-reading-v2",
+        created_at=datetime(2026, 8, 24, 10, tzinfo=timezone.utc),
+        publication=PublicationMeta(public_notice="仅完成泛读，未进入前十研究"),
+    )
+    # Editorial process comments should not be treated as public facts by callers;
+    # this fixture still lists one to lock that publication does not rewrite quotes.
+    item = build_plain_digest([analysis])["tech_items"][0]
+    assert "任务解决率" in item["headline"] + item["scan"]
+    assert "无需训练" in item["scan"]
+    assert "个百分点" in item["scan"]
+    assert "FlashAttention" in analysis.plain_takeaway
+    assert item["sources"][0]["quote"] == "training-free resolution rate with FlashAttention"
+
+
+def test_r14_scan_skips_background_and_uses_structured_security_topic() -> None:
+    from daily_intel.publication.plain_digest import build_plain_digest, group_analyses_by_topic
+
+    background = Analysis(
+        event_id="sec-1", status=AnalysisStatus.LEAD,
+        headline="新的越狱评测发布",
+        scan_sentence="研究团队发布了针对代理系统的越狱评测，并给出可复核的失败案例。",
+        plain_takeaway="近年来大模型安全讨论很多。研究团队发布了针对代理系统的越狱评测，并给出可复核的失败案例。",
+        confidence=.4,
+        quality=AnalysisQuality(passed=False, score=40),
+        model="fixture", prompt_version="v",
+        created_at=datetime(2026, 8, 24, 10, tzinfo=timezone.utc),
+        topic_id="cybersecurity", topic_name="网络安全",
+    )
+    later = background.model_copy(update={"event_id": "sec-2", "headline": "另一条安全事件"})
+    model_item = background.model_copy(update={
+        "event_id": "model-1", "headline": "新模型发布", "topic_id": "foundation_models",
+        "topic_name": "大模型与Agent",
+        "scan_sentence": "实验室发布了新的语言模型。",
+    })
+    digest = build_plain_digest([background])
+    assert "近年来" not in digest["tech_items"][0]["scan"]
+    assert "越狱评测" in digest["tech_items"][0]["scan"]
+    assert digest["tech_items"][0]["kicker"] == "安全"
+    grouped = group_analyses_by_topic([background, model_item, later])
+    assert [item.event_id for item in grouped] == ["sec-1", "sec-2", "model-1"]
+
+
+def test_r6_material_gate_page_does_not_say_not_in_top_ten(tmp_path) -> None:
+    now = datetime(2026, 8, 24, 10, tzinfo=timezone.utc)
+    pair = _reading_analysis("pair", "PAIR 代理评测", "已完成深研但材料不足。")
+    gpt = _reading_analysis("gpt6", "GPT-6 相关材料", "已完成深研但材料不足。")
+    pair = pair.model_copy(update={"publication": PublicationMeta(
+        selection_order=4, was_research_target=True, cache_hit=True,
+        research_status="material_gate_extensive", publication_tier="extensive",
+        public_notice="已深研，材料不足，转为泛读",
+        material_gate_reason="有效证据少于 2 条",
+    )})
+    gpt = gpt.model_copy(update={"publication": PublicationMeta(
+        selection_order=7, was_research_target=True, cache_hit=True,
+        research_status="material_gate_extensive", publication_tier="extensive",
+        public_notice="已深研，材料不足，转为泛读",
+    )})
+    context = {
+        "title": "测试日报", "report_date": "2026-08-24", "market_date": "2026-08-24",
+        "generated_at": "2026-08-24 18:00 CST", "is_trading_day": True,
+        "experiment_id": "test", "run_name": "material-gate",
+        "analyses": [pair, gpt], "intensive_analyses": [],
+        "extensive_analyses": [pair, gpt],
+        "ai_status": "enabled", "ai_status_label": "AI深研已启用",
+        "usage": {"calls": 0, "input_tokens": 0, "output_tokens": 0},
+        "prompt_version": "test-v1", "pipeline_errors": [],
+        "market_source_status": [], "intelligence_source_status": [],
+        "quality_summary": {
+            "research_targets": 10, "deep_passed": 6, "quality_downgraded": 4,
+            "broad_only": 30, "material_gate_extensive": 2,
+            "intensive_published": 8, "extensive_published": 32,
+        },
+    }
+    html = publish(context, [pair, gpt], {"run_name": "material-gate"}, tmp_path, now)["html"].read_text(encoding="utf-8")
+    assert "已深研，材料不足，转为泛读" in html
+    assert "未进入前十" not in html
+    assert "研究目标 10" in html
+    assert "其中材料不足转入泛读 2" in html

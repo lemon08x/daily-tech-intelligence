@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from contextlib import contextmanager
@@ -9,10 +10,10 @@ from typing import Any, Iterator
 
 from pydantic import ValidationError
 
-from daily_intel.core.models import Analysis, Document, Event
+from daily_intel.core.models import Analysis, Document, Event, PublicationRecord
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class SQLiteIntelligenceRepository:
@@ -124,11 +125,7 @@ class SQLiteIntelligenceRepository:
                 );
                 """
             )
-            db.execute(
-                "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(SCHEMA_VERSION),),
-            )
+            self._migrate(db)
 
     def upsert_document(self, document: Document) -> bool:
         payload = document.model_dump(mode="json")
@@ -308,3 +305,227 @@ class SQLiteIntelligenceRepository:
                 "INSERT INTO pipeline_state VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
                 (key, value, datetime.now().astimezone().isoformat()),
             )
+
+    def record_publications(self, records: list[PublicationRecord]) -> None:
+        if not records:
+            return
+        with self._connect() as db:
+            for record in records:
+                payload = record.model_dump(mode="json")
+                db.execute(
+                    """INSERT INTO publication_ledger(
+                        run_id, event_id, canonical_urls_json, experiment_id, is_production,
+                        selection_order, publication_tier, research_status, published_at,
+                        content_fingerprint, freshness_label
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT(run_id, event_id) DO UPDATE SET
+                        canonical_urls_json=excluded.canonical_urls_json,
+                        experiment_id=excluded.experiment_id,
+                        is_production=excluded.is_production,
+                        selection_order=excluded.selection_order,
+                        publication_tier=excluded.publication_tier,
+                        research_status=excluded.research_status,
+                        published_at=excluded.published_at,
+                        content_fingerprint=excluded.content_fingerprint,
+                        freshness_label=excluded.freshness_label
+                    """,
+                    (
+                        record.run_id, record.event_id,
+                        json.dumps(record.canonical_urls, ensure_ascii=False),
+                        record.experiment_id, 1 if record.is_production else 0,
+                        record.selection_order, record.publication_tier,
+                        record.research_status, payload["published_at"],
+                        record.content_fingerprint, record.freshness_label,
+                    ),
+                )
+
+    def recent_publications(
+        self, since: datetime, until: datetime, *,
+        production_only: bool = False, experiment_id: str | None = None,
+    ) -> list[PublicationRecord]:
+        clauses = ["published_at>=?", "published_at<?"]
+        values: list[Any] = [since.isoformat(), until.isoformat()]
+        if production_only:
+            clauses.append("is_production=1")
+        elif experiment_id:
+            clauses.append("(is_production=1 OR experiment_id=?)")
+            values.append(experiment_id)
+        sql = (
+            "SELECT * FROM publication_ledger WHERE "
+            + " AND ".join(clauses)
+            + " ORDER BY published_at DESC"
+        )
+        with self._connect() as db:
+            rows = db.execute(sql, values).fetchall()
+        return [self._publication_from_row(row) for row in rows]
+
+    def first_publication_at(self, event_id: str, *, experiment_id: str, production_only: bool) -> datetime | None:
+        clause = "is_production=1" if production_only else "(is_production=1 OR experiment_id=?)"
+        args = [event_id] if production_only else [event_id, experiment_id]
+        with self._connect() as db:
+            rows = db.execute("SELECT published_at FROM publication_ledger WHERE event_id=? AND " + clause, args).fetchall()
+        return min((datetime.fromisoformat(row["published_at"]) for row in rows), default=None)
+
+    def save_content_snapshot(self, text: str) -> str:
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO content_snapshots(hash, text, created_at)
+                VALUES(?,?,?) ON CONFLICT(hash) DO NOTHING""",
+                (digest, text, datetime.now().astimezone().isoformat()),
+            )
+        return digest
+
+    def get_content_snapshot(self, digest: str) -> str | None:
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT text FROM content_snapshots WHERE hash=?", (digest,),
+            ).fetchone()
+        return None if row is None else str(row["text"])
+
+    def save_research_audit(self, payload: dict[str, Any]) -> None:
+        with self._connect() as db:
+            db.execute(
+                """INSERT INTO research_audits(
+                    run_id, event_id, stage, model, experiment_id, cache_scope,
+                    prompt_version, policy_version, schema_version, snapshot_hash,
+                    payload_json, created_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    int(payload.get("run_id") or 0),
+                    str(payload.get("event_id") or ""),
+                    str(payload.get("stage") or ""),
+                    str(payload.get("model") or ""),
+                    str(payload.get("experiment_id") or ""),
+                    str(payload.get("cache_scope") or ""),
+                    str(payload.get("prompt_version") or ""),
+                    str(payload.get("policy_version") or ""),
+                    str(payload.get("schema_version") or ""),
+                    str(payload.get("snapshot_hash") or ""),
+                    json.dumps(payload.get("payload") or {}, ensure_ascii=False),
+                    datetime.now().astimezone().isoformat(),
+                ),
+            )
+
+    def rebuild_publication_ledger(self) -> int:
+        with self._connect() as db:
+            return self._rebuild_ledger(db)
+
+    def _migrate(self, db: sqlite3.Connection) -> None:
+        row = db.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'"
+        ).fetchone()
+        current = int(row["value"]) if row else 4
+        if current < 5:
+            db.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS publication_ledger (
+                    run_id INTEGER NOT NULL,
+                    event_id TEXT NOT NULL,
+                    canonical_urls_json TEXT NOT NULL,
+                    experiment_id TEXT NOT NULL,
+                    is_production INTEGER NOT NULL DEFAULT 0,
+                    selection_order INTEGER NOT NULL DEFAULT 0,
+                    publication_tier TEXT NOT NULL DEFAULT '',
+                    research_status TEXT NOT NULL DEFAULT '',
+                    published_at TEXT NOT NULL,
+                    content_fingerprint TEXT NOT NULL DEFAULT '',
+                    freshness_label TEXT NOT NULL DEFAULT '',
+                    PRIMARY KEY(run_id, event_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_publication_ledger_published
+                    ON publication_ledger(published_at);
+                CREATE INDEX IF NOT EXISTS idx_publication_ledger_event
+                    ON publication_ledger(event_id, published_at);
+                CREATE TABLE IF NOT EXISTS content_snapshots (
+                    hash TEXT PRIMARY KEY,
+                    text TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS research_audits (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL DEFAULT 0,
+                    event_id TEXT NOT NULL,
+                    stage TEXT NOT NULL,
+                    model TEXT NOT NULL DEFAULT '',
+                    experiment_id TEXT NOT NULL DEFAULT '',
+                    cache_scope TEXT NOT NULL DEFAULT '',
+                    prompt_version TEXT NOT NULL DEFAULT '',
+                    policy_version TEXT NOT NULL DEFAULT '',
+                    schema_version TEXT NOT NULL DEFAULT '',
+                    snapshot_hash TEXT NOT NULL DEFAULT '',
+                    payload_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_research_audits_event
+                    ON research_audits(event_id, created_at);
+                """
+            )
+            self._rebuild_ledger(db)
+        db.execute(
+            "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (str(SCHEMA_VERSION),),
+        )
+
+    def _rebuild_ledger(self, db: sqlite3.Connection) -> int:
+        existing = {
+            (int(row["run_id"]), str(row["event_id"]))
+            for row in db.execute("SELECT run_id, event_id FROM publication_ledger")
+        }
+        rows = db.execute(
+            "SELECT id, finished_at, metadata_json FROM pipeline_runs WHERE status='success'"
+        ).fetchall()
+        inserted = 0
+        for row in rows:
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            experiment_id = str(metadata.get("experiment_id") or "")
+            is_production = 1 if experiment_id == "deepseek-v4-flash" else 0
+            published_at = str(row["finished_at"] or metadata.get("generated_at") or "")
+            intelligence = metadata.get("intelligence") or {}
+            for item in intelligence.get("processing_trace") or []:
+                if str(item.get("status") or "") != "published":
+                    continue
+                event_id = str(item.get("event_id") or "")
+                key = (int(row["id"]), event_id)
+                if not event_id or key in existing:
+                    continue
+                db.execute(
+                    """INSERT INTO publication_ledger(
+                        run_id, event_id, canonical_urls_json, experiment_id, is_production,
+                        selection_order, publication_tier, research_status, published_at,
+                        content_fingerprint, freshness_label
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        int(row["id"]), event_id, "[]", experiment_id, is_production,
+                        int(item.get("selection_order") or 0),
+                        str(item.get("publication_tier") or ""),
+                        "unknown", published_at, "", "unknown",
+                    ),
+                )
+                existing.add(key)
+                inserted += 1
+        return inserted
+
+    @staticmethod
+    def _publication_from_row(row: sqlite3.Row) -> PublicationRecord:
+        try:
+            urls = json.loads(row["canonical_urls_json"] or "[]")
+        except json.JSONDecodeError:
+            urls = []
+        return PublicationRecord(
+            run_id=int(row["run_id"]),
+            event_id=str(row["event_id"]),
+            canonical_urls=list(urls),
+            experiment_id=str(row["experiment_id"]),
+            is_production=bool(row["is_production"]),
+            selection_order=int(row["selection_order"]),
+            publication_tier=str(row["publication_tier"]),
+            research_status=str(row["research_status"]),
+            published_at=row["published_at"],
+            content_fingerprint=str(row["content_fingerprint"] or ""),
+            freshness_label=str(row["freshness_label"] or ""),
+        )

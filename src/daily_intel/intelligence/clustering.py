@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import timedelta
+from urllib.parse import urlsplit
 
 from rapidfuzz.fuzz import token_set_ratio
 
@@ -104,6 +105,8 @@ def cluster_documents(
             leader, leader_topic, _, _ = group[0]
             if abs(document.published_at - leader.published_at) > timedelta(hours=window_hours):
                 continue
+            if _distinct_hosted_items(document, leader):
+                continue
             same_project = bool(_project_keys(document) & _project_keys(leader))
             same_url = bool(
                 (document.canonical_url or document.url)
@@ -156,3 +159,14 @@ def _project_keys(document: Document) -> set[str]:
     if target:
         keys |= project_identity_keys(target)
     return keys
+
+
+def _distinct_hosted_items(left: Document, right: Document) -> bool:
+    def item(doc):
+        url = urlsplit(doc.canonical_url or doc.url)
+        parts = url.path.strip("/").split("/")
+        if url.hostname in {"github.com", "www.github.com"} and len(parts) >= 4 and parts[2] in {"issues", "discussions", "pull", "releases"}:
+            return parts[:2], parts[2:]
+        return None
+    a, b = item(left), item(right)
+    return bool(a and b and a[0] == b[0] and a[1] != b[1])

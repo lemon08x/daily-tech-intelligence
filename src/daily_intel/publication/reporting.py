@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -14,10 +15,24 @@ from daily_intel.publication.plain_digest import (
     group_analyses_by_topic,
 )
 
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+
+def _shanghai(value: datetime | None) -> str:
+    if value is None:
+        return "日期未知"
+    current = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return current.astimezone(_SHANGHAI).strftime("%Y-%m-%d %H:%M")
+
 
 QUALITY_ISSUE_LABELS = {
     "verifier_not_pass": "校验器未通过",
     "unsupported_claims": "存在未支持结论",
+    "conflicting_claims": "存在与来源冲突的结论",
+    "unverifiable_claims": "存在无法核验的结论",
+    "claim_protocol_error": "审核返回的断言编号重复或超出清单",
+    "unaudited_claims": "关键结论未经逐项审核",
+    "rewritten_after_audit": "审核后发生实质性改写",
     "insufficient_evidence": "可定位证据不足",
     "missing_primary_source": "缺少一手来源",
     "insufficient_key_facts": "有效事实不足",
@@ -26,7 +41,8 @@ QUALITY_ISSUE_LABELS = {
     "insufficient_risks": "风险项不足",
     "insufficient_counterpoints": "反面观点不足",
     "ai_not_enabled": "AI未启用",
-    "broad_reading_only": "仅完成泛读，未进入前十精读",
+    "research_failed": "已列为研究目标，深研失败",
+    "broad_reading_only": "仅完成泛读，未进入前十研究",
 }
 
 
@@ -60,6 +76,7 @@ def publish(
     )
     env.filters.update(text=clean_text)
     env.filters["quality_issue"] = quality_issue_label
+    env.filters["shanghai"] = _shanghai
     html_path = run_dir / "daily_digest.html"
     if html_path.exists():
         raise FileExistsError(f"运行目录已包含日报文件，拒绝覆盖: {run_dir}")
