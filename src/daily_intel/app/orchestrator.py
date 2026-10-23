@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import traceback
+
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -167,10 +169,12 @@ def run_application(
         intensive_analyses, extensive_analyses = partition_reading_analyses(
             intelligence.analyses, intensive_limit
         )
+        generated = datetime.now(timezone)
         context = {
             **market.context,
             "title": settings["app"]["title"],
-            "generated_at": current.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "generated_at": generated.strftime("%Y-%m-%d %H:%M:%S %Z"),
+            "started_at": current.strftime("%Y-%m-%d %H:%M:%S %Z"),
             "report_date": current.strftime("%Y-%m-%d"),
             "run_name": resolved_run_name,
             "experiment_id": experiment_id,
@@ -198,7 +202,9 @@ def run_application(
         run_metadata = {
             **market.metadata,
             "run_id": run_id,
-            "generated_at": current.isoformat(timespec="seconds"),
+            "generated_at": generated.isoformat(timespec="seconds"),
+            "started_at": current.isoformat(timespec="seconds"),
+            "report_date": current.strftime("%Y-%m-%d"),
             "offline": offline,
             "experiment_id": experiment_id,
             "run_name": resolved_run_name,
@@ -266,7 +272,7 @@ def run_application(
                     selection_order=item.publication.selection_order,
                     publication_tier=item.publication.publication_tier,
                     research_status=item.publication.research_status,
-                    published_at=current,
+                    published_at=generated,
                     content_fingerprint=item.publication.content_fingerprint,
                     freshness_label=item.publication.freshness_label,
                 )
@@ -279,6 +285,6 @@ def run_application(
         return outputs
     except Exception as exc:
         repository.finish_run(
-            run_id, "failed", {**run_metadata, "error": f"{type(exc).__name__}: {exc}"[:2000]},
+            run_id, "failed", {**run_metadata, "error": f"{type(exc).__name__}: {exc}"[:2000], "traceback": traceback.format_exc()},
         )
         raise

@@ -3,27 +3,27 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from daily_intel.core.models import (
     Document, Event, PublicationRecord, ScoutBatch, ScoutItem,
 )
 from daily_intel.intelligence.snapshots import (
-    canonical_urls, content_fingerprint, hours_since,
+    canonical_urls, content_fingerprint, hours_since, stage_documents, SHANGHAI,
 )
 from daily_intel.intelligence.terms import localize_public_facts, localize_public_text
 from daily_intel.core.progress import progress
 from daily_intel.core.ports import IntelligenceRepository
 from daily_intel.intelligence.modeling import ModelStageRunner
 from daily_intel.intelligence.clustering import UNCLASSIFIED_TOPIC_ID, UNCLASSIFIED_TOPIC_NAME
-from daily_intel.intelligence.sources.common import event_lane
+from daily_intel.intelligence.sources.common import event_lane, canonicalize_url
 
 
 class EventSelector:
     """Rank-fuses deterministic signals with bounded model judgement."""
 
-    VERSION = "rank-fusion-v6-quality"
+    VERSION = "rank-fusion-v8-reader-value"
 
     def __init__(
         self, settings: dict[str, Any], repository: IntelligenceRepository,
@@ -43,7 +43,7 @@ class EventSelector:
         )
         self.deterministic_weight = float(self.config.get("selection_deterministic_weight", .35))
         self.model_weight = float(self.config.get("selection_model_weight", .65))
-        self.model_reject_floor = float(self.config.get("selection_model_reject_floor", 55))
+        self.min_reader_relevance = float(self.config.get("selection_min_reader_relevance", 60))
         self.repeat_penalty = float(self.config.get("selection_repeat_penalty", .4))
         self.repeat_hours = float(self.config.get("selection_repeat_hours", 36))
         self.freshness_0_24h = float(self.config.get("selection_freshness_0_24h", 1.0))
@@ -96,6 +96,7 @@ class EventSelector:
                 "version": self.VERSION,
                 "deterministic_weight": self.deterministic_weight,
                 "model_weight": self.model_weight,
+                "min_reader_relevance": self.min_reader_relevance,
                 "scout_doc_chars": int(self.config.get("scout_doc_chars", 4000)),
             },
             separators=(",", ":"), sort_keys=True,
@@ -157,23 +158,17 @@ class EventSelector:
                     continue
                 event = self._with_topic(event, item.topic_id)
                 self.repository.upsert_event(event)
-                if not item.relevant and event.deterministic_score < self.model_reject_floor:
+                rejection = self._reader_rejection(item)
+                if rejection:
                     rejected += 1
-                    trace.append(self._trace_item(
-                        event, docs, "scout_rejected", item.reason,
+                    traced = self._trace_item(
+                        event, docs, "scout_rejected", rejection,
                         event.deterministic_score,
-                    ))
+                    )
+                    traced.update({"reader_relevance": item.relevance, "model_relevant": item.relevant})
+                    trace.append(traced)
                     continue
-                model_score = (
-                    item.relevance * .30
-                    + item.novelty * .25
-                    + item.technical_depth * .25
-                    + item.industry_impact * .20
-                )
-                score = (
-                    event.deterministic_score * self.deterministic_weight
-                    + model_score * self.model_weight
-                )
+                score, model_score = self._fusion_score(event, item)
                 ranked.append((score, event, docs))
                 if self._is_official_release(event, docs, item.industry_impact, item.relevant):
                     priority_candidates.add(event.id)
@@ -182,6 +177,7 @@ class EventSelector:
                     "deterministic_score": round(float(event.deterministic_score), 2),
                     "model_score": round(float(model_score), 2),
                     "model_relevant": bool(item.relevant),
+                    "reader_relevance": item.relevance,
                 })
                 trace.append(traced)
             ranked.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
@@ -248,7 +244,7 @@ class EventSelector:
         self, event_docs: list[tuple[Event, list[Document]]], cache_scope: str,
         now: datetime | None = None,
     ) -> tuple[list[tuple[Event, list[Document]]], str | None]:
-        """Let DeepSeek scan all events, shortlist globally, then rerank once."""
+        """Let the configured model scan all events, shortlist globally, then rerank once."""
         current = now or datetime.now(timezone.utc)
         recent = self._recent_publications(current)
         signature = self._broad_signature(event_docs)
@@ -257,28 +253,29 @@ class EventSelector:
         if cached:
             restored = self._restore_broad_cache(cached, signature, event_docs, recent, current)
             if restored is not None:
-                progress(f"当前：复用 DeepSeek 泛读与复排缓存（{len(restored)} 个候选）")
+                progress(f"当前：复用模型泛读与复排缓存（{len(restored)} 个候选）")
                 return restored, None
 
         batch_size = max(1, int(self.broad_config.get("batch_size", 30)))
         doc_chars = max(200, int(self.broad_config.get("doc_chars", 1800)))
         errors: list[str] = []
 
-        progress(f"当前：启动 DeepSeek 泛读，扫描全部 {len(event_docs)} 个事件")
+        progress(f"当前：启动模型泛读，扫描全部 {len(event_docs)} 个事件")
         broad_response = ScoutBatch(items=[])
         try:
             broad_response = self.stages.scout(
                 event_docs, self.settings["topics"], stage="scout_broad",
                 batch_size=batch_size, doc_chars=doc_chars,
-                progress_label="DeepSeek 泛读批次",
+                progress_label="泛读批次",
             )
+            errors.extend(getattr(self.stages, "scout_errors", []))
         except Exception as exc:
             errors.append(f"scout_broad: {type(exc).__name__}: {exc}")
 
         broad_ranked, broad_trace, broad_stats, broad_priority = (
             self._rank_scout_response(
-                event_docs, broad_response, reader="deepseek",
-                runner=self.stages, stage="scout_broad", allow_reject=True,
+                event_docs, broad_response, reader="broad_reading",
+                runner=self.stages, stage="scout_broad",
             )
         )
         broad_ranked = self._apply_exposure(broad_ranked, recent, current, record_trace=False)
@@ -290,23 +287,24 @@ class EventSelector:
         rerank_failed = False
         if shortlist:
             try:
-                progress(f"当前：DeepSeek 复排全局前 {len(shortlist)} 个泛读候选")
+                progress(f"当前：模型复排全局前 {len(shortlist)} 个泛读候选")
                 rerank_response = self.stages.scout(
                     shortlist, self.settings["topics"], stage="scout_rerank",
                     batch_size=max(
                         1, int(self.broad_config.get("rerank_batch_size", 40))
                     ),
                     doc_chars=doc_chars,
-                    progress_label="DeepSeek 统一复排批次",
+                    progress_label="统一复排批次",
                 )
+                errors.extend(getattr(self.stages, "scout_errors", []))
             except Exception as exc:
                 rerank_failed = True
                 errors.append(f"scout_rerank: {type(exc).__name__}: {exc}")
 
         final_ranked, rerank_trace, rerank_stats, rerank_priority = (
             self._rank_scout_response(
-                shortlist, rerank_response, reader="deepseek_rerank",
-                runner=self.stages, stage="scout_rerank", allow_reject=False,
+                shortlist, rerank_response, reader="rerank",
+                runner=self.stages, stage="scout_rerank",
             )
         )
         if rerank_failed:
@@ -340,7 +338,7 @@ class EventSelector:
             if traced.get("status") == "candidate" and event_id not in shortlisted_ids:
                 traced["status"] = "broad_not_shortlisted"
                 traced["reason"] = (
-                    f"未进入 DeepSeek 全局前 {self.shortlist_events}；"
+                    f"未进入全局前 {self.shortlist_events}；"
                     + str(traced.get("reason") or "")
                 )[:500]
         for reranked in rerank_trace:
@@ -350,7 +348,7 @@ class EventSelector:
             broad_score = previous.get("broad_score", previous.get("score"))
             previous.update(reranked)
             previous.update({
-                "status": "candidate",
+                "status": reranked["status"],
                 "broad_reader": broad_reader,
                 "broad_score": broad_score,
                 "rerank_score": reranked.get("score"),
@@ -371,7 +369,7 @@ class EventSelector:
                 "scan": str(item.get("scan") or "")[:220],
                 "reason": str(item.get("reason") or "")[:500],
                 "model": str(item.get("model") or self.stages.configured_model("scout")),
-                "reader": "deepseek_rerank",
+                "reader": "rerank",
                 "public_headline": str(item.get("public_headline") or "")[:120],
                 "public_summary": str(item.get("public_summary") or "")[:400],
                 "public_facts": list(item.get("public_facts") or []),
@@ -384,7 +382,7 @@ class EventSelector:
             "scout_input_events": len(event_docs),
             "scout_reviewed_events": broad_stats["reviewed"],
             "scout_fallback_events": broad_stats["fallback"],
-            "scout_rejected_events": broad_stats["rejected"],
+            "scout_rejected_events": broad_stats["rejected"] + rerank_stats["rejected"],
             "scout_retained_events": len(final_ranked),
             "broad_reading_input_events": len(event_docs),
             "broad_reading_reviewed_events": broad_stats["reviewed"],
@@ -393,6 +391,7 @@ class EventSelector:
             "broad_reading_shortlist_events": len(shortlist),
             "rerank_reviewed_events": rerank_stats["reviewed"],
             "rerank_fallback_events": rerank_stats["fallback"],
+            "rerank_rejected_events": rerank_stats["rejected"],
             "official_release_priority_events": len(self.priority_event_ids),
         }
         self.repository.set_state(cache_key, json.dumps({
@@ -420,7 +419,6 @@ class EventSelector:
         reader: str,
         runner: ModelStageRunner,
         stage: str,
-        allow_reject: bool,
     ) -> tuple[
         list[tuple[float, Event, list[Document]]],
         list[dict[str, Any]], dict[str, int], set[str],
@@ -472,17 +470,19 @@ class EventSelector:
                     ]
                     for document in docs
                 }
-                if allow_reject and not relevant and event.deterministic_score < self.model_reject_floor:
+                rejection = self._reader_rejection(item)
+                if rejection:
                     rejected += 1
                     traced = self._trace_item(
-                        event, docs, "scout_rejected", reason,
+                        event, docs, "scout_rejected", rejection,
                         event.deterministic_score,
                     )
                     traced.update({
                         "broad_reader": reader,
                         "model": model,
                         "scan": scan,
-                        "model_relevant": False,
+                        "model_relevant": relevant,
+                        "reader_relevance": item.relevance,
                     })
                     trace.append(traced)
                     continue
@@ -498,6 +498,7 @@ class EventSelector:
                     round(float(model_score), 2) if model_score is not None else None
                 ),
                 "model_relevant": relevant,
+                "reader_relevance": item.relevance if item is not None else None,
                 "model": model,
                 "scan": scan,
                 "public_headline": public_headline,
@@ -513,12 +514,22 @@ class EventSelector:
             "rejected": rejected,
         }, priority
 
+    def _reader_rejection(self, item: ScoutItem) -> str:
+        # Topical fit, source quality and technical complexity cannot rescue an
+        # event the editor judged unhelpful. Shortlists are ceilings, not quotas.
+        if not item.relevant or item.relevance < self.min_reader_relevance:
+            return (
+                f"阅读价值不足（{item.relevance:g}/100；门槛 {self.min_reader_relevance:g}）："
+                + item.reason
+            )[:500]
+        return ""
+
     def _fusion_score(self, event: Event, item: ScoutItem) -> tuple[float, float]:
         model_score = (
-            item.relevance * .30
-            + item.novelty * .25
-            + item.technical_depth * .25
-            + item.industry_impact * .20
+            item.relevance * .55
+            + item.novelty * .15
+            + item.technical_depth * .05
+            + item.industry_impact * .25
         )
         score = (
             event.deterministic_score * self.deterministic_weight
@@ -550,6 +561,7 @@ class EventSelector:
             "version": self.VERSION,
             "deterministic_weight": self.deterministic_weight,
             "model_weight": self.model_weight,
+            "min_reader_relevance": self.min_reader_relevance,
             "shortlist_events": self.shortlist_events,
             "batch_size": int(self.broad_config.get("batch_size", 30)),
             "rerank_batch_size": int(self.broad_config.get("rerank_batch_size", 40)),
@@ -614,6 +626,9 @@ class EventSelector:
             payload = json.loads(cached)
             if payload.get("signature") != signature:
                 return None
+            funnel = payload.get("funnel", {})
+            if funnel.get("broad_reading_fallback_events", 0) or funnel.get("rerank_fallback_events", 0):
+                return None
             by_id = {event.id: (event, docs) for event, docs in event_docs}
             ranked: list[tuple[float, Event, list[Document]]] = []
             for item in payload.get("ranked", []):
@@ -647,13 +662,12 @@ class EventSelector:
             (event.deterministic_score, event, docs)
             for event, docs in event_docs
         ]
-        adjusted = self._apply_exposure(scored, recent, now)
         if not self.last_trace:
             self.last_trace = [
                 self._trace_item(
                     event, docs, "candidate", "AI 未启用，使用确定性排序", score,
                 )
-                for score, event, docs in adjusted
+                for score, event, docs in scored
             ]
             self.last_funnel = {
                 "scout_input_events": len(event_docs),
@@ -663,6 +677,8 @@ class EventSelector:
                 "scout_retained_events": len(event_docs),
                 "official_release_priority_events": 0,
             }
+        adjusted = self._apply_exposure(scored, recent, now)
+        self.last_funnel["scout_retained_events"] = len(adjusted)
         return [(event, docs) for _, event, docs in adjusted]
 
     def _apply_exposure(
@@ -677,7 +693,9 @@ class EventSelector:
         for score, event, docs in ranked:
             freshness = self._freshness_factor(docs, now)
             repeat = self._repeat_factor(event, docs, recent)
-            adjusted.append((score * freshness * repeat, event, docs))
+            excluded = repeat == 0 or freshness == 0
+            if not excluded:
+                adjusted.append((score * freshness * repeat, event, docs))
             self.last_exposure[event.id] = {
                 "raw_score": round(float(score), 2),
                 "freshness_factor": round(float(freshness), 3),
@@ -685,6 +703,20 @@ class EventSelector:
                 "adjusted_score": round(float(score * freshness * repeat), 2),
                 "freshness_label": self._freshness_label(event, docs, recent),
             }
+            if excluded:
+                self.last_exposure[event.id].update({
+                    "status": "repeat_excluded" if repeat == 0 else "future_dated",
+                    "reason": "已刊登且材料未变，不再收录" if repeat == 0 else "来源发布时间晚于本轮开始时间",
+                })
+            if record_trace:
+                traced = next((item for item in self.last_trace if item.get("event_id") == event.id), None)
+                if traced is not None:
+                    traced.update(self.last_exposure[event.id])
+                elif excluded:
+                    self.last_trace.append({
+                        **self._trace_item(event, docs, "candidate", "", score),
+                        **self.last_exposure[event.id],
+                    })
         adjusted.sort(key=lambda item: (item[0], item[1].last_seen), reverse=True)
         return adjusted
 
@@ -732,9 +764,10 @@ class EventSelector:
         }
 
     def _recent_publications(self, now: datetime) -> list[PublicationRecord]:
-        current = _aware(now)
+        current = _aware(now).astimezone(SHANGHAI)
         start_of_today = current.replace(hour=0, minute=0, second=0, microsecond=0)
-        cutoff = start_of_today - timedelta(hours=self.repeat_hours)
+        # Same-day manual A/B reruns remain reproducible; prior days never expire.
+        cutoff = datetime(1970, 1, 1, tzinfo=timezone.utc)
         production_only = bool(self.is_production)
         try:
             return self.repository.recent_publications(
@@ -749,6 +782,8 @@ class EventSelector:
         self, event: Event, docs: list[Document], recent: list[PublicationRecord],
     ) -> float:
         previous = self._previous_publication(event, docs, recent)
+        if previous is not None and self._unchanged(previous, docs):
+            return 0.0
         if previous is None or self.repeat_penalty >= 1:
             return 1.0
         current = content_fingerprint(docs)
@@ -758,6 +793,8 @@ class EventSelector:
 
     def _freshness_factor(self, docs: list[Document], now: datetime) -> float:
         ages = [hours_since(item.published_at, now) for item in docs]
+        if any(age is not None and age < 0 for age in ages):
+            return 0.0
         ages = [item for item in ages if item is not None]
         if not ages:
             return self.freshness_48_72h
@@ -774,9 +811,11 @@ class EventSelector:
         previous = self._previous_publication(event, docs, recent)
         if previous is None:
             return "首次收录"
+        if self._unchanged(previous, docs):
+            return "再次收录"
         current = content_fingerprint(docs)
         if previous.content_fingerprint and current and previous.content_fingerprint != current:
-            return "有新材料"
+            return "材料有变化，待核对"
         if not previous.content_fingerprint:
             return "新增材料待核对"
         return "再次收录"
@@ -786,11 +825,22 @@ class EventSelector:
     ) -> PublicationRecord | None:
         if not recent:
             return None
-        urls = set(canonical_urls(docs))
+        urls = {canonicalize_url(url) for url in canonical_urls(docs)}
         for item in recent:
-            if item.event_id == event.id or (urls and urls & set(item.canonical_urls)):
+            if item.event_id == event.id or (urls and urls & {canonicalize_url(url) for url in item.canonical_urls}):
                 return item
         return None
+
+    def _unchanged(self, previous: PublicationRecord, docs: list[Document]) -> bool:
+        if not previous.content_fingerprint:
+            return False
+        # Legacy ledger entries fingerprinted the actual stage input, which may
+        # be clipped. Do not mistake a different clipping limit for new evidence.
+        limits = {0, int(self.config.get("full_text_max_chars", 50000)),
+                  int(self.broad_config.get("doc_chars", 1800))}
+        return previous.content_fingerprint in {
+            content_fingerprint(stage_documents(docs, limit)) for limit in limits
+        }
 
     @staticmethod
     def prioritize_for_research(

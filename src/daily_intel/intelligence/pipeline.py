@@ -120,7 +120,8 @@ class IntelligencePipeline:
             experiment_id if ai_enabled or offline else f"{experiment_id}-no-ai"
         )
         cache_scope = self.stages.cache_scope(cache_experiment)
-        self.stages.audit_context = {"run_id": run_id, "experiment_id": experiment_id, "cache_scope": cache_scope}
+        self.stages.audit_context = {"run_id": run_id, "experiment_id": experiment_id, "cache_scope": cache_scope,
+                                     "force_analysis": force_analysis}
         if offline:
             return self._offline_result(cache_scope)
 
@@ -152,7 +153,7 @@ class IntelligencePipeline:
         if bounded_research:
             progress(
                 f"当前：选题完成；{len(selected)} 条进入发布候选，"
-                f"仅前 {len(research_targets)} 条执行 DeepSeek 精读"
+                f"仅前 {len(research_targets)} 条执行精读"
             )
         else:
             progress(f"当前：选题完成，准备深研 {len(research_targets)} 个事件")
@@ -243,7 +244,7 @@ class IntelligencePipeline:
             analyses.append(analysis)
             research_outcomes[event.id] = (
                 "published",
-                f"完成 DeepSeek 泛读与复排，未进入前 {intensive_limit} 研究",
+                f"完成泛读与复排，未进入前 {intensive_limit} 研究",
             )
 
         selection_order = {
@@ -260,15 +261,18 @@ class IntelligencePipeline:
             elif analysis.status.value == "deep":
                 research_status = ResearchStatus.DEEP_PASS.value
                 public_notice = ""
+            elif was_target and analysis.quality.final_content_passed:
+                research_status = ResearchStatus.QUALITY_DOWNGRADE.value
+                public_notice = "刊登内容已对照原文，部分分析栏目证据不足"
             elif was_target and material_issue:
                 research_status = ResearchStatus.QUALITY_DOWNGRADE.value
-                public_notice = f"已深研，材料不足，转为泛读（{material_issue}）"
+                public_notice = "原文材料不足，仅供线索参考"
             elif was_target:
                 research_status = ResearchStatus.QUALITY_DOWNGRADE.value
-                public_notice = "已深研，质量门降级"
+                public_notice = "部分内容缺少充分证据，仅供线索参考"
             else:
                 research_status = ResearchStatus.BROAD_ONLY.value
-                public_notice = f"仅完成泛读，未进入前 {intensive_limit} 研究"
+                public_notice = "初步整理，尚未逐项核验"
             publication = analysis.publication.model_copy(update={
                 "first_published_at": self.repository.first_publication_at(analysis.event_id, experiment_id=experiment_id, production_only=is_production),
                 "selection_order": selection_order.get(analysis.event_id, 0),
@@ -476,6 +480,7 @@ class IntelligencePipeline:
             issue="broad_reading_only" if not failure else "research_failed",
             selection_reason=selection_reason,
             headline=headline,
+            scan_sentence=scan,
             summary=summary or scan,
             facts=facts,
             evidence=evidence,
@@ -498,6 +503,7 @@ class IntelligencePipeline:
                 stage_documents(documents, int(self.config.get("full_text_max_chars", 50000)))
             ),
             "source_published_at": dates["source_published_at"],
+            "source_updated_at": dates["source_updated_at"],
             "original_published_at": dates["original_published_at"],
             "first_seen": dates["first_seen"],
             "last_seen": dates["last_seen"],

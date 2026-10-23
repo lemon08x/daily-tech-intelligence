@@ -83,7 +83,12 @@ class EventResearcher:
         grounded = self.quality_gate.ground_claims(analysis.quality.claim_audits, clipped)
         if any(before.status != after.status for before, after in zip(analysis.quality.claim_audits, grounded)):
             return None
-        if analysis.quality.passed and (not grounded or any(item.status.value != "supported" for item in grounded)):
+        if analysis.quality.final_content_passed:
+            supported_texts = {"".join(item.text.split()) for item in grounded if item.status.value == "supported"}
+            published = extract_claims(analysis)
+            if not published or any("".join(item.text.split()) not in supported_texts for item in published):
+                return None
+        elif analysis.quality.passed and (not grounded or any(item.status.value != "supported" for item in grounded)):
             return None
         fingerprint = content_fingerprint(clipped)
         publication = analysis.publication.model_copy(update={
@@ -145,6 +150,7 @@ class EventResearcher:
         issue: str = "ai_not_enabled",
         selection_reason: str = "",
         headline: str = "",
+        scan_sentence: str = "",
         summary: str = "",
         facts: list[str] | None = None,
         evidence: list[Evidence] | None = None,
@@ -174,11 +180,11 @@ class EventResearcher:
             event_id=event.id,
             status=AnalysisStatus.LEAD,
             headline=localize_public_text(headline or event.title),
-            scan_sentence=public_summary[:220],
+            scan_sentence=localize_public_text(scan_sentence or public_summary)[:220],
             plain_takeaway=public_summary,
             key_facts=public_facts[:8],
             risks=[
-                "仅完成批量泛读与 DeepSeek 统一复排，尚未经过 Analyst、Verifier 和确定性质量门"
+                "本条为初步整理，尚未逐项核验，请以原文为准"
                 if broad_only else
                 "尚未完成强模型深研与独立证据校验"
             ],

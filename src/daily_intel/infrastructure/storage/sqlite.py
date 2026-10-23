@@ -131,10 +131,24 @@ class SQLiteIntelligenceRepository:
         payload = document.model_dump(mode="json")
         with self._connect() as db:
             existing = db.execute(
-                "SELECT id FROM documents WHERE content_hash=? OR (source_id=? AND external_id=?)",
+                "SELECT id, source_id, external_id, metadata_json FROM documents WHERE content_hash=? OR (source_id=? AND external_id=?)",
                 (document.content_hash, document.source_id, document.external_id),
             ).fetchone()
             if existing:
+                # Repair a legacy sitemap lastmod date only from explicit
+                # publication metadata for the same source document. Research
+                # snapshots and historical publication records remain immutable.
+                if (existing["source_id"] == document.source_id
+                        and existing["external_id"] == document.external_id
+                        and document.metadata.get("sitemap_url")
+                        and document.metadata.get("date_basis") == "published"
+                        and document.metadata.get("original_published_at")):
+                    metadata = json.loads(existing["metadata_json"])
+                    metadata.update({key: document.metadata[key] for key in (
+                        "original_published_at", "source_updated_at", "date_basis"
+                    ) if key in document.metadata})
+                    db.execute("UPDATE documents SET published_at=?, metadata_json=? WHERE id=?",
+                               (payload["published_at"], json.dumps(metadata, ensure_ascii=False), existing["id"]))
                 return False
             db.execute(
                 """INSERT INTO documents(
@@ -343,7 +357,7 @@ class SQLiteIntelligenceRepository:
         self, since: datetime, until: datetime, *,
         production_only: bool = False, experiment_id: str | None = None,
     ) -> list[PublicationRecord]:
-        clauses = ["published_at>=?", "published_at<?"]
+        clauses = ["julianday(published_at)>=julianday(?)", "julianday(published_at)<julianday(?)"]
         values: list[Any] = [since.isoformat(), until.isoformat()]
         if production_only:
             clauses.append("is_production=1")
@@ -353,7 +367,7 @@ class SQLiteIntelligenceRepository:
         sql = (
             "SELECT * FROM publication_ledger WHERE "
             + " AND ".join(clauses)
-            + " ORDER BY published_at DESC"
+            + " ORDER BY julianday(published_at) DESC"
         )
         with self._connect() as db:
             rows = db.execute(sql, values).fetchall()
@@ -382,6 +396,20 @@ class SQLiteIntelligenceRepository:
                 "SELECT text FROM content_snapshots WHERE hash=?", (digest,),
             ).fetchone()
         return None if row is None else str(row["text"])
+
+    def get_successful_stage(self, stage: str, event_id: str, input_hash: str,
+                             cache_scope: str, model: str) -> dict | None:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT payload_json FROM research_audits WHERE stage=? AND event_id=? "
+                "AND snapshot_hash=? AND cache_scope=? AND model=? ORDER BY id DESC",
+                (stage + "_attempt", event_id, input_hash, cache_scope, model),
+            ).fetchall()
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            if payload.get("category") == "success" and payload.get("result") is not None:
+                return payload["result"]
+        return None
 
     def save_research_audit(self, payload: dict[str, Any]) -> None:
         with self._connect() as db:

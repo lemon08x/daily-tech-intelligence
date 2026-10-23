@@ -1,7 +1,7 @@
 app:
   title: "科技产业情报日报"
   timezone: "Asia/Shanghai"
-  production_experiment_id: "deepseek-v4-flash"
+  production_experiment_id: "deepseek-v4-abliterated"
 
 paths:
   cache_dir: "../data/cache"
@@ -25,7 +25,7 @@ intelligence:
   source_fetch_timeout_seconds: 20
   selection_deterministic_weight: 0.35
   selection_model_weight: 0.65
-  selection_model_reject_floor: 55
+  selection_min_reader_relevance: 60
   selection_repeat_penalty: 0.4
   selection_repeat_hours: 36
   selection_freshness_0_24h: 1.0
@@ -39,7 +39,7 @@ github:
   publish_limit: 10
 
 quality:
-  policy_version: "evidence-gate-v4"
+  policy_version: "evidence-gate-v5"
   schema_version: "claim-audit-v2"
   min_key_facts: 3
   max_key_facts: 6
@@ -61,41 +61,36 @@ quality:
 
 llm:
   provider: "openai_compatible"
-  base_url: "https://api.deepseek.com"
+  base_url: "http://192.168.31.235:8317/v1"
   api_key_env: "DEEPSEEK_API_KEY"
-  prompt_version: "tech-intel-v7"
+  prompt_version: "tech-intel-v13-reader-value"
   request_timeout_seconds: 1200
   scout:
-    model: "deepseek-v4-flash"
-    max_output_tokens: 6000
+    model: "deepseek-v4-abliterated"
     temperature: 0
     extra_body:
       thinking: {type: "disabled"}
       reasoning_effort: "low"
   analyst:
-    model: "deepseek-v4-pro"
-    max_output_tokens: 6000
+    model: "deepseek-v4-abliterated"
     temperature: 0
     extra_body:
       thinking: {type: "enabled"}
       reasoning_effort: "high"
   verifier:
-    model: "deepseek-v4-pro"
-    max_output_tokens: 3000
+    model: "deepseek-v4-abliterated"
     temperature: 0
     extra_body:
       thinking: {type: "enabled"}
       reasoning_effort: "high"
   digest_brief:
-    model: "deepseek-v4-flash"
-    max_output_tokens: 6000
+    model: "deepseek-v4-abliterated"
     temperature: 0
     extra_body:
       thinking: {type: "disabled"}
       reasoning_effort: "low"
   git_brief:
-    model: "deepseek-v4-flash"
-    max_output_tokens: 4000
+    model: "deepseek-v4-abliterated"
     temperature: 0
     extra_body:
       thinking: {type: "disabled"}

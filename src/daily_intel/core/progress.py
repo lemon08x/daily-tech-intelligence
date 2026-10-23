@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import sys
 import unicodedata
 
@@ -25,3 +26,7 @@ def progress(message: str) -> None:
         print(text, flush=True)
     except UnicodeEncodeError:
         print(text.encode("ascii", errors="replace").decode("ascii"), flush=True)
+    except OSError as exc:
+        # A detached Windows console/pipe must not abort expensive model work.
+        if exc.errno not in {errno.EINVAL, errno.EPIPE, errno.EBADF}:
+            raise

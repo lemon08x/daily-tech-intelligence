@@ -130,7 +130,7 @@ class ComparisonRow(StrictModel):
 class AnalysisQuality(StrictModel):
     """Deterministic audit result applied after all model stages."""
 
-    policy_version: str = "evidence-gate-v4"
+    policy_version: str = "evidence-gate-v5"
     passed: bool = False
     score: int = Field(default=0, ge=0, le=100)
     supported_evidence: int = Field(default=0, ge=0)
@@ -140,6 +140,11 @@ class AnalysisQuality(StrictModel):
     issues: list[str] = Field(default_factory=list, max_length=16)
     schema_version: str = "claim-audit-v2"
     claim_audits: list[ClaimAudit] = Field(default_factory=list)
+    final_content_passed: bool = False
+    final_claim_count: int = 0
+    removed_claim_count: int = 0
+    source_limitations: list[str] = Field(default_factory=list)
+    completeness_issues: list[str] = Field(default_factory=list)
 
 
 class PublicationMeta(StrictModel):
@@ -157,6 +162,7 @@ class PublicationMeta(StrictModel):
     snapshot_hash: str = ""
     schema_version: str = "claim-audit-v2"
     source_published_at: datetime | None = None
+    source_updated_at: datetime | None = None
     original_published_at: datetime | None = None
     first_published_at: datetime | None = None
     first_seen: datetime | None = None
@@ -204,20 +210,20 @@ class ScoutPublicFact(StrictModel):
 
 class ScoutItem(StrictModel):
     event_id: str
-    relevant: bool
+    relevant: bool = Field(description="是否有具体阅读价值；仅主题相关、技术复杂或资料可靠不算。")
     topic_id: str
-    relevance: float = Field(ge=0, le=100)
+    relevance: float = Field(ge=0, le=100, description="阅读价值：能否帮助读者理解科技方向、发现可用方法或理解商业机会与瓶颈，而非关键词匹配度。")
     novelty: float = Field(ge=0, le=100)
     technical_depth: float = Field(ge=0, le=100)
     industry_impact: float = Field(ge=0, le=100)
-    reason: str
+    reason: str = Field(description="具体的阅读收获或淘汰理由，不能只说有创新、技术深入或证据充分。")
     scan: str = Field(
         default="",
         max_length=220,
-        description="只依据给定材料写的一句事实性泛读摘要，不作预测或外推。",
+        description="建议60到140字：发生了什么、为什么值得了解；关键数字若出现，保留基线和条件，不作无依据外推。",
     )
-    public_headline: str = Field(default="", max_length=120)
-    public_summary: str = Field(default="", max_length=400)
+    public_headline: str = Field(default="", max_length=120, description="建议20到50字，从具体问题、用途或变化切入，保留研究范围；项目名可放摘要。")
+    public_summary: str = Field(default="", max_length=400, description="建议120到240字：先讲问题、变化及阅读价值，再给支撑这一认识的关键结果与主要边界。")
     public_facts: list[ScoutPublicFact] = Field(default_factory=list, max_length=3)
 
 
@@ -251,17 +257,17 @@ class GitBriefingBatch(StrictModel):
 
 class AnalysisDraft(StrictModel):
     headline: str = Field(
-        description="给非专业读者的标题：写清谁做了什么、结果是什么，不要写成论文题目或发行说明标题。",
+        description="建议20到50字，从具体问题、用途或变化切入，保留研究范围；项目名可放正文。",
     )
     # Draft limits are deliberately wider than published limits. The deterministic
     # quality gate normalizes verbose model responses before building Analysis.
     scan_sentence: str = Field(
         default="",
-        description="独立速读句：说明谁做了什么及主要结果，不要只写背景。",
+        description="建议60到140字：发生了什么、为什么值得了解；必要数字与基线及适用条件紧邻。",
     )
     plain_takeaway: str = Field(
         min_length=8,
-        description="2到3句大白话。先说发生了什么和为什么重要；缩写、算法名、指标名第一次出现必须用人话解释。解释不得引入文档没有的数字、排名或公司属性。",
+        description="建议120到240字：先讲问题、本次变化及其意义，再给支撑这个认识的关键结果和主要边界。保留项目名；解释依据文档，不强行推导商业收益。",
     )
     key_facts: list[str] = Field(
         default_factory=list,

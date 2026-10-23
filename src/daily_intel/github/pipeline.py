@@ -49,9 +49,9 @@ def apply_git_brief(brief: Any, projects: list[dict[str, Any]]) -> list[dict[str
             project["kicker"] = clean_text(str(match.kicker), 12)
         project["plain"] = clean_text(match.function, 300)
         project["use_cases"] = [
-            clean_text(str(item), 160)
+            clean_text(str(item), 600)
             for item in (match.use_cases or [])
-            if clean_text(str(item), 160)
+            if clean_text(str(item), 600)
         ][:3]
         project["ai_briefed"] = True
     return projects

@@ -1,12 +1,14 @@
 """把当日最新运行的日报通过 SMTP（QQ邮箱）发送到 REPORT_TO。
 
 从 .env 读取 SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/REPORT_TO。
-找到 output/<今日>/runs/ 下最新的成功运行（有 daily_digest.html）：
+计划任务通过 --run-log 和 --run-exit-code 选择本次实际产物，支持跨日。
+手动无参数运行时，找到 output/<今日>/runs/ 下最新的成功运行：
 - 成功：正文为摘要，附件为 daily_digest.html
 - 无成功运行：发送失败通知（附日志尾部）
 """
 from __future__ import annotations
 
+import argparse
 import smtplib
 import sys
 from datetime import date
@@ -56,6 +58,25 @@ def find_today_run() -> tuple[Path | None, list[Path]]:
     return None, candidates
 
 
+def find_logged_run(log: Path, exit_code: int) -> Path | None:
+    """Select this invocation's returned artifact, including across midnight."""
+    if exit_code != 0 or not log.is_file():
+        return None
+    matches = re.findall(r"^\s*html:\s*(.+?)\s*$", _read_log_text(log), re.MULTILINE)
+    if not matches:
+        return None
+    report = Path(matches[-1]).resolve()
+    try:
+        relative = report.relative_to((PROJECT_ROOT / "output").resolve())
+        date.fromisoformat(relative.parts[0])
+    except (ValueError, IndexError):
+        return None
+    if (len(relative.parts) != 4 or relative.parts[1] != "runs"
+            or report.name != "daily_digest.html" or not report.is_file()):
+        return None
+    return report.parent
+
+
 def build_summary(run: Path) -> str:
     html = (run / "daily_digest.html").read_text(encoding="utf-8")
     lines = [f"运行：{run.name}", ""]
@@ -85,21 +106,30 @@ def send(env: dict[str, str], subject: str, body: str, attachments: list[tuple[s
         server.sendmail(env["SMTP_USER"], [env["REPORT_TO"]], msg.as_string())
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run-log", type=Path)
+    parser.add_argument("--run-exit-code", type=int, default=0)
+    parser.add_argument("--report-date", type=date.fromisoformat, default=date.today())
+    args = parser.parse_args(argv)
     env = load_env()
     missing = [k for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "REPORT_TO") if not env.get(k)]
     if missing:
         print(f"缺少 .env 配置项: {', '.join(missing)}", file=sys.stderr)
         return 2
 
-    run, candidates = find_today_run()
+    if args.run_log:
+        run = find_logged_run(args.run_log, args.run_exit_code)
+    else:
+        run, _ = find_today_run()
     if run is None:
         tail = ""
-        logs = sorted((PROJECT_ROOT / "logs").glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        logs = [args.run_log] if args.run_log and args.run_log.is_file() else sorted(
+            (PROJECT_ROOT / "logs").glob("agent_*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if logs:
             tail = "\n".join(_read_log_text(logs[0]).splitlines()[-15:])
-        body = f"今日日报生成失败或尚未完成（找到 {len(candidates)} 个运行目录，均无 daily_digest.html）。\n\n日志尾部：\n{tail}"
-        send(env, f"【日报失败】{date.today().isoformat()} 科技情报日报未生成", body, [])
+        body = f"本次日报生成失败或尚未完成（退出码 {args.run_exit_code}，未找到本次成功产物）。\n\n日志尾部：\n{tail}"
+        send(env, f"【日报失败】{args.report_date.isoformat()} 科技情报日报未生成", body, [])
         print("已发送失败通知")
         return 1
 
@@ -107,7 +137,8 @@ def main() -> int:
     attachments = [
         ("daily_digest.html", (run / "daily_digest.html").read_bytes()),
     ]
-    send(env, f"科技产业情报日报 {date.today().isoformat()}", summary, attachments)
+    report_date = run.parent.parent.name
+    send(env, f"科技产业情报日报 {report_date}", summary, attachments)
     print(f"已发送日报（运行 {run.name}）")
     return 0
 

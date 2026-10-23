@@ -37,7 +37,7 @@ from daily_intel.intelligence.snapshots import (
 
 @dataclass(frozen=True, slots=True)
 class QualityPolicy:
-    version: str = "evidence-gate-v4"
+    version: str = "evidence-gate-v5"
     min_key_facts: int = 3
     max_key_facts: int = 6
     min_supported_evidence: int = 2
@@ -102,7 +102,8 @@ class QualityPolicy:
             "industry_impacts_max": self.max_industry_impacts,
             "section_max_chars": self.section_max_chars,
             "plain_takeaway_max_chars": self.plain_takeaway_max_chars,
-            "unsupported_claims_force_downgrade": self.downgrade_on_unsupported_claims,
+            "unsupported_claims_must_be_removed": True,
+            "publication_gate": "Audit every draft assertion; release only unchanged supported assertions. Source limitations and analytical completeness are assessed separately.",
             "claim_audit": {
                 "schema_version": self.schema_version,
                 "cover_every_assertion": True,
@@ -273,7 +274,24 @@ class AnalysisQualityGate:
             verification, unsupported, len(evidence), primary_sources,
             len(safe_draft.key_facts), safe_draft, unique_issues,
         )
-        passed = not unique_issues
+        # Audit history stays intact. Release checks concern only exact supported
+        # assertions retained in the final draft, not assertions removed from it.
+        final_claims = extract_claims(safe_draft)
+        supported_assertions = {_normalized(c.text) for c in claims if c.status == ClaimStatus.SUPPORTED}
+        unresolved_global = any(
+            not any(_normalized(value) == _normalized(c.text) and c.status != ClaimStatus.SUPPORTED for c in claims)
+            for value in verification.unsupported_claims
+        )
+        final_content_passed = bool(final_claims) and all(
+            _normalized(c.text) in supported_assertions for c in final_claims
+        ) and not length_rewritten and "claim_protocol_error" not in issues and not unresolved_global
+        if verification.verdict != "pass" and (not verification.unsupported_claims or unresolved_global):
+            final_content_passed = False  # An unlocalized adverse verdict remains blocking.
+        completeness_issues = [issue for issue in unique_issues if issue in {
+            "insufficient_evidence", "insufficient_key_facts", "missing_plain_takeaway",
+            "missing_required_sections", "insufficient_risks", "insufficient_counterpoints",
+        }]
+        passed = final_content_passed and not completeness_issues
         confidence = max(0.0, min(1.0, normalized_draft.confidence + verification.confidence_adjustment))
         if source_diversity <= 1:
             confidence = min(confidence, self.policy.max_single_source_confidence)
@@ -292,6 +310,11 @@ class AnalysisQualityGate:
             issues=unique_issues,
             schema_version=self.policy.schema_version,
             claim_audits=claims,
+            final_content_passed=final_content_passed,
+            final_claim_count=len(final_claims),
+            removed_claim_count=sum(c.status != ClaimStatus.SUPPORTED for c in claims),
+            source_limitations=["missing_primary_source"] if "missing_primary_source" in issues else [],
+            completeness_issues=completeness_issues,
         )
         return QualityDecision(
             normalized_draft, evidence, quality, confidence, claims, safe_draft,
@@ -338,24 +361,23 @@ class AnalysisQualityGate:
                 publication=publication,
             )
         publication.research_status = ResearchStatus.QUALITY_DOWNGRADE.value
-        excerpts = [
-            (document.content or document.summary or document.title).strip()[:300]
-            for document in []
-        ]
         return Analysis(
             event_id=event_id, status=AnalysisStatus.LEAD,
             headline=safe.headline,
             scan_sentence=safe.scan_sentence,
             plain_takeaway=safe.plain_takeaway,
             key_facts=safe.key_facts,
-            risks=["部分结论尚未完成核验，请结合下方审核原因阅读。"],
+            technical_mechanism=safe.technical_mechanism,
+            novelty=safe.novelty, maturity=safe.maturity,
+            outlook_6_24m=safe.outlook_6_24m,
+            industry_impacts=safe.industry_impacts,
+            risks=safe.risks or ([] if decision.quality.final_content_passed else ["本条未通过完整核验；保留已获证据支持的内容，具体限制见核验说明。"]),
+            counterpoints=safe.counterpoints,
             confidence=decision.confidence, evidence=decision.evidence,
             quality=decision.quality, model=model,
             prompt_version=prompt_version, created_at=created_at,
             lane=reading, topic_id=topic_id, topic_name=topic_name,
-            publication=publication.model_copy(update={
-                "source_excerpts": excerpts,
-            }),
+            publication=publication,
         )
 
     def _length_rewrite_detected(self, draft: AnalysisDraft) -> bool:
@@ -402,6 +424,8 @@ class AnalysisQualityGate:
             "maturity": maturity,
             "outlook_6_24m": outlook,
             "industry_impacts": impacts[: self.policy.max_industry_impacts],
+            "risks": supported_text(claims, "risks[")[: self.policy.max_risks],
+            "counterpoints": supported_text(claims, "counterpoints[")[: self.policy.max_counterpoints],
         })
 
     def normalize_draft(self, draft: AnalysisDraft) -> AnalysisDraft:
@@ -570,6 +594,9 @@ def summarize_quality(
             round(sum(item.quality.score for item in research) / len(research), 1) if research else 0
         ),
         "passed": sum(item.quality.passed for item in analyses),
+        "final_content_passed": sum(item.quality.final_content_passed for item in research),
+        "source_limited": sum(bool(item.quality.source_limitations) for item in research),
+        "analysis_incomplete": sum(bool(item.quality.completeness_issues) for item in research),
         "downgraded": sum(not item.quality.passed for item in research),
         "issue_counts": dict(sorted(issues.items())),
         "research_targets": len(research_ids),

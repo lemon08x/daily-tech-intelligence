@@ -6,6 +6,7 @@ from typing import Callable
 from daily_intel.core.models import Document, Event
 from daily_intel.core.ports import IntelligenceRepository
 from daily_intel.intelligence.clustering import assign_topic, cluster_documents, is_routine_release
+from daily_intel.intelligence.snapshots import aware
 
 
 Clusterer = Callable[[list[Document], list[dict], int, int], list[Event]]
@@ -33,6 +34,8 @@ class EventCatalog:
             hours=int(self.config["cluster_window_hours"])
         )
         recent_documents = self.repository.recent_documents(recent_since)
+        future_documents = [item for item in recent_documents if aware(item.published_at) > aware(now)]
+        recent_documents = [item for item in recent_documents if aware(item.published_at) <= aware(now)]
         hard_filtered = [item for item in recent_documents if is_routine_release(item)]
         unclassified = [
             item for item in recent_documents
@@ -55,6 +58,7 @@ class EventCatalog:
             "new_documents": inserted,
             "duplicate_documents": len(documents) - inserted,
             "window_documents": len(recent_documents),
+            "future_dated_documents": len(future_documents),
             "hard_filtered_documents": len(hard_filtered),
             "unclassified_documents": len(unclassified),
             "candidate_events": len(pairs),
@@ -69,4 +73,9 @@ class EventCatalog:
             }
             for item in hard_filtered
         ]
+        self.last_trace.extend({
+            "document_id": item.id, "title": item.title, "source": item.source_id,
+            "status": "future_dated", "reason": "来源发布时间晚于本轮开始时间，暂不入选",
+            "published_at": item.published_at.isoformat(),
+        } for item in future_documents)
         return pairs

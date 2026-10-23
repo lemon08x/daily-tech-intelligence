@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import errno
 from io import BytesIO, TextIOWrapper
 
 import pytest
@@ -10,6 +11,22 @@ from daily_intel.core.progress import progress
 
 
 ZWSP_TITLE = "当前：深研 general · The EU’s AI Drive Undermines Its \u200bOwn Chip Strategy"
+
+
+@pytest.mark.parametrize("error_number", [errno.EINVAL, errno.EPIPE, errno.EBADF, errno.ENOSPC])
+def test_progress_handles_detached_output_but_preserves_disk_errors(monkeypatch, error_number):
+    class BrokenOutput:
+        encoding = "utf-8"
+
+        def write(self, text):
+            raise OSError(error_number, "output unavailable")
+
+    monkeypatch.setattr(sys, "stdout", BrokenOutput())
+    if error_number == errno.ENOSPC:
+        with pytest.raises(OSError):
+            progress("当前：泛读批次 8/21")
+    else:
+        progress("当前：泛读批次 8/21")
 
 
 def test_progress_does_not_raise_when_stdout_is_gbk(monkeypatch) -> None:

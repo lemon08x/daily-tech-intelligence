@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$TaskName = "科技情报日报",
     [string]$At = "01:00",
     [ValidateRange(1, 365)]
@@ -13,9 +13,9 @@ $Runner = Join-Path $PSScriptRoot "run_daily_agent.ps1"
 
 $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Runner`"" -WorkingDirectory $ProjectRoot
 $Trigger = New-ScheduledTaskTrigger -Daily -DaysInterval $DaysInterval -At $At
-$Settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionTimeLimitHours)
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionTimeLimitHours)
 $IntervalLabel = if ($DaysInterval -eq 1) { "每天" } else { "每 $DaysInterval 天" }
-$Description = "${IntervalLabel}用 DeepSeek 泛读、复排前十精读并生成日报邮件"
+$Description = "${IntervalLabel}用 GPT-6.1 Sol 泛读、复排前十精读并生成日报邮件"
 $ScheduleSummary = "$IntervalLabel $At 运行（含周末，错过则下次登录时补跑，上限 $ExecutionTimeLimitHours 小时，不并行重入）"
 
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue

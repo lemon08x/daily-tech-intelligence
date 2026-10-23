@@ -95,6 +95,9 @@ def display_shanghai(value: datetime | None) -> str:
 
 
 def source_published_at(document: Document) -> datetime | None:
+    if document.metadata.get("sitemap_url"):
+        # Includes legacy sitemap records whose lastmod was stored as published_at.
+        return original_published_at(document)
     return aware(document.published_at)
 
 
@@ -131,6 +134,9 @@ def event_dates(event: Event, documents: list[Document]) -> dict[str, datetime |
     return {
         "source_published_at": min((item for item in published if item), default=None),
         "original_published_at": min((item for item in originals if item), default=None),
+        "source_updated_at": max((value for item in documents if (
+            value := _parse_datetime(item.metadata.get("source_updated_at"))
+        )), default=None),
         "first_seen": aware(event.first_seen),
         "last_seen": aware(event.last_seen),
     }

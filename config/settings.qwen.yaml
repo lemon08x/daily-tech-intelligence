@@ -42,7 +42,7 @@ llm:
   provider: "openai_compatible"
   base_url: "http://192.168.31.235:8317/v1"
   api_key_env: "QWEN_LAN_API_KEY"
-  prompt_version: "tech-intel-v7"
+  prompt_version: "tech-intel-v13-reader-value"
   request_timeout_seconds: 1200
   scout:
     model: "qwen3.8-27b"
@@ -50,28 +50,23 @@ llm:
       thinking:
         type: enabled
       # 该端点默认 xhigh；显式传 xhigh 会被改写成 high 并 400。
-    max_output_tokens: 32000
   analyst:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
         type: enabled
-    max_output_tokens: 32000
   verifier:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
         type: enabled
-    max_output_tokens: 32000
   digest_brief:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
         type: enabled
-    max_output_tokens: 32000
   git_brief:
     model: "qwen3.8-27b"
     extra_body:
       thinking:
         type: enabled
-    max_output_tokens: 32000

@@ -33,7 +33,8 @@ from daily_intel.intelligence.prompts import (
     scout_user,
     verifier_user,
 )
-from daily_intel.intelligence.quality import QualityPolicy
+from daily_intel.intelligence.quality import QualityPolicy, exact_evidence_quote
+from daily_intel.intelligence.snapshots import stage_documents
 
 
 class ModelStageRunner:
@@ -51,6 +52,7 @@ class ModelStageRunner:
         self.audit_context: dict[str, Any] = {}
         self._usage = self._empty_usage()
         self._actual_models: dict[str, set[str]] = defaultdict(set)
+        self.scout_errors: list[str] = []
 
     @staticmethod
     def _empty_usage() -> dict[str, Any]:
@@ -101,7 +103,7 @@ class ModelStageRunner:
         )
         identity = {
             "clustering_version": "event-identity-v2",
-            "claim_contract_version": "fixed-claims-v2",
+            "claim_contract_version": "fixed-claims-v5-final-publication",
             "experiment_id": sanitize_run_identifier(experiment_id),
             "provider": metadata.get("provider", type(self.llm).__name__),
             "configured_models": configured_models,
@@ -143,6 +145,40 @@ class ModelStageRunner:
             else self._source_chars("scout_doc_chars", 4000)
         )
         items = []
+        self.scout_errors = []
+
+        def scan_batch(batch):
+            try:
+                returned = self._generate(
+                    stage, SCOUT_SYSTEM, scout_user(batch, topics, doc_chars=resolved_doc_chars),
+                    ScoutBatch, None,
+                ).value.items
+                expected = {e.id for e, _ in batch}
+                by_id = {item.event_id: item for item in returned if item.event_id in expected}
+                missing = [(e, d) for e, d in batch if e.id not in by_id]
+                if not missing:
+                    return list(by_id.values())
+                if len(missing) < len(batch):
+                    return list(by_id.values()) + scan_batch(missing)
+                if len(batch) > 1:
+                    middle = len(batch) // 2
+                    return scan_batch(batch[:middle]) + scan_batch(batch[middle:])
+                message = f"{stage}: missing_event; events={batch[0][0].id}"
+                self.scout_errors.append(message)
+                self.audit(None, stage + "_batch_failed", {"error": message})
+                return []
+            except Exception as exc:
+                # Response failures can be isolated by dividing the batch. Network
+                # failures must not fan out into hundreds of identical requests.
+                if len(batch) > 1 and getattr(exc, "category", "") in {
+                    "schema_mismatch", "json_syntax", "truncated_response", "empty_response"
+                }:
+                    middle = len(batch) // 2
+                    return scan_batch(batch[:middle]) + scan_batch(batch[middle:])
+                message = f"{stage}: {type(exc).__name__}: {exc}; events=" + ",".join(e.id for e, _ in batch)
+                self.scout_errors.append(message)
+                self.audit(None, stage + "_batch_failed", {"error": message})
+                return []
         total_batches = (
             (len(event_docs) + resolved_batch_size - 1) // resolved_batch_size
             if event_docs else 0
@@ -156,12 +192,7 @@ class ModelStageRunner:
                     f"当前：{progress_label} {batch_number}/{total_batches} "
                     f"（{len(batch)} 个事件）"
                 )
-            result = self._generate(
-                stage, SCOUT_SYSTEM,
-                scout_user(batch, topics, doc_chars=resolved_doc_chars),
-                ScoutBatch, None,
-            ).value
-            items.extend(result.items)
+            items.extend(scan_batch(batch))
         return ScoutBatch(items=items)
 
     def brief_digest(self, payload: dict[str, Any]) -> DigestBrief:
@@ -191,14 +222,48 @@ class ModelStageRunner:
         self, event: Event, documents: list[Document], draft: AnalysisDraft,
         *, claims: list[ClaimAudit] | None = None,
     ) -> VerificationResult:
-        return self._generate(
-            "verifier", VERIFIER_SYSTEM,
-            verifier_user(
-                event, documents, draft, claims=claims,
-                max_chars=self._source_chars("full_text_max_chars", 50000),
-            ),
+        supplied = stage_documents(documents, self._source_chars("full_text_max_chars", 50000))
+        user = verifier_user(event, supplied, draft, claims=claims, max_chars=0)
+        result = self._generate(
+            "verifier", VERIFIER_SYSTEM, user,
             VerificationResult, event.id,
         ).value
+        by_id = {d.id: d for d in supplied}
+        invalid = [c.claim_id for c in result.claim_checks if c.status == "supported" and (
+            c.document_id not in by_id
+            or exact_evidence_quote(c.quote, by_id[c.document_id]) is None
+        )]
+        if not invalid:
+            return result
+        # One bounded correction pass using exactly the same supplied documents.
+        # A citation-format correction must not erase a previous adverse verdict.
+        payload = json.loads(user)
+        payload["citation_feedback"] = {
+            "invalid_claim_ids": invalid,
+            "previous_result": result.model_dump(mode="json"),
+            "instruction": "这些 supported 引文不是连续原文。重新独立核验完整清单；仅使用所供文档，选择可独立支持断言的连续短句。不得跨页眉/图表拼接，不可纠正时标为 unverifiable。",
+        }
+        self.audit(event.id, "verifier_quote_retry", {"invalid_claim_ids": invalid})
+        progress(f"当前：核验引文需纠正 {len(invalid)} 项，仅补审一次")
+        try:
+            revised = self._generate(
+                "verifier", VERIFIER_SYSTEM, json.dumps(payload, ensure_ascii=False),
+                VerificationResult, event.id,
+            ).value
+        except Exception as exc:
+            self.audit(event.id, "verifier_quote_retry_failed", {"error": f"{type(exc).__name__}: {exc}"[:500]})
+            return result
+        previous = {c.claim_id: c for c in result.claim_checks}
+        if (len(previous) != len(result.claim_checks)
+                or len({c.claim_id for c in revised.claim_checks}) != len(revised.claim_checks)
+                or set(previous) != {c.claim_id for c in revised.claim_checks}):
+            return result
+        return revised.model_copy(update={
+            "claim_checks": [previous[c.claim_id] if previous[c.claim_id].status != "supported" else c
+                             for c in revised.claim_checks],
+            "unsupported_claims": list(dict.fromkeys([*result.unsupported_claims, *revised.unsupported_claims])),
+            "verdict": result.verdict if result.verdict != "pass" else revised.verdict,
+        })
 
     def audit(self, event_id: str | None, stage: str, payload: dict, *,
               model: str = "", snapshot_hash: str = "") -> None:
@@ -218,6 +283,19 @@ class ModelStageRunner:
             {"system": system, "user": user, "schema": schema.model_json_schema()}, ensure_ascii=False,
         ))
         self.audit(event_id, stage + "_input", {"input_hash": input_hash}, snapshot_hash=input_hash)
+        lookup = getattr(self.repository, "get_successful_stage", None)
+        resumable = stage in {"scout_broad", "scout_rerank"} or (
+            stage == "analyst" and self.repository.get_analysis(
+                event_id or "", self.audit_context.get("cache_scope", "")) is None)
+        if resumable and lookup and not self.audit_context.get("force_analysis"):
+            saved = lookup(stage, event_id or "", input_hash,
+                           self.audit_context.get("cache_scope", ""), self.configured_model(stage))
+            if saved is not None:
+                value = schema.model_validate(saved)
+                self.audit(event_id, stage + "_resume", {"input_hash": input_hash},
+                           model=self.configured_model(stage), snapshot_hash=input_hash)
+                self._actual_models[stage].add(self.configured_model(stage))
+                return LLMResult(value, self.configured_model(stage))
         error = None
         stage_usage = self._usage["by_stage"].setdefault(stage, {
             "calls": 0, "attempts": 0, "input_tokens": 0, "output_tokens": 0,
@@ -227,7 +305,9 @@ class ModelStageRunner:
             started = perf_counter()
             result = None
             try:
-                result = self.llm.generate(stage, system, user, schema)
+                retry = getattr(self.llm, "retry_generate", None)
+                result = (retry(stage, system, user, schema, error)
+                          if attempt > 1 and retry else self.llm.generate(stage, system, user, schema))
             except Exception as exc:
                 error = exc
             elapsed = perf_counter() - started
@@ -253,9 +333,21 @@ class ModelStageRunner:
             payload = {"attempt": attempt, "category": category, "input_tokens": input_tokens,
                        "output_tokens": output_tokens, "usage_unknown": unknown,
                        "finish_reason": getattr(outcome, "finish_reason", ""), "duration_seconds": elapsed}
+            request_parameters = getattr(outcome, "request_parameters", None)
+            if request_parameters:
+                payload["request_snapshot_hash"] = self.repository.save_content_snapshot(
+                    json.dumps(request_parameters, ensure_ascii=False))
             if result is not None:
                 payload["result"] = result.value.model_dump(mode="json")
+            else:
+                diagnostic = {name: getattr(error, name, "") for name in (
+                    "response_content", "reasoning_content", "validation_errors")}
+                if any(diagnostic.values()):
+                    payload["response_snapshot_hash"] = self.repository.save_content_snapshot(
+                        json.dumps(diagnostic, ensure_ascii=False))
             self.audit(event_id, stage + "_attempt", payload, model=model, snapshot_hash=input_hash)
             if result is not None:
                 return result
+            action = "将重试一次" if attempt == 1 else "已达重试上限，交由当前阶段处理失败"
+            progress(f"当前：{stage} 请求失败（{category}，耗时 {elapsed:.1f} 秒）；{action}")
         raise error or RuntimeError("LLM调用失败")

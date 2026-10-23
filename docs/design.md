@@ -23,7 +23,7 @@
 
 总的设计思路可以压成一句话：**模型只生成候选结构，程序拥有去重、证据核验、质量裁决和发布规格。** 换模型不能改变“什么可以作为深度结论”。AkShare 是 Tier 3 雷达，不是独立选题或观察名单；它与其他内容使用同一个 Scout。产品标题已是「科技产业情报日报」，日报不展示个股扫描。
 
-对外「今日速读」是精读结果的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。生产由 DeepSeek 分批泛读全部候选、保留全局前 40 后统一复排；最终前十才运行 Analyst + Verifier。未进前十及精读失败项只作为泛读摘要；`digest_brief` 不再参与日常发布。
+对外「今日速读」是精读结果的 kicker + 一句话，由 `build_plain_digest` 从 analyses 生成。生产由 Qwen 3.8 27B 分批泛读全部候选、保留全局前 40 后统一复排；最终前十才运行 Analyst + Verifier。未进前十及精读失败项只作为泛读摘要；`digest_brief` 不再参与日常发布。
 
 ---
 
@@ -35,7 +35,7 @@
 
 **意见 vs 证据。** 合法后端是 OpenAI 兼容 API（局域网 DeepSeek / Qwen，或云端示例）。生产早间任务走局域网 API。不要在应用外重做采集、分析或发布。
 
-**生产是 DeepSeek 单模型链路。** `config/settings.deepseek.yaml` 的后端是 DeepSeek V4 Flash（`192.168.31.236:8000`）。它扫描全部候选、截取全局前 40、再次复排，并负责最终前十的 Analyst、Verifier 与确定性质量门。选题使用独立的 `broad-reading-v2`、模型/端点指纹和 `rank-fusion-v6-quality` 缓存键；分析缓存还包含质量策略与审核 schema 版本。独立 `settings.qwen.yaml` 只用于手工兼容性检查并写 `data/intelligence_qwen.db`，不参与生产链路。
+**生产是 Qwen 3.8 27B 单模型链路。** `config/settings.daily-qwen.yaml` 连接 `192.168.31.235:8317`，扫描全部候选、截取全局前 40、再次复排，并负责最终前十的 Analyst、Verifier 与确定性质量门。选题使用独立的 `broad-reading-v2`、模型/端点指纹和 `rank-fusion-v6-quality` 缓存键；分析缓存还包含质量策略与审核 schema 版本。计划任务写入 `data/intelligence_qwen_daily.db`；`settings.qwen.yaml` 手工检查写入另一独立库 `data/intelligence_qwen.db`。`settings.deepseek.yaml` 保留为手工 DeepSeek 运行配置。
 
 **今日速读（对外）。** `plain_digest.tech_items`：精读条目的每条主题词（kicker）+ `_scan_line`（`plain_takeaway` 第一句）。不要把「深/线索」徽章埋在速读里。主题词只看标题和速读句：Transformers 发版即使 key_facts 提到蛋白质模型，也不能 kicker 成「生物」。精读卡和速读共享同一份按首次出现主题稳定分组的列表，同主题相邻，组内仍是 Scout 顺序。
 
@@ -99,7 +99,7 @@
 4. **端口意图**是 LLM / 存储 / 市场快照走 `LLMClient` / `IntelligenceRepository` / `MarketProvider`，业务阶段不依赖 SQLite 类、某个模型 SDK 类。**例外（现码）：** `intelligence/mapping.py` 的 `CompanyMapper` 直接 `import akshare as ak`，调用 `ak.stock_zh_a_disclosure_report_cninfo` 与 `ak.stock_industry_change_cninfo`，不是 `MarketProvider`。
 5. `publication` 只消费标准化结果：不采集、不调模型、不重新裁决质量。**现码成立。**
 6. 新阶段失败返回局部错误或降级状态，不能补造事实。**现码成立。**
-7. 分析与 Scout 缓存必须包含实验标识和模型指纹；不同模型不得互相复用 **`analysis_variants` / Scout state 键**。**成立。** 但 `EventSelector._recent_analyses()` 与离线 `get_latest_analyses(limit * 4)` **省略 `cache_scope`**，同库多实验会共享次日 0.4 惩罚和离线复用。生产只使用 DeepSeek；手工 Qwen 检查另用文件库规避。
+7. 分析与 Scout 缓存必须包含实验标识和模型指纹；不同模型不得互相复用 **`analysis_variants` / Scout state 键**。**成立。** 但 `EventSelector._recent_analyses()` 与离线 `get_latest_analyses(limit * 4)` **省略 `cache_scope`**，同库多实验会共享次日 0.4 惩罚和离线复用。计划任务、手工 Qwen 检查与手工 DeepSeek 运行使用不同文件库。
 
 ### 2. 程序拥有发布规格，模型只出草稿
 
@@ -148,7 +148,7 @@
 - `EventSelector._recent_analyses` 调用 `get_latest_analyses(80)` 不传 scope → 次日惩罚可能吃到另一实验昨天的发布。
 - 离线 `IntelligencePipeline._offline_result` 同样不传 scope。
 
-生产只使用 DeepSeek 库；手工 Qwen 检查使用独立库，所以上述缺口日常不发作。同库 A/B 仍危险。
+每日 Qwen 任务、手工 Qwen 检查和手工 DeepSeek 运行分别使用独立库，所以上述缺口日常不发作。同库 A/B 仍危险。
 
 ### 6. 降级优于停机
 
@@ -407,7 +407,7 @@ sequenceDiagram
 - 完全重复：×0.4。
 - 上次发布后 2 小时以上又有新 `last_seen`：× min(1.0, 0.4+0.35)=0.75。
 
-生产泛读由 DeepSeek 以 `broad_reading.batch_size`（默认 30）扫描全部事件，按融合分截取 `shortlist_events`（默认 40），再按 `rerank_batch_size`（默认 40）统一复排。每个结果必须含评分、主题、编辑理由和一句仅基于材料的 `scan`。缓存签名包含事件及文档哈希，键包含独立泛读提示词版本、DeepSeek 模型/URL 指纹、选择器版本和分析实验 scope。
+生产泛读由 Qwen 3.8 27B 以 `broad_reading.batch_size`（默认 30）扫描全部事件，按融合分截取 `shortlist_events`（默认 40），再按 `rerank_batch_size`（默认 40）统一复排。每个结果必须含评分、主题、编辑理由和一句仅基于材料的 `scan`。缓存签名包含事件及文档哈希，键包含独立泛读提示词版本、Qwen 模型/URL 指纹、选择器版本和分析实验 scope。
 
 **禁止。** 让模型分数 100% 决定入选；跨实验复用 Scout 缓存键。不要假设次日惩罚已按实验隔离（同库未隔离）。
 
@@ -687,8 +687,9 @@ sequenceDiagram
 | 文件 | 角色 |
 | --- | --- |
 | `config/settings.yaml` | 云端 DeepSeek 示例：scout=flash、analyst/verifier=pro，库 `data/intelligence.db`。**不是早间任务配置。** 未配置 `git_brief`/`digest_brief` 时客户端回退到 `scout` 段 |
-| `config/settings.deepseek.yaml` | **日常定时任务配置。** DeepSeek `192.168.31.236:8000` 负责全量泛读、前 40 复排和最终前十 Analyst/Verifier；只需要 `OMLX_API_KEY`，库为 `intelligence_deepseek.db` |
-| `config/settings.qwen.yaml` | 可选手工兼容性检查。LAN `http://192.168.31.235:8317/v1`，`QWEN_LAN_API_KEY`，库 `intelligence_qwen.db`。不参与生产；thinking enabled，**不**显式传 xhigh（YAML 注释：端点会 400；observed，非测试） |
+| `config/settings.daily-qwen.yaml` | **日常定时任务配置。** Qwen 3.8 27B `192.168.31.235:8317` 负责全量泛读、前 40 复排和最终前十 Analyst/Verifier；需要 `QWEN_LAN_API_KEY`，库为 `intelligence_qwen_daily.db` |
+| `config/settings.deepseek.yaml` | 手工 DeepSeek 运行配置，数据库 `intelligence_deepseek.db` |
+| `config/settings.qwen.yaml` | 可选手工兼容性检查。LAN `http://192.168.31.235:8317/v1`，`QWEN_LAN_API_KEY`，库 `intelligence_qwen.db`，与计划任务数据库分开；thinking enabled，**不**显式传 xhigh（YAML 注释：端点会 400；observed，非测试） |
 | `config/topics.yaml` | 八个主题 id/name：大模型与Agent、芯片算力、**机器人与具身智能**、云与开发工具、网络安全、智能汽车、能源科技、生物技术 |
 | `config/sources.yaml` | 分层白名单 + lane + publisher_id + 关键词预过滤 |
 
@@ -874,9 +875,9 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 - **过程级：** `processing_funnel` / `processing_trace` 保存在 SQLite；运行目录只发布 HTML。
 - **告警：** 早间任务依赖 `--require-ai` 非零退出 + 邮件失败通知（无成功 HTML 时 `send_report.py` 发日志尾）。没有独立 metrics daemon。
 
-延迟量级（约 304 事件、思考开启）：约 11 个 DeepSeek 泛读批次，之后 1 个前 40 复排批次；昂贵调用固定为最多 10 次 Analyst + 10 次 Verifier。相比旧流程约 608 次逐事件调用，冷启动的重调用数降到 20。主调度 `ExecutionTimeLimit` 为 48 小时并设置 `MultipleInstances=IgnoreNew`。
+调用规模（约 304 事件、思考开启）：约 11 个泛读批次，之后 1 个前 40 复排批次；昂贵调用固定为最多 10 次 Analyst + 10 次 Verifier。相比旧流程约 608 次逐事件调用，冷启动的重调用数降到 20。主调度 `ExecutionTimeLimit` 为 48 小时并设置 `MultipleInstances=IgnoreNew`。
 
-存储：每份 HTML 约数百 KB；SQLite 随文档增长，按实验分库避免 Qwen 写爆 DeepSeek 库。
+存储：每份 HTML 约数百 KB；SQLite 随文档增长；计划任务、手工 Qwen 检查与手工 DeepSeek 运行使用独立情报库。
 
 ---
 
@@ -884,8 +885,8 @@ JSON 树对「打开某日日报」友好，但对 72h `recent_documents`、Scou
 
 已经在生产使用的「发布开关」就是配置文件和 CLI flag，没有 feature flag 服务。
 
-1. **日常：** `启动日报.cmd`，或每天 01:00 的计划任务 → `settings.deepseek.yaml` + `--require-ai`；只要求 `OMLX_API_KEY`。
-2. **可选模型兼容性检查：** `启动日报-qwen.cmd`（独立库，不污染生产缓存，也不辅助生产日报）。
+1. **日常计划任务：** 每天 01:00 执行 `run_daily_agent.ps1` → `settings.daily-qwen.yaml` + `--require-ai`；需要 `QWEN_LAN_API_KEY`。
+2. **手工入口：** `启动日报.cmd` 默认走 `settings.deepseek.yaml`；`启动日报-qwen.cmd` 走独立库的 Qwen 配置。
 3. **契约变更：** 先改 `tests/`，跑 `pytest`，再改 `policy_version` / `prompt_version`。
 4. **回滚：** 不覆盖历史 `runs/`；改回 YAML 或换回上一份配置再跑即可。`--force-analysis` 只影响当前 scope。
 5. **手工模型 A/B：** 不同 yaml、不同 db、不同 experiment_id；不要混缓存。
@@ -920,9 +921,9 @@ Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Obje
 1. **模块化单体 + 端口。** 一份日报、可替换来源/模型/发布器。避免微服务运维，也避免 Skill 把契约吞进提示词。
 2. **质量门在模型之外。** `evidence-gate-v2` 用完整 issue taxonomy 定义深度结论（证据、一手来源、unsupported、verifier pass、事实/风险/反面/必填段/plain_takeaway）。换模型不能放宽其中任何一项。
 3. **科技情报为主，市场为雷达。** 产品标题去掉 A 股观察；无个股扫描；热点讲事件成因。地理标签「A股」保留。
-4. **35/65 融合选题 + 次日 0.4 惩罚 + 精读/泛读展示。** DeepSeek 泛读全部候选并复排全局前 40；昨天发过的新闻今天让路；只有最终前十研究，其余入围项进入泛读。
-5. **实验隔离用库文件 + cache_scope 指纹。** 生产只使用 DeepSeek；手工 Qwen 检查物理分库。同库内 `analysis_variants` 与 Scout 键按指纹隔离，旁表与 latest-analyses 查询尚未。
-6. **LAN Flash 生产，Qwen 仅手工检查。** 两套后端遵循同一 `LLMClient`，但生产无人值守链路只创建 DeepSeek 客户端。
+4. **35/65 融合选题 + 次日 0.4 惩罚 + 精读/泛读展示。** Qwen 3.8 27B 泛读全部候选并复排全局前 40；昨天发过的新闻今天让路；只有最终前十研究，其余入围项进入泛读。
+5. **实验隔离用库文件 + cache_scope 指纹。** 每日生产使用 Qwen 3.8 27B 独立库；手工 Qwen 检查和手工 DeepSeek 运行也各用独立库。同库内 `analysis_variants` 与 Scout 键按指纹隔离，旁表与 latest-analyses 查询尚未。
+6. **LAN Qwen 3.8 27B 生产，DeepSeek 保留为手工入口。** 两套后端遵循同一 `LLMClient`，计划任务按配置创建 Qwen 客户端。
 7. **产物只进 unique run 目录。** 同日多次、可对比、不可覆盖；过程页与日报成对出现。
 8. **公司映射默认假说。** 只有巨潮公告能把状态抬到 verified。
 9. **失败局部降级。** 单源、单事件、digest_brief、git_brief 都可以失败；整报仍出。HTTP 层最多 2×2 次。`--require-ai` 是调度用的硬开关。
@@ -945,7 +946,7 @@ Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Obje
 - [`scripts/README.md`](../scripts/README.md) — 启动器
 - 代码根：`src/daily_intel/`
 - 质量默认：`core/settings.py` `QUALITY_DEFAULTS`
-- 生产配置：`config/settings.deepseek.yaml`
+- 生产配置：`config/settings.daily-qwen.yaml`
 
 ---
 
@@ -975,7 +976,7 @@ Windows 注意事项已产品化：UTF-8 Python、ASCII `.cmd`、不用 Tee-Obje
 - **标题：** Document git_brief and digest_brief in settings.yaml example
 - **影响文件：** `config/settings.yaml`（本 PR **取消**，不要改这份文件）
 - **依赖：** —
-- **状态：** 用户决定 **不补**。缺段时 `OpenAICompatibleLLM.generate` 回退 `scout` 是已知行为。除非有人实际使用云端示例路径，否则不要为「以免误导」去改 YAML。生产文件仍是 `settings.deepseek.yaml` / `settings.qwen.yaml`，二者已配置五阶段。
+- **状态：** 用户决定 **不补**。缺段时 `OpenAICompatibleLLM.generate` 回退 `scout` 是已知行为。除非有人实际使用云端示例路径，否则不要为「以免误导」去改 YAML。生产文件是 `settings.daily-qwen.yaml`；`settings.deepseek.yaml` 和 `settings.qwen.yaml` 保留为手工运行配置。
 
 ### PR 4：同库多实验的查询与旁表隔离 — **仍开放，本轮不执行**
 

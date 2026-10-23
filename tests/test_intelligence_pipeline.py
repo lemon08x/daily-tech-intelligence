@@ -241,7 +241,9 @@ def test_akshare_radar_news_joins_the_same_scout_and_research_path(
     assert "半导体设备出口政策发生变化" in scout_titles
     assert len(result.analyses) == 2
     assert llm.calls.count("analyst") == 2
-    assert llm.calls.count("verifier") == 2
+    # The fixture cites the accelerator document for radar claims; one bounded
+    # citation correction is attempted, then the quality gate still rejects it.
+    assert llm.calls.count("verifier") == 3
 
 
 def test_unclassified_official_release_reaches_scout_and_trace(tmp_path, monkeypatch) -> None:

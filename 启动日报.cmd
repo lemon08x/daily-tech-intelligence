@@ -36,7 +36,7 @@ if not exist ".venv\Scripts\python.exe" (
     if errorlevel 1 goto failed
 )
 
-echo Generating daily digest with LAN DeepSeek V4 Flash...
+echo Generating daily digest with LAN DeepSeek V4 Abliterated...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%scripts\run_daily.ps1" %OPEN_SWITCH% %REQUIRE_SWITCH% %EXTRA_SWITCHES%
 if errorlevel 1 goto failed
 

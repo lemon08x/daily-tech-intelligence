@@ -346,3 +346,11 @@ def test_sdk_retries_are_explicitly_disabled(monkeypatch):
     client = OpenAICompatibleLLM({"api_key_env": "REMEDIATION_SDK_TEST_KEY", "base_url": "https://example.invalid"})
     assert client._client.max_retries == 0
     client._client.close()
+
+
+@pytest.mark.parametrize("stage", ["scout", "analyst", "verifier", "digest_brief", "git_brief"])
+def test_requests_honor_explicit_output_token_limits(stage):
+    client, calls = client_with_responses([response('{"answer": 42}')])
+    client.config[stage] = {"model": "configured", "max_output_tokens": 32000}
+    client.generate(stage, "system", "user", Answer)
+    assert calls[0]["max_tokens"] == 32000

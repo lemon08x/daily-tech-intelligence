@@ -9,6 +9,7 @@ import requests
 import trafilatura
 
 from daily_intel.core.models import Document
+from daily_intel.intelligence.sources.publication_dates import explicit_publication_date
 from daily_intel.intelligence.sources.common import (
     USER_AGENT,
     canonicalize_url,
@@ -78,12 +79,14 @@ class SitemapSource:
             content = ""
             extraction_quality = "metadata"
             metadata_error = ""
+            published = None
             if self.config.get("fetch_page_metadata", False):
                 try:
                     page = requests.get(
                         url, timeout=self.timeout, headers={"User-Agent": USER_AGENT}
                     )
                     page.raise_for_status()
+                    published = explicit_publication_date(page.text)
                     extracted = trafilatura.extract_metadata(page.text)
                     if extracted is not None:
                         title = plain_text(extracted.title or title)
@@ -108,6 +111,9 @@ class SitemapSource:
                 **source_metadata(self.config),
                 "sitemap_url": self.config["url"],
                 "fetch_full_text": bool(self.config.get("fetch_full_text", True)),
+                "source_updated_at": modified.isoformat(),
+                "date_basis": "published" if published else "modified",
+                "original_published_at": published.isoformat() if published else "",
             }
             path_topic_hints = self.config.get("path_topic_hints") or {}
             for prefix, topic_id in path_topic_hints.items():
@@ -125,7 +131,9 @@ class SitemapSource:
                     title=title,
                     url=url,
                     canonical_url=canonical,
-                    published_at=modified,
+                    # Keep a discovery timestamp for the storage contract, while
+                    # marking its meaning explicitly for stages and publication.
+                    published_at=published or modified,
                     fetched_at=now,
                     summary=summary or title,
                     content=content or summary or title,

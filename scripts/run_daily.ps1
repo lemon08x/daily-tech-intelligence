@@ -3,12 +3,20 @@
     [switch]$Open,
     [switch]$NoAI,
     [switch]$RequireAI,
-    [string]$ExperimentId = "deepseek-v4-flash",
+    [string]$ExperimentId = "deepseek-v4-abliterated",
     [switch]$ForceAnalysis,
     [string]$Config = ""
 )
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1: decode native UTF-8 and write UTF-8 logs.
+$utf8Encoding = New-Object System.Text.UTF8Encoding $false
+[Console]::InputEncoding = $utf8Encoding
+[Console]::OutputEncoding = $utf8Encoding
+$OutputEncoding = $utf8Encoding
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$env:PYTHONIOENCODING = 'utf-8:replace'
+
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $LogDir = Join-Path $ProjectRoot "logs"
@@ -55,7 +63,7 @@ $configName = Split-Path -Leaf $Config
 if ($configName -match "qwen" -or $ExperimentId -match "qwen") {
     $backend = "LAN Qwen 3.8-27B"
 } elseif ($configName -match "deepseek" -or $ExperimentId -match "deepseek") {
-    $backend = "LAN DeepSeek V4 Flash"
+    $backend = "LAN DeepSeek V4 Abliterated"
 } else {
     $backend = $configName
 }

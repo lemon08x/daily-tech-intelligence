@@ -42,24 +42,29 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
         if not item.get("enabled", True)
     }
     assert {"hacker_newsletter", "tldr_ai"} <= disabled
-    assert settings["llm"]["prompt_version"] == "tech-intel-v7"
-    assert settings["quality"]["policy_version"] == "evidence-gate-v4"
+    assert settings["llm"]["prompt_version"] == "tech-intel-v13-reader-value"
+    assert settings["quality"]["policy_version"] == "evidence-gate-v5"
     assert settings["intelligence"]["intensive_reading_events"] == 10
 
 
-def test_production_config_uses_deepseek_only_for_broad_reading() -> None:
+def test_daily_config_uses_gpt61_sol_with_broad_reading() -> None:
     root = Path(__file__).resolve().parents[1]
-    production = load_settings(root / "config" / "settings.deepseek.yaml")
+    production = load_settings(root / "config" / "settings.daily-gpt.yaml")
     qwen_check = load_settings(root / "config" / "settings.qwen.yaml")
+    deepseek_manual = load_settings(root / "config" / "settings.deepseek.yaml")
     broad = production["broad_reading"]
     assert broad["enabled"] is True
     assert broad["shortlist_events"] == 40
     assert broad["batch_size"] == 30
     assert broad["rerank_batch_size"] == 40
     assert "auxiliary_llm" not in broad
-    assert production["llm"]["base_url"] == "http://192.168.31.236:8000/v1"
-    assert production["llm"]["analyst"]["model"] == "deepseek-v4-flash-0731"
-    assert production["llm"]["verifier"]["model"] == "deepseek-v4-flash-0731"
+    assert production["llm"]["base_url"] == "http://192.168.31.235:8317/v1"
+    assert production["llm"]["api_key_env"] == "QWEN_LAN_API_KEY"
+    assert production["app"]["production_experiment_id"] == "gpt-6.1-sol-daily"
+    assert production["paths"]["intelligence_db"] == "../data/intelligence_gpt61_sol_daily.db"
+    stages = ("scout", "analyst", "verifier", "digest_brief", "git_brief")
+    assert {production["llm"][stage]["model"] for stage in stages} == {"gpt-6.1-sol"}
+    assert deepseek_manual["llm"]["analyst"]["model"] == "deepseek-v4-abliterated"
     assert qwen_check["broad_reading"]["enabled"] is False
 
 
@@ -149,6 +154,10 @@ def test_publish_groups_same_topics_in_quick_and_intensive_reading(tmp_path) -> 
     intensive = html.split('id="intensive-panel"', 1)[1].split(
         'id="extensive-panel"', 1
     )[0]
+    assert "未做逐项核验" not in quick
+    assert "待核实线索" not in quick
+    assert "模型自评" not in html
+    assert "质量门降级" not in html
     assert quick.index("模型速读甲") < quick.index("模型速读乙") < quick.index("芯片速读")
     assert (
         intensive.index("大模型架构甲")
@@ -260,16 +269,16 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert 'href="https://example.com/source"' in html
     assert "阅读原文" in html
     assert "今日速读" in html
-    assert "精读" in html and "泛读" in html
+    assert "详细解读" in html and "更多线索" in html
     assert "市场情报" not in html
-    assert 'data-tab="intensive">精读</button>' in html
+    assert 'data-tab="intensive">详细解读</button>' in html
     assert 'data-tab="extensive"' in html
     assert "data-subtab" not in html
     assert "新闻精选" not in html
     digest_html = html.split('id="intensive-panel"', 1)[0]
     assert "实验室公布了一项可核对的工程改进，短时间内还不会大规模落地。" in digest_html
     digest_body = digest_html.split("<h2>今日速读</h2>", 1)[1]
-    assert "精读摘要" in digest_body
+    assert "每条先看一件事" in digest_body
     assert "scan-kicker" in digest_body
     assert "技术深研" in html
     assert "赚钱效应" not in html
@@ -292,20 +301,20 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "深</span>" not in digest_html and ">线索<" not in digest_html
     assert "出口管制" not in html
     assert "第二项事件已经完成分析" in extensive_html
-    assert "第二项事件已经完成分析" not in extensive_index_html
+    assert "第二项事件已经完成分析" in extensive_index_html
     assert "泛读事件" in extensive_index_html
     assert 'class="extensive-entry"' in extensive_index_html
     assert 'data-extensive-target="extensive-item-1"' in extensive_index_html
     assert 'href="https://example.com/source"' not in extensive_index_html
     assert 'class="extensive-back"' in extensive_html
-    assert "返回泛读列表" in extensive_html
+    assert "返回线索列表" in extensive_html
     assert "history.state?.fromExtensiveIndex" in html
     assert "window.addEventListener('popstate'" in html
     assert 'class="scan-clusters"' in extensive_html
     assert 'class="scan-cluster"' in extensive_html
     assert "columns:2" in html and "break-inside:avoid" in html
     assert '<details class="deep-dive">' in intensive_html
-    assert '<details class="deep-dive">' not in extensive_html
+    assert '<details class="deep-dive">' in extensive_html
     assert "个股扫描" not in html
     assert "长江证券" not in html
     assert 'id="git-panel"' in html
@@ -319,9 +328,11 @@ def test_publish_writes_unified_outputs(tmp_path) -> None:
     assert "今日 +1200" in git_html and "本周 +5000" in git_html
     assert "共 15万 星" in git_html
     assert "推演" not in git_html
-    collapsed, expanded = html.split('<details class="deep-dive">', 1)
-    assert "第一条核心事实" in collapsed and "第二条核心事实" in collapsed
-    assert "第三条补充事实" not in collapsed and "第三条补充事实" in expanded
+    collapsed, expanded = intensive_html.split('<details class="deep-dive">', 1)
+    assert analysis.plain_takeaway in collapsed
+    for fact in analysis.key_facts:
+        assert fact not in collapsed
+        assert fact in expanded
     assert outputs["html"].parent == tmp_path / "2026-08-24" / "runs" / "100000-test"
     assert not (tmp_path / "2026-08-24" / "daily_digest.html").exists()
     assert not (tmp_path / "2026-08-24" / "latest_run.json").exists()
@@ -690,7 +701,8 @@ def test_r6_material_gate_page_does_not_say_not_in_top_ten(tmp_path) -> None:
         },
     }
     html = publish(context, [pair, gpt], {"run_name": "material-gate"}, tmp_path, now)["html"].read_text(encoding="utf-8")
-    assert "已深研，材料不足，转为泛读" in html
+    assert "原文材料不足，仅供线索参考" in html
     assert "未进入前十" not in html
-    assert "研究目标 10" in html
-    assert "其中材料不足转入泛读 2" in html
+    assert "本次计划核验 10" in html
+    assert "完整通过深度质量要求" not in html
+    assert "刊登内容核验、来源限制及分析完整性分别标示" in html

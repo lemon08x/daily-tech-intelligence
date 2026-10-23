@@ -1,7 +1,7 @@
 app:
-  title: "科技产业情报日报 · DeepSeek V4 Flash"
+  title: "科技产业情报日报 · DeepSeek V4 Abliterated"
   timezone: "Asia/Shanghai"
-  production_experiment_id: "deepseek-v4-flash"
+  production_experiment_id: "deepseek-v4-abliterated"
 
 paths:
   cache_dir: "../data/cache"
@@ -40,54 +40,51 @@ github:
 
 broad_reading:
   enabled: true
-  prompt_version: "broad-reading-v2"
+  prompt_version: "broad-reading-v8-reader-value"
   shortlist_events: 40
   batch_size: 30
   rerank_batch_size: 40
   doc_chars: 1800
 
 quality:
-  policy_version: "evidence-gate-v4"
+  policy_version: "evidence-gate-v5"
   schema_version: "claim-audit-v2"
 
 llm:
   provider: "openai_compatible"
-  base_url: "http://192.168.31.236:8000/v1"
+  base_url: "http://192.168.31.235:8317/v1"
   api_key_env: "OMLX_API_KEY"
-  prompt_version: "tech-intel-v7"
-  request_timeout_seconds: 1200
+  prompt_version: "tech-intel-v13-reader-value"
+  request_timeout_seconds: 1800
   scout:
-    model: "deepseek-v4-flash-0731"
+    model: "deepseek-v4-abliterated"
     extra_body:
       thinking:
         type: enabled
       reasoning_effort: xhigh
-    max_output_tokens: 32000
   analyst:
-    model: "deepseek-v4-flash-0731"
+    model: "deepseek-v4-abliterated"
     extra_body:
       thinking:
         type: enabled
       reasoning_effort: xhigh
-    max_output_tokens: 32000
   verifier:
-    model: "deepseek-v4-flash-0731"
+    model: "deepseek-v4-abliterated"
+    max_output_tokens: 131072
+    retry_max_output_tokens: 262144
     extra_body:
       thinking:
         type: enabled
       reasoning_effort: xhigh
-    max_output_tokens: 32000
   digest_brief:
-    model: "deepseek-v4-flash-0731"
+    model: "deepseek-v4-abliterated"
     extra_body:
       thinking:
         type: enabled
       reasoning_effort: xhigh
-    max_output_tokens: 32000
   git_brief:
-    model: "deepseek-v4-flash-0731"
+    model: "deepseek-v4-abliterated"
     extra_body:
       thinking:
         type: enabled
       reasoning_effort: xhigh
-    max_output_tokens: 32000

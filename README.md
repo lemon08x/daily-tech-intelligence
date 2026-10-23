@@ -6,9 +6,9 @@
 
 ## 快速开始
 
-最简单的方式是双击根目录的 `启动日报.cmd`。它与定时任务同一条链路：DeepSeek 分批泛读全部候选，保留全局前 40 条统一复排，并只精读最终前十，生成后打开当天 HTML。生产配置是 `config/settings.deepseek.yaml`。首次运行会创建 `.venv` 并安装依赖。
+双击根目录的 `启动日报.cmd` 可手动生成日报，默认使用 DeepSeek 配置。每天 01:00 的计划任务使用 GPT-6.1 Sol，分批泛读全部候选、保留全局前 40 条统一复排并精读最终前十；配置为 `config/settings.daily-gpt.yaml`。首次运行会创建 `.venv` 并安装依赖。
 
-如需单独检查 Qwen 3.8-27B 的接口兼容性，可双击 `启动日报-qwen.cmd`。它走 `config/settings.qwen.yaml` 和独立库 `data/intelligence_qwen.db`，不会覆盖 DeepSeek 的分析缓存，也不会辅助生产日报。密钥变量是 `QWEN_LAN_API_KEY`。
+如需单独检查 Qwen 3.8-27B，可双击 `启动日报-qwen.cmd`。它走 `config/settings.qwen.yaml` 和独立库 `data/intelligence_qwen.db`，与计划任务的 `data/intelligence_gpt61_sol_daily.db` 分开。密钥变量是 `QWEN_LAN_API_KEY`。
 
 启动窗口会先打印后端、配置和实验 id，再输出 `[1/6]` 到 `[6/6]` 阶段，以及 `当前：…` 明细。
 
@@ -28,12 +28,11 @@ Qwen 一次性运行：
 
 没有 API 密钥也能运行：系统会采集权威来源，发布明确标为“线索”的事件，不会伪造 AI 分析。
 
-定时任务只使用局域网 DeepSeek，密钥变量是 `OMLX_API_KEY`，只写本机环境变量，不要写进配置或仓库：
+定时任务使用局域网 GPT-6.1 Sol，复用网关密钥变量 `QWEN_LAN_API_KEY`（沿用历史名称）。密钥只写本机环境变量，不要写进配置或仓库：
 
 ```powershell
-[Environment]::SetEnvironmentVariable("OMLX_API_KEY", "你的密钥", "User")
-$env:OMLX_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
-.\scripts\run_daily.ps1 -RequireAI -Open
+[Environment]::SetEnvironmentVariable("QWEN_LAN_API_KEY", "你的密钥", "User")
+.\scripts\install_agent_task.ps1
 ```
 
 常用运行方式：
@@ -58,15 +57,19 @@ $env:OMLX_API_KEY = "你的密钥"  # 仅让当前 PowerShell 立即生效
 ```text
 output/YYYY-MM-DD/
 └── runs/
-    ├── HHMMSS-run-id-deepseek-v4-flash/
-    └── HHMMSS-run-id-qwen3.8-27b/
+    ├── HHMMSS-run-id-gpt-6.1-sol-daily/
+    └── HHMMSS-run-id-deepseek-v4-abliterated/
 ```
 
 每个 `runs/<run-name>` 只写 `daily_digest.html`。同一天重复运行不会覆盖此前运行目录，也不会在日期根目录生成副本。
 
-HTML 先给出精读条目的“今日速读”，再提供“精读 / 泛读 / Git”三个页签。科技白名单和 AkShare 快讯统一进入 72 小时事件池；DeepSeek 泛读全部候选、保留全局前 40 条并复排，只有最终前十经过 Analyst、Verifier 和确定性质量门，其余入围项作为泛读线索。关键结论要逐项审核，作者“领先/最高”叙述若与表格冲突会被拦截；降级条目删除未支持内容，并保留真实流程状态（例如已深研但材料不足）。精读与今日速读都按首次出现的主题稳定分组，同主题相邻且组内保留 Scout 顺序；泛读首页只显示分类和标题，点标题后在同一 HTML 内进入详情，可返回列表或使用浏览器后退。“Git”页独立列出 GitHub 今日最热和本周增长最快的真实仓库、总星标，以及 AI 逐仓库对照 README、清单和源码入口生成的具体使用场景；星标增量只在副标题展示，不绘制无量纲进度条。前一天已经发布过的事件（含泛读和缓存复用）第二天会按成功运行的曝光记录降低排序权重，符合当前质量策略和材料指纹的前十分析才会复用缓存。
+HTML 先给出“今日速读”，再提供“详细解读 / 更多线索 / 开源工具”三个页签。没有精读条目时，速读选取前七条线索，并默认打开线索页。科技白名单和 AkShare 快讯统一进入 72 小时事件池；GPT-6.1 Sol 泛读全部候选、保留全局前 40 条并复排，只有最终前十经过 Analyst、Verifier 和确定性质量门，其余入围项作为泛读线索。关键结论要逐项审核，作者“领先/最高”叙述若与表格冲突会被拦截；降级条目删除未支持内容，并保留真实流程状态（例如已深研但材料不足）。精读与今日速读都按首次出现的主题稳定分组，同主题相邻且组内保留 Scout 顺序；泛读首页显示分类、标题和独立速读句，点标题后在同一 HTML 内进入详情，可返回列表或使用浏览器后退。“Git”页独立列出 GitHub 今日最热和本周增长最快的真实仓库、总星标，以及 AI 逐仓库对照 README、清单和源码入口生成的具体使用场景；星标增量只在副标题展示，不绘制无量纲进度条。前一天已经发布过的事件（含泛读和缓存复用）第二天会按成功运行的曝光记录降低排序权重，符合当前质量策略和材料指纹的前十分析才会复用缓存。
 
-持久化情报位于 `data\intelligence_deepseek.db`（Qwen 为 `intelligence_qwen.db`），包括文档、事件、证据、按实验及模型指纹隔离的分析版本、阶段输入快照、研究审计、成功发布的曝光记录、LLM 调用和流水线游标。市场 CSV 缓存仍位于 `data\cache\`。
+日报写作采用 `tech-intel-v13-reader-value` / `broad-reading-v8-reader-value`：先判断新闻能否帮助读者看懂科技方向、发现可用方法或理解商业机会与瓶颈，再决定是否入选。Scout 的 relevance 表示阅读价值，模型评分权重为阅读价值 55%、产业影响 25%、创新性 15%、技术深度 5%。模型判定不值得读，或阅读价值低于 `selection_min_reader_relevance`（默认 60）时，事件在初筛或复排中淘汰；较高的规则分、一手来源和主题配额不能把它补回来。40 条候选和 10 条精读均为上限，不为数量凑新闻。模型不可用时仍按既有规则降级，并记录未完成选题判断。
+
+标题与速读从具体问题和变化切入；摘要前两句解释为什么值得了解，随后给支持这一认识的关键结果和主要边界。项目名在标题或正文保留，不反复堆砌算法、对照名称和榜单数字。关键数字出现时仍须带基线和条件；会改变主判断的限制必须紧邻摘要结果。详细事实、成熟度、完整限制、技术机制和核验记录按需展开，核验状态仍直接可见。泛读的速读与完整摘要分开保存；展示层不改写已审核事实或原文引文。更换提示词版本会隔离旧分析与 Scout 缓存。文末列出实际引用来源及采集缺口。
+
+持久化情报位于 `data\intelligence_gpt61_sol_daily.db`（手工 Qwen 检查为 `intelligence_qwen.db`；DeepSeek 手工运行使用 `intelligence_deepseek.db`），包括文档、事件、证据、按实验及模型指纹隔离的分析版本、阶段输入快照、研究审计、成功发布的曝光记录、LLM 调用和流水线游标。市场 CSV 缓存仍位于 `data\cache\`。
 
 ## 架构
 
@@ -107,8 +110,8 @@ src/daily_intel/
 
 1. 首次回看 48 小时；之后每个来源从自己的上次成功游标继续，并保留 6 小时重叠。
 2. 分组 arXiv、RSS/Atom、官方 sitemap、结构化论文 API、GitHub Release 和 AkShare 市场快讯先做来源级去重与 72 小时事件聚类；明显的 nightly/build 在进入 AI 前丢弃，未命中规则主题的内容保留为 `other`。
-3. DeepSeek 分批泛读全部候选；排序由确定性分数 35% 与模型分数 65% 融合，模型漏项时回退到确定性排序，并截取全局前 `shortlist_events`（生产默认 40）。
-4. DeepSeek 对这 40 条统一复排并做主题覆盖排序。只有最终前 `intensive_reading_events`（默认 10）检查分析缓存、进入 Analyst 和独立 Verifier；单条失败不会用第 11 条补位，而是降为泛读线索。
+3. GPT-6.1 Sol 分批泛读全部候选；排序由确定性分数 35% 与模型分数 65% 融合，模型漏项时回退到确定性排序，并截取全局前 `shortlist_events`（生产默认 40）。
+4. GPT-6.1 Sol 对这 40 条统一复排并做主题覆盖排序。只有最终前 `intensive_reading_events`（默认 10）检查分析缓存、进入 Analyst 和独立 Verifier；单条失败不会用第 11 条补位，而是降为泛读线索。
 5. 前十只有满足逐字证据、一手来源及精读材料门的结果才标为“深度结论”；其余入围项不做昂贵深研、不写分析缓存，并在泛读二级详情中展示摘要、要点和来源材料。
 
 模型输出还会经过统一质量契约：事实、证据、产业影响、风险与反面观点都有固定上下限；重复项和伪造引用会被程序剔除；存在 `unsupported_claims` 时，即使校验模型返回 `pass` 也强制降级；单一来源和线索状态都有置信度上限。质量分、证据数、来源数与降级原因会写入 HTML。
@@ -117,27 +120,28 @@ src/daily_intel/
 
 ## 配置
 
-- `config\settings.deepseek.yaml`：早间任务实际配置；
-- `config\settings.qwen.yaml`：本地 Qwen 验证配置；
-- `config\settings.yaml`：云端 DeepSeek 示例，不是早间任务路径；
+- `config\settings.daily-gpt.yaml`：每日计划任务配置，GPT-6.1 Sol；
+- `config\settings.qwen.yaml`：手工 Qwen 检查配置；
+- `config\settings.deepseek.yaml`：手工 DeepSeek 配置；
+- `config\settings.yaml`：云端 DeepSeek 示例，不是计划任务路径；
 - `config\topics.yaml`：主题及中英文关键词；
 - `config\sources.yaml`：分层来源白名单、来源级过滤与 GitHub 仓库。
 
-日报内容主链由 DeepSeek 批量泛读全部事件，保留全局前 40 条后统一复排。只有最终前十进入 `analyst`（精读）和 `verifier`（独立校验），其余候选以明确标记的泛读摘要发布，不写入分析缓存。Git 项目另用 `git_brief`。
+日报内容主链由 GPT-6.1 Sol 批量泛读全部事件，保留全局前 40 条后统一复排。只有最终前十进入 `analyst`（精读）和 `verifier`（独立校验），其余候选以明确标记的泛读摘要发布，不写入分析缓存。Git 项目另用 `git_brief`。
 
-日常定时任务用的是 `config/settings.deepseek.yaml`：所有模型阶段都由 `http://192.168.31.236:8000/v1` 上的 `deepseek-v4-flash-0731` 完成。独立的 `broad-reading-v1` 选题缓存不会改变 DeepSeek 分析缓存作用域；Qwen 配置只保留为手工兼容性检查入口。
+日常定时任务使用 `config/settings.daily-gpt.yaml`：所有模型阶段都由 `http://192.168.31.235:8317/v1` 上的 `gpt-6.1-sol` 完成，并写入独立的 `data/intelligence_gpt61_sol_daily.db`。DeepSeek 配置保留为手工运行入口；`config/settings.qwen.yaml` 使用另一独立数据库，供手工检查。
 
 ## 自动运行与测试
 
-每天 01:00（含周末）用 DeepSeek 局域网服务器生成日报并发送邮件：
+每天 01:00（含周末）用局域网 GPT-6.1 Sol 生成日报并发送邮件：
 
 ```powershell
 .\scripts\install_agent_task.ps1
 ```
 
-该任务读取 `config/settings.deepseek.yaml`，只需要 `OMLX_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报。
+该任务读取 `config/settings.daily-gpt.yaml`，需要 `QWEN_LAN_API_KEY`。同名任务已存在时会就地更新触发器，不会再安装一份。非交易日仍会出科技日报。
 
-304 条候选的典型冷启动由约 11 次 DeepSeek 批量泛读、1 次前 40 复排和最多 20 次前十精读调用组成，不再对全部候选逐条执行 Analyst + Verifier。计划任务上限为 48 小时，并禁止同一任务并行重入；同模型、同提示词和同质量策略的前十分析仍会复用缓存。
+304 条候选的典型冷启动由约 11 次 GPT-6.1 Sol 批量泛读、1 次前 40 复排和最多 20 次前十精读调用组成，不再对全部候选逐条执行 Analyst + Verifier。计划任务上限为 48 小时，并禁止同一任务并行重入；同模型、同提示词和同质量策略的前十分析仍会复用缓存。
 
 运行日志保存在 `logs\`。
 

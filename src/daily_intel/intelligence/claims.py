@@ -102,6 +102,10 @@ def extract_claims(draft: AnalysisDraft) -> list[ClaimAudit]:
             f"industry_impacts.{index}", f"industry_impacts[{index}]", text,
             kind=ClaimKind.OUTLOOK,
         ))
+    for name in ("risks", "counterpoints"):
+        for index, value in enumerate(getattr(draft, name)):
+            if value.strip():
+                claims.append(_claim(f"{name}.{index}", f"{name}[{index}]", value))
     return claims
 
 
@@ -169,18 +173,50 @@ def check_numeric_claims(
     for claim in claims:
         notes: list[str] = []
         status = claim.status
-        if not COMPARISON_TRIGGER.search(claim.text) and not FIRST_CLAIM_RE.search(claim.text):
+        scope_issue = _scope_overstatement(claim)
+        if scope_issue:
+            updated.append(claim.model_copy(update={
+                "status": ClaimStatus.UNSUPPORTED,
+                "notes": "；".join(filter(None, [claim.notes, scope_issue])),
+            }))
+            continue
+        # A first execution is an operating condition, not a novelty claim.
+        novelty_text = re.sub(r"(?:首次|第一次)(?:求解|运行|调用|迭代|执行|启动|演示)|第一次无模型演示|第一次让[^，,。；;]{1,30}测试", "", claim.text)
+        novelty_text = re.sub(
+            r"[^。；;，,]*(?:首次|第一次)[^。；;，,]*(?:需以同行评审|不是已核实)[^。；;，,]*",
+            "", novelty_text,
+        )
+        novelty_text = re.sub(r"(?:不能|不可|不足以)(?:据此)?(?:推断|证明)[^，,。；;]{0,12}(?:首次|第一次)", "", novelty_text)
+        novelty_text = re.sub(r"(?:论文|作者)自称[“\"]?首次[”\"]?[^。；;]*?(?:不是已核实的文献优先性|不能据此推断文献优先性)", "", novelty_text)
+        # A regulatory ceiling/floor is not a performance ranking.
+        ranking_text = re.sub(
+            r"(?:不能|不可|不足以|尚不能)(?:据此)?(?:推断|证明|说明|认定)[^，,。；;]{0,16}?(?:领先|优于|好于)",
+            "", claim.text,
+        )
+        ranking_text = re.sub(
+            r"(?:允许|限制|限额|上限|下限)[^。；;]{0,16}?(?:最高|最低)(?=\s*\d+\s*(?:MW|GW|kW|V|A|伏|瓦))",
+            "", ranking_text, flags=re.I,
+        )
+        ranking_text = re.sub(
+            r"(?:不一定等于|不等于|不能代表)[^，,。；;]{0,24}?(?:领先|占优|优于|好于)",
+            "", ranking_text,
+        )
+        ranking_text = re.sub(
+            r"(?:并非|并不|不一定|不等于|不能|不可|尚未|未能|没有|未)(?:全面|整体|始终|都|同比例|在所有任务上)?(?:领先|占优|优于|好于)",
+            "", ranking_text,
+        )
+        if not COMPARISON_TRIGGER.search(claim.text) and not FIRST_CLAIM_RE.search(novelty_text):
             updated.append(claim)
             continue
         percent_issue = _percent_point_confusion(claim.text)
         if percent_issue:
             status = ClaimStatus.CONFLICTING
             notes.append(percent_issue)
-        if FIRST_CLAIM_RE.search(claim.text) and not _first_time_supported(claim.text, corpus):
+        if FIRST_CLAIM_RE.search(novelty_text) and not _first_time_supported(novelty_text, claim.quote):
             status = ClaimStatus.UNSUPPORTED
             notes.append("来源仅描述提出方法，不足以证明首次")
-        if LEADING_CLAIM_RE.search(claim.text):
-            lead_issue = _leading_conflict(claim.text, tables, extra_rows, corpus)
+        if LEADING_CLAIM_RE.search(ranking_text):
+            lead_issue = _leading_conflict(ranking_text, tables, extra_rows, corpus)
             if lead_issue:
                 status = ClaimStatus.CONFLICTING if "矛盾" in lead_issue or "高于" in lead_issue else ClaimStatus.UNVERIFIABLE
                 notes.append(lead_issue)
@@ -192,6 +228,24 @@ def check_numeric_claims(
         else:
             updated.append(claim)
     return updated
+
+
+def _scope_overstatement(claim: ClaimAudit) -> str:
+    if claim.status != ClaimStatus.SUPPORTED:
+        return ""
+    # Explicit limitations are not affirmative capability claims.
+    capability_text = re.sub(
+        r"(?:不能|不可|无法|不等于|不足以|尚未)[^。；]{0,24}全天候", "", claim.text,
+    )
+    if re.search(r"(?:说明|证明|实现|支持|可)[^。；]{0,12}全天候", capability_text) and not re.search(
+        r"all[- ]weather|全天候", claim.quote, re.I,
+    ):
+        return "夜间或局部环境实验不能证明全天候能力，需限定实际测试条件"
+    if re.search(r"精度[^。；]{0,35}\d+(?:\.\d+)?\s*倍", claim.text) and re.search(
+        r"Pearson|correlation|相关系数|相关度", claim.quote, re.I,
+    ) and not re.search(r"相关系数|相关度|Pearson", claim.text, re.I):
+        return "相关系数的倍数不能概括为整体精度倍数，需保留原指标与测试范围"
+    return ""
 
 
 def blocking_claim_issues(claims: list[ClaimAudit]) -> list[str]:

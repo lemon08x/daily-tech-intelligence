@@ -7,7 +7,7 @@ import yaml
 
 
 QUALITY_DEFAULTS = {
-    "policy_version": "evidence-gate-v4",
+    "policy_version": "evidence-gate-v5",
     "schema_version": "claim-audit-v2",
     "min_key_facts": 3,
     "max_key_facts": 6,
@@ -30,7 +30,7 @@ QUALITY_DEFAULTS = {
 INTELLIGENCE_DEFAULTS = {
     "selection_deterministic_weight": .35,
     "selection_model_weight": .65,
-    "selection_model_reject_floor": 55,
+    "selection_min_reader_relevance": 60,
     "selection_repeat_penalty": .4,
     "selection_repeat_hours": 36,
     "selection_freshness_0_24h": 1.0,
@@ -53,7 +53,7 @@ GITHUB_DEFAULTS = {
 }
 BROAD_READING_DEFAULTS = {
     "enabled": False,
-    "prompt_version": "broad-reading-v2",
+    "prompt_version": "broad-reading-v8-reader-value",
     "shortlist_events": 40,
     "batch_size": 30,
     "rerank_batch_size": 40,
@@ -116,6 +116,8 @@ def _validate(settings: dict[str, Any]) -> None:
     )
     if any(value < 0 for value in selection_weights) or abs(sum(selection_weights) - 1.0) > 1e-9:
         raise ValueError("intelligence 的确定性与模型筛选权重必须非负且之和为 1")
+    if not 0 <= float(intelligence["selection_min_reader_relevance"]) <= 100:
+        raise ValueError("intelligence.selection_min_reader_relevance 必须位于 0 到 100 之间")
     broad_reading = settings["broad_reading"]
     for key in ("shortlist_events", "batch_size", "rerank_batch_size", "doc_chars"):
         if int(broad_reading[key]) <= 0:

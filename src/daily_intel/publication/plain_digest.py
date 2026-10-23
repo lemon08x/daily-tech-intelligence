@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from datetime import datetime, timezone
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from daily_intel.core.models import Analysis
 from daily_intel.market.normalize import clean_text
+from daily_intel.publication.verification import verification_status
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 TOPIC_ID_KICKERS = {
@@ -48,7 +50,7 @@ def _takeaway(analysis: Analysis) -> str:
     excerpts = analysis.publication.source_excerpts
     if excerpts:
         return excerpts[0]
-    return analysis.headline.strip()
+    return display_headline(analysis).strip()
 
 
 def _sentences(value: str) -> list[str]:
@@ -81,6 +83,9 @@ def _looks_like_background(sentence: str) -> bool:
 
 
 def _scan_line(analysis: Analysis) -> str:
+    if (analysis.publication.unverified_placeholder
+            and not analysis.scan_sentence.strip() and not analysis.plain_takeaway.strip()):
+        return "这条材料暂缺可靠的中文解读，可在详情中查看原文。"
     if analysis.scan_sentence.strip():
         return clean_text(analysis.scan_sentence, 220)
     sentences = _sentences(_takeaway(analysis))
@@ -144,6 +149,10 @@ def _date_line(analysis: Analysis) -> str:
         parts.append(f"原始发表 {original}")
     if meta.source_published_at:
         parts.append(f"来源日期 {source}")
+    if meta.source_updated_at:
+        parts.append(f"页面更新 {_shanghai(meta.source_updated_at)}")
+    if not meta.source_published_at and not meta.original_published_at:
+        parts.append("原始发布日期未知")
     if meta.first_published_at:
         parts.append(f"首次刊登 {_shanghai(meta.first_published_at)}")
     else:
@@ -151,6 +160,28 @@ def _date_line(analysis: Analysis) -> str:
     if meta.freshness_label:
         parts.append(meta.freshness_label)
     return " · ".join(parts) if parts else "日期未知"
+
+
+def display_headline(analysis: Analysis) -> str:
+    if analysis.publication.unverified_placeholder:
+        return f"{_topic_kicker(analysis)}线索：暂无可靠解读"
+    return analysis.headline
+
+
+def reading_paragraphs(value: str) -> list[str]:
+    """Only add visual breaks; keep wording, numbers and qualifications intact."""
+    return [part.strip() for part in re.findall(r".+?(?:[。！？][”’」』]?|$)", value, re.S)
+            if part.strip()]
+
+
+def audit_notes(analysis: Analysis) -> list[dict[str, str]]:
+    labels = {"headline": "标题", "scan_sentence": "速读", "plain_takeaway": "摘要",
+              "key_facts": "事实", "technical_mechanism": "技术机制", "novelty": "新颖性",
+              "maturity": "成熟度", "outlook_6_24m": "展望", "industry_impacts": "产业影响",
+              "risks": "风险", "counterpoints": "反面信息"}
+    return [{"field": labels.get(c.field_path.split("[")[0], "表述"),
+             "text": c.text, "reason": c.notes or "该表述尚未取得足够的原文支持"}
+            for c in analysis.quality.claim_audits if c.status.value != "supported"]
 
 
 def build_plain_digest(
@@ -166,27 +197,33 @@ def build_plain_digest(
         detail_facts: list[str] = []
         seen_facts = {scan.strip(), analysis.headline.strip()}
         for fact in analysis.key_facts:
-            cleaned = clean_text(fact, 500).strip()
+            cleaned = fact.strip()
             if cleaned and cleaned not in seen_facts:
                 detail_facts.append(cleaned)
                 seen_facts.add(cleaned)
         item = {
             "event_id": analysis.event_id,
-            "headline": analysis.headline,
+            "headline": display_headline(analysis),
             "kicker": _topic_kicker(analysis),
             "scan": scan,
             "takeaway": _takeaway(analysis),
+            "takeaway_paragraphs": (
+                [] if analysis.publication.unverified_placeholder and not analysis.plain_takeaway.strip()
+                else reading_paragraphs(analysis.plain_takeaway or scan)
+            ),
             "url": url,
             "status": analysis.status.value,
+            "verified": analysis.status.value == "deep" and analysis.quality.passed,
+            "verification": verification_status(analysis),
             "lane": analysis.lane,
             "key_facts": detail_facts,
             "technical_mechanism": clean_text(analysis.technical_mechanism, 900),
             "novelty": clean_text(analysis.novelty, 900),
-            "maturity": clean_text(analysis.maturity, 900),
+            "maturity": analysis.maturity,
             "outlook": clean_text(analysis.outlook_6_24m, 900),
-            "risks": [clean_text(value, 500) for value in analysis.risks if value.strip()],
+            "risks": [value for value in analysis.risks if value.strip()],
             "counterpoints": [
-                clean_text(value, 500) for value in analysis.counterpoints if value.strip()
+                value for value in analysis.counterpoints if value.strip()
             ],
             "public_notice": analysis.publication.public_notice,
             "research_status": analysis.publication.research_status,
@@ -195,6 +232,7 @@ def build_plain_digest(
             "date_line": _date_line(analysis),
             "freshness_label": analysis.publication.freshness_label,
             "disputed_claims": analysis.publication.disputed_claims,
+            "audit_notes": audit_notes(analysis),
             "source_headline": analysis.publication.source_headline,
             "source_excerpts": analysis.publication.source_excerpts,
             "unverified_placeholder": analysis.publication.unverified_placeholder,
