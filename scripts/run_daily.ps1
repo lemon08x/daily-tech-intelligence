@@ -3,8 +3,9 @@
     [switch]$Open,
     [switch]$NoAI,
     [switch]$RequireAI,
-    [string]$ExperimentId = "deepseek-v4-abliterated",
+    [string]$ExperimentId = "",
     [switch]$ForceAnalysis,
+    [switch]$Scheduled,
     [string]$Config = ""
 )
 
@@ -18,10 +19,11 @@ $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 $env:PYTHONIOENCODING = 'utf-8:replace'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $ProjectRoot
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $LogDir = Join-Path $ProjectRoot "logs"
 if (-not $Config) {
-    $Config = Join-Path $ProjectRoot "config\settings.deepseek.yaml"
+    $Config = Join-Path $ProjectRoot "config\settings.daily-gpt.yaml"
 }
 
 if (-not (Test-Path -LiteralPath $Python)) {
@@ -30,6 +32,14 @@ if (-not (Test-Path -LiteralPath $Python)) {
 if ($NoAI -and $RequireAI) {
     throw "-NoAI 与 -RequireAI 不能同时使用"
 }
+if ($Scheduled) { $Open = $false }
+
+# Resolve identity from the selected config so manual and scheduled runs cannot drift.
+$configIdentity = & $Python -c 'import json,sys; from pathlib import Path; from daily_intel.core.settings import load_settings; c=load_settings(Path(sys.argv[1])); print(json.dumps(dict(experiment=c[''app''].get(''production_experiment_id'', ''default''), model=c[''llm''][''scout''][''model''])))' $Config
+if ($LASTEXITCODE -ne 0) { throw "无法读取日报配置: $Config" }
+$identity = $configIdentity | ConvertFrom-Json
+if (-not $ExperimentId) { $ExperimentId = $identity.experiment }
+$backend = $identity.model
 
 if (Test-Path (Join-Path $ProjectRoot ".env")) {
     Get-Content (Join-Path $ProjectRoot ".env") -Encoding UTF8 | ForEach-Object {
@@ -39,7 +49,7 @@ if (Test-Path (Join-Path $ProjectRoot ".env")) {
         }
     }
 }
-foreach ($key in @("OMLX_API_KEY", "DEEPSEEK_API_KEY", "QWEN_LAN_API_KEY")) {
+foreach ($key in @("OMLX_API_KEY", "DEEPSEEK_API_KEY", "QWEN_LAN_API_KEY", "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "REPORT_TO")) {
     if (-not [Environment]::GetEnvironmentVariable($key)) {
         $fromUser = [Environment]::GetEnvironmentVariable($key, "User")
         if ($fromUser) {
@@ -59,14 +69,10 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONUNBUFFERED = "1"
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
-$configName = Split-Path -Leaf $Config
-if ($configName -match "qwen" -or $ExperimentId -match "qwen") {
-    $backend = "LAN Qwen 3.8-27B"
-} elseif ($configName -match "deepseek" -or $ExperimentId -match "deepseek") {
-    $backend = "LAN DeepSeek V4 Abliterated"
-} else {
-    $backend = $configName
-}
+$Stamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
+$ReportDate = Get-Date -Format "yyyy-MM-dd"
+$logPath = Join-Path $LogDir "latest.log"
+if ($Scheduled) { $logPath = Join-Path $LogDir "agent_$Stamp.log" }
 if ($RequireAI) { $mode = "require-ai" }
 elseif ($NoAI) { $mode = "no-ai" }
 elseif ($Offline) { $mode = "offline" }
@@ -83,7 +89,7 @@ if ($ForceAnalysis) {
     Write-Host " Analysis     force (ignore same-scope cache)"
 }
 Write-Host " Progress     [1/6] market -> collect -> git -> publish"
-Write-Host " Log          $(Join-Path $LogDir 'latest.log')"
+Write-Host " Log          $logPath"
 Write-Host "============================================================"
 Write-Host ""
 
@@ -99,12 +105,12 @@ if ($ForceAnalysis) { $Arguments += "--force-analysis" }
 if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
     $PSNativeCommandUseErrorActionPreference = $false
 }
-$logPath = Join-Path $LogDir "latest.log"
 $savedEa = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 $code = 1
 $utf8 = New-Object System.Text.UTF8Encoding $false
 $writer = New-Object System.IO.StreamWriter $logPath, $false, $utf8
+$writer.AutoFlush = $true
 try {
     & $Python @Arguments 2>&1 | ForEach-Object {
         $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { "$_" }
@@ -116,5 +122,14 @@ try {
     $writer.Flush()
     $writer.Dispose()
     $ErrorActionPreference = $savedEa
+}
+if ($Scheduled) {
+    $SendLog = Join-Path $LogDir "send_$Stamp.log"
+    & $Python (Join-Path $PSScriptRoot "send_report.py") --run-log $logPath --run-exit-code $code --report-date $ReportDate *>> $SendLog
+    $SendExit = $LASTEXITCODE
+    if ($null -eq $SendExit) { $SendExit = 1 }
+    Get-Content $SendLog -ErrorAction SilentlyContinue
+    if ($code -ne 0) { exit $code }
+    exit $SendExit
 }
 if ($code -ne 0) { exit $code }

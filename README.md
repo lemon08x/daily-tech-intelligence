@@ -6,7 +6,9 @@
 
 ## 快速开始
 
-双击根目录的 `启动日报.cmd` 可手动生成日报，默认使用 DeepSeek 配置。每天 01:00 的计划任务使用 GPT-6 Luna，分批泛读全部候选、保留全局前 40 条统一复排并精读最终前十；配置为 `config/settings.daily-gpt.yaml`。首次运行会创建 `.venv` 并安装依赖。
+双击根目录的 `启动日报.cmd` 可手动生成日报。每天 01:00 的计划任务直接调用同一个启动器（`启动日报.cmd --scheduled`），两者统一使用 `config/settings.daily-gpt.yaml` 中的 GPT-6 Luna、实验名和独立数据库。分批泛读全部候选、保留最多 40 条统一复排并精读最终前十。首次运行会创建 `.venv` 并安装依赖。
+
+手动启动完成后打开日报；定时模式不打开页面、不在失败后等待按键，另外保存本轮独立日志并发送日报邮件。生成逻辑统一由 `scripts/run_daily.ps1` 执行，默认实验名从所选配置读取。旧 `scripts/run_daily_agent.ps1` 只保留为转发入口。
 
 如需单独检查 Qwen 3.8-27B，可双击 `启动日报-qwen.cmd`。它走 `config/settings.qwen.yaml` 和独立库 `data/intelligence_qwen.db`，与计划任务的 `data/intelligence_gpt6_luna_daily.db` 分开。密钥变量是 `QWEN_LAN_API_KEY`。
 
@@ -129,7 +131,7 @@ src/daily_intel/
 
 日报内容主链由 GPT-6 Luna 批量泛读全部事件，保留全局前 40 条后统一复排。只有最终前十进入 `analyst`（精读）和 `verifier`（独立校验），其余候选以明确标记的泛读摘要发布，不写入分析缓存。Git 项目另用 `git_brief`。
 
-日常定时任务使用 `config/settings.daily-gpt.yaml`：所有模型阶段都由 `http://192.168.31.235:8317/v1` 上的 `gpt-6-luna` 完成，并写入独立的 `data/intelligence_gpt6_luna_daily.db`。DeepSeek 配置保留为手工运行入口；`config/settings.qwen.yaml` 使用另一独立数据库，供手工检查。
+手动启动器与日常定时任务使用 `config/settings.daily-gpt.yaml`：所有模型阶段都由 `http://192.168.31.235:8317/v1` 上的 `gpt-6-luna` 完成，并写入独立的 `data/intelligence_gpt6_luna_daily.db`。如需手工检查 DeepSeek，运行 `scripts/run_daily.ps1 -RequireAI -Open -Config config/settings.deepseek.yaml`；`config/settings.qwen.yaml` 使用另一独立数据库，供手工检查。
 
 ## 自动运行与测试
 

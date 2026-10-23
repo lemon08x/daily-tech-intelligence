@@ -24,10 +24,16 @@ Verifier. The remaining shortlisted events are broad-reading leads:
 .\scripts\run_daily.ps1 -RequireAI -Open -Config .\config\settings.daily-gpt.yaml -ExperimentId "gpt-6-luna-daily"
 ```
 
-The scheduled task calls `scripts/run_daily_agent.ps1`; install or update it
-with `scripts/install_agent_task.ps1`. The existing LAN gateway key env remains `QWEN_LAN_API_KEY` (historical name).
-`启动日报.cmd` remains a separate on-demand DeepSeek run using
-`config/settings.deepseek.yaml` and `OMLX_API_KEY`.
+The scheduled task directly calls `启动日报.cmd --scheduled` at 01:00;
+install or update it with `scripts/install_agent_task.ps1`.
+Manual and scheduled startup share `scripts/run_daily.ps1`, whose default
+config is `config/settings.daily-gpt.yaml`; the experiment id and model label
+are read from that config. Scheduled mode suppresses browser opening and
+failure pauses, saves a unique run log, and emails that invocation's result.
+`scripts/run_daily_agent.ps1` is only a compatibility forwarder to the launcher.
+The existing LAN gateway key env remains `QWEN_LAN_API_KEY` (historical name).
+DeepSeek is an explicit optional configuration (`config/settings.deepseek.yaml`,
+`OMLX_API_KEY`), not the default manual launcher.
 
 Occasional local check with Qwen 3.8-27B: `启动日报-qwen.cmd` or
 
