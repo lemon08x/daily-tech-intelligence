@@ -16,12 +16,12 @@ reimplementing collection, analysis, or publication.
 ## Daily run
 
 Production runs daily at 01:00 (including weekends), with a 48-hour
-task execution limit. GPT-6.1 Sol scans every event in batches, keeps the
+task execution limit. GPT-6 Luna scans every event in batches, keeps the
 global top 40, reranks that shortlist, and only the final top 10 run Analyst +
 Verifier. The remaining shortlisted events are broad-reading leads:
 
 ```powershell
-.\scripts\run_daily.ps1 -RequireAI -Open -Config .\config\settings.daily-gpt.yaml -ExperimentId "gpt-6.1-sol-daily"
+.\scripts\run_daily.ps1 -RequireAI -Open -Config .\config\settings.daily-gpt.yaml -ExperimentId "gpt-6-luna-daily"
 ```
 
 The scheduled task calls `scripts/run_daily_agent.ps1`; install or update it
@@ -36,7 +36,7 @@ Occasional local check with Qwen 3.8-27B: `启动日报-qwen.cmd` or
 ```
 
 That path uses `data/intelligence_qwen.db` and does not share analysis cache
-with the scheduled GPT-6.1 Sol run, which uses `data/intelligence_gpt61_sol_daily.db`. Key env
+with the scheduled GPT-6 Luna run, which uses `data/intelligence_gpt6_luna_daily.db`. Key env
 `QWEN_LAN_API_KEY`. It remains an isolated manual model check.
 
 Same-model A/B rerun: add `-ForceAnalysis`. A different model or experiment
@@ -49,7 +49,7 @@ There is no Harness file bridge. Do not recreate `scripts/harness`.
 
 Read the configured broad-reading / `scout` / `analyst` / `verifier` /
 `digest_brief` stages. Broad-reading leads are not deep conclusions and must
-not be written to the scheduled GPT-6.1 Sol analysis cache.
+not be written to the scheduled GPT-6 Luna analysis cache.
 Use only documents supplied to that stage. Evidence quotes must be exact
 continuous substrings of the supplied document. Do not invent company mappings
 or stock calls.

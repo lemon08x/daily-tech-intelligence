@@ -1,12 +1,12 @@
 app:
-  title: "科技产业情报日报 · GPT-6.1 Sol"
+  title: "科技产业情报日报 · GPT-6 Luna"
   timezone: "Asia/Shanghai"
-  production_experiment_id: "gpt-6.1-sol-daily"
+  production_experiment_id: "gpt-6-luna-daily"
 
 paths:
   cache_dir: "../data/cache"
   output_dir: "../output"
-  intelligence_db: "../data/intelligence_gpt61_sol_daily.db"
+  intelligence_db: "../data/intelligence_gpt6_luna_daily.db"
 
 intelligence:
   first_run_lookback_hours: 48
@@ -59,12 +59,12 @@ llm:
   prompt_version: "tech-intel-v13-reader-value"
   request_timeout_seconds: 1200
   scout:
-    model: "gpt-6.1-sol"
+    model: "gpt-6-luna"
   analyst:
-    model: "gpt-6.1-sol"
+    model: "gpt-6-luna"
   verifier:
-    model: "gpt-6.1-sol"
+    model: "gpt-6-luna"
   digest_brief:
-    model: "gpt-6.1-sol"
+    model: "gpt-6-luna"
   git_brief:
-    model: "gpt-6.1-sol"
+    model: "gpt-6-luna"

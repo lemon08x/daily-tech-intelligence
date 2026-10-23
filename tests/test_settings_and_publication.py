@@ -47,7 +47,7 @@ def test_project_config_resolves_expected_paths_and_sources() -> None:
     assert settings["intelligence"]["intensive_reading_events"] == 10
 
 
-def test_daily_config_uses_gpt61_sol_with_broad_reading() -> None:
+def test_daily_config_uses_gpt6_luna_with_broad_reading() -> None:
     root = Path(__file__).resolve().parents[1]
     production = load_settings(root / "config" / "settings.daily-gpt.yaml")
     qwen_check = load_settings(root / "config" / "settings.qwen.yaml")
@@ -60,10 +60,10 @@ def test_daily_config_uses_gpt61_sol_with_broad_reading() -> None:
     assert "auxiliary_llm" not in broad
     assert production["llm"]["base_url"] == "http://192.168.31.235:8317/v1"
     assert production["llm"]["api_key_env"] == "QWEN_LAN_API_KEY"
-    assert production["app"]["production_experiment_id"] == "gpt-6.1-sol-daily"
-    assert production["paths"]["intelligence_db"] == "../data/intelligence_gpt61_sol_daily.db"
+    assert production["app"]["production_experiment_id"] == "gpt-6-luna-daily"
+    assert production["paths"]["intelligence_db"] == "../data/intelligence_gpt6_luna_daily.db"
     stages = ("scout", "analyst", "verifier", "digest_brief", "git_brief")
-    assert {production["llm"][stage]["model"] for stage in stages} == {"gpt-6.1-sol"}
+    assert {production["llm"][stage]["model"] for stage in stages} == {"gpt-6-luna"}
     assert deepseek_manual["llm"]["analyst"]["model"] == "deepseek-v4-abliterated"
     assert qwen_check["broad_reading"]["enabled"] is False
 

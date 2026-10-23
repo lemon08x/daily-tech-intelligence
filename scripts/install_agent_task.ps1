@@ -15,7 +15,7 @@ $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfil
 $Trigger = New-ScheduledTaskTrigger -Daily -DaysInterval $DaysInterval -At $At
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionTimeLimitHours)
 $IntervalLabel = if ($DaysInterval -eq 1) { "每天" } else { "每 $DaysInterval 天" }
-$Description = "${IntervalLabel}用 GPT-6.1 Sol 泛读、复排前十精读并生成日报邮件"
+$Description = "${IntervalLabel}用 GPT-6 Luna 泛读、复排前十精读并生成日报邮件"
 $ScheduleSummary = "$IntervalLabel $At 运行（含周末，错过则下次登录时补跑，上限 $ExecutionTimeLimitHours 小时，不并行重入）"
 
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
